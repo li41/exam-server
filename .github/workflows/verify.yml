@@ -1,0 +1,141 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Enable pnpm through Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Verify
+        run: corepack pnpm verify
+
+      - name: Check v1 contract compatibility
+        if: github.event_name == 'pull_request'
+        env:
+          CONTRACT_BASE_REF: origin/${{ github.base_ref }}
+        run: corepack pnpm contract:compatibility
+
+  security:
+    name: Production dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Enable pnpm through Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+
+      - name: Audit production dependencies
+        run: corepack pnpm audit --prod --audit-level=high
+
+  integration:
+    name: MySQL, Redis, backup restore
+    needs: [verify, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: foundation_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MYSQL_TEST_URL: mysql://root:root@127.0.0.1:3306/foundation_test
+      REDIS_TEST_URL: redis://127.0.0.1:6379
+      MYSQL_URL: mysql://root:root@127.0.0.1:3306/foundation_test
+      FILE_STORAGE_ROOT: /tmp/server-foundation-storage
+      BACKUP_ROOT: /tmp/server-foundation-backups
+      BACKUP_REHEARSAL_CONFIRM: YES_I_UNDERSTAND_THIS_IS_DESTRUCTIVE
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Enable pnpm through Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Install MySQL client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+
+      - name: Build workspace
+        run: corepack pnpm build
+
+      - name: Run backing-service integration tests
+        run: corepack pnpm test:integration
+
+      - name: Check N-1 application against migrated schema
+        if: github.event_name == 'pull_request'
+        env:
+          ROLLBACK_BASE_REF: origin/${{ github.base_ref }}
+        run: corepack pnpm migration:rollback-compatibility
+
+      - name: Rehearse backup and restore
+        run: corepack pnpm backup:rehearse

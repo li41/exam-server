@@ -1,0 +1,32 @@
+{
+  "name": "@server-foundation/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -b",
+    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.0",
+    "@hono/zod-validator": "^0.9.0",
+    "@server-foundation/api-contracts": "workspace:*",
+    "@server-foundation/auth": "workspace:*",
+    "@server-foundation/domain": "workspace:*",
+    "@server-foundation/mysql-adapter": "workspace:*",
+    "@server-foundation/redis-adapter": "workspace:*",
+    "@server-foundation/local-fs-storage": "workspace:*",
+    "@server-foundation/testing": "workspace:*",
+    "hono": "^4.13.1",
+    "redis": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "vitest": "^4.1.10"
+  }
+}

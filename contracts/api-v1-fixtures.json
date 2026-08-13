@@ -1,0 +1,63 @@
+{
+  "CreateItemSchema": { "title": "Legacy fixture" },
+  "UpdateItemSchema": { "title": "Updated fixture", "version": 1 },
+  "DeleteItemQuerySchema": { "version": "1" },
+  "ItemSchema": {
+    "id": "item-1",
+    "tenantId": "tenant-1",
+    "title": "Legacy fixture",
+    "status": "draft",
+    "version": 1,
+    "createdAt": "2026-08-10T00:00:00.000Z",
+    "updatedAt": "2026-08-10T00:00:00.000Z",
+    "deletedAt": null
+  },
+  "FileMetadataSchema": {
+    "fileId": "file-1",
+    "ownerId": "user-1",
+    "tenantId": "tenant-1",
+    "originalName": "fixture.txt",
+    "displayName": "Fixture",
+    "mimeType": "text/plain",
+    "sizeBytes": 7,
+    "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "status": "ready",
+    "createdAt": "2026-08-10T00:00:00.000Z",
+    "deletedAt": null
+  },
+  "AuthIdentitySchema": {
+    "userId": "user-1",
+    "email": "fixture@example.com",
+    "tenantId": "tenant-1",
+    "roles": ["member"]
+  },
+  "LoginRequestSchema": {
+    "email": "fixture@example.com",
+    "password": "correct horse battery staple"
+  },
+  "RefreshRequestSchema": { "refreshToken": "refresh-token" },
+  "AuthTokenResponseSchema": {
+    "accessToken": "access-token",
+    "refreshToken": "refresh-token",
+    "accessTokenExpiresAt": "2026-08-10T01:00:00.000Z",
+    "refreshTokenExpiresAt": "2026-08-17T00:00:00.000Z"
+  },
+  "UploadSessionSchema": {
+    "sessionId": "upload-1",
+    "fileId": "file-1",
+    "expiresAt": "2026-08-10T01:00:00.000Z",
+    "resumable": true
+  },
+  "InitiateUploadRequestSchema": {
+    "originalName": "fixture.txt",
+    "displayName": "Fixture",
+    "mimeType": "text/plain",
+    "sizeBytes": 7,
+    "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "UploadProgressSchema": { "bytesReceived": 7, "complete": true },
+  "ApiErrorResponseSchema": {
+    "error": { "code": "conflict", "message": "Fixture conflict." },
+    "requestId": "123e4567-e89b-42d3-a456-426614174000"
+  }
+}

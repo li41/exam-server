@@ -1,0 +1,14 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+backups/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+deploy/env/*.env
+!deploy/env/*.env.example
+
+# Windows 下載殘留（WSL 下會materialize成檔案）
+*:Zone.Identifier

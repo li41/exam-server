@@ -1,0 +1,32 @@
+{
+  "name": "@server-foundation/mysql-adapter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "schema"
+  ],
+  "scripts": {
+    "typecheck": "tsc -b",
+    "build": "tsc -b",
+    "test": "vitest run test/cursor.test.ts test/migrate.test.ts",
+    "test:integration": "vitest run test/*.integration.test.ts",
+    "migrate": "tsc -b && node scripts/migrate.mjs"
+  },
+  "dependencies": {
+    "@server-foundation/api-contracts": "workspace:*",
+    "@server-foundation/domain": "workspace:*",
+    "mysql2": "^3.23.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "vitest": "^4.1.10"
+  }
+}

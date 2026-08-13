@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+  echo "usage: $0 <release.tar.gz> <release-id>" >&2
+  exit 2
+fi
+
+archive="$(realpath "$1")"
+release_id="$2"
+release_root="${SERVER_FOUNDATION_RELEASE_ROOT:-/opt/server-foundation/releases}"
+current_link="${SERVER_FOUNDATION_CURRENT_LINK:-/opt/server-foundation/current}"
+env_file="${SERVER_FOUNDATION_ENV_FILE:-/etc/server-foundation/server-foundation.env}"
+service="${SERVER_FOUNDATION_SERVICE:-server-foundation}"
+health_url="${SERVER_FOUNDATION_HEALTH_URL:-http://127.0.0.1:8787/health/ready}"
+target="$release_root/$release_id"
+
+if [ ! -f "$archive" ]; then
+  echo "release archive not found: $archive" >&2
+  exit 1
+fi
+if [ -e "$target" ]; then
+  echo "release already exists: $target" >&2
+  exit 1
+fi
+if [ ! -r "$env_file" ]; then
+  echo "environment file is not readable: $env_file" >&2
+  exit 1
+fi
+
+if [ -f "$archive.sha256" ]; then
+  (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
+fi
+
+mysql_url="$(sed -n 's/^MYSQL_URL=//p' "$env_file" | head -n 1)"
+if [ -z "$mysql_url" ]; then
+  echo "MYSQL_URL is missing from $env_file" >&2
+  exit 1
+fi
+
+mkdir -p "$release_root" "$(dirname "$current_link")"
+mkdir "$target"
+tar -xzf "$archive" -C "$target"
+corepack pnpm --dir "$target" install --prod --frozen-lockfile
+MYSQL_URL="$mysql_url" corepack pnpm --dir "$target" --filter @server-foundation/mysql-adapter migrate
+
+previous="$(readlink -f "$current_link" 2>/dev/null || true)"
+next_link="${current_link}.next"
+rm -f "$next_link"
+ln -s "$target" "$next_link"
+mv -Tf "$next_link" "$current_link"
+systemctl restart "$service"
+
+healthy=false
+for _ in {1..30}; do
+  if curl -fsS "$health_url" >/dev/null; then
+    healthy=true
+    break
+  fi
+  sleep 1
+done
+
+if [ "$healthy" = true ]; then
+  echo "release $release_id is healthy and active"
+  exit 0
+fi
+
+echo "release $release_id failed readiness check" >&2
+if [ -n "$previous" ] && [ -d "$previous" ]; then
+  rm -f "$next_link"
+  ln -s "$previous" "$next_link"
+  mv -Tf "$next_link" "$current_link"
+  systemctl restart "$service"
+  echo "rolled back current symlink to $previous" >&2
+fi
+exit 1

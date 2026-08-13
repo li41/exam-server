@@ -1,0 +1,36 @@
+{
+  "name": "server-foundation",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A reusable TypeScript API foundation for desktop applications.",
+  "type": "module",
+  "packageManager": "pnpm@11.10.0",
+  "scripts": {
+    "dev": "corepack pnpm --filter @server-foundation/api dev",
+    "typecheck": "tsc -b && corepack pnpm --filter @server-foundation/api typecheck:test",
+    "lint": "oxlint apps packages",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "corepack pnpm --filter @server-foundation/api... build && corepack pnpm --filter @server-foundation/api test && corepack pnpm --filter @server-foundation/auth test && corepack pnpm --filter @server-foundation/mysql-adapter test && corepack pnpm --filter @server-foundation/redis-adapter test && corepack pnpm --filter @server-foundation/local-fs-storage test && corepack pnpm test:backup",
+    "test:backup": "node --test scripts/backup.test.mjs",
+    "test:integration": "corepack pnpm test:integration:mysql && corepack pnpm test:integration:redis && corepack pnpm test:integration:api",
+    "test:integration:mysql": "corepack pnpm --filter @server-foundation/mysql-adapter test:integration",
+    "test:integration:redis": "corepack pnpm --filter @server-foundation/redis-adapter test:integration",
+    "test:integration:api": "corepack pnpm --filter @server-foundation/api exec vitest run test/auth.integration.test.ts test/files.integration.test.ts",
+    "contract:fixtures": "node scripts/check-contract-fixtures.mjs",
+    "contract:compatibility": "node scripts/check-contract-compatibility.mjs",
+    "migration:rollback-compatibility": "node scripts/check-migration-rollback-compatibility.mjs",
+    "security:audit": "corepack pnpm audit --prod --audit-level=high",
+    "backup": "node scripts/backup.mjs",
+    "backup:rehearse": "node scripts/backup-restore-rehearsal.mjs",
+    "restore": "node scripts/restore.mjs",
+    "release:package": "node scripts/package-release.mjs",
+    "build": "corepack pnpm --filter @server-foundation/api... build && corepack pnpm --filter @server-foundation/mysql-adapter build && corepack pnpm --filter @server-foundation/redis-adapter build && corepack pnpm --filter @server-foundation/local-fs-storage build",
+    "verify": "corepack pnpm typecheck && corepack pnpm lint && corepack pnpm format:check && corepack pnpm test && corepack pnpm build && corepack pnpm contract:fixtures"
+  },
+  "devDependencies": {
+    "oxlint": "^1.77.0",
+    "prettier": "^3.9.6",
+    "typescript": "^7.0.2"
+  }
+}

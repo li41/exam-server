@@ -1,0 +1,26 @@
+{
+  email {$ACME_EMAIL}
+}
+
+{$SERVER_DOMAIN} {
+  encode zstd gzip
+
+  header {
+    -Server
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+  }
+
+  reverse_proxy 127.0.0.1:8787 {
+    header_up X-Real-IP {remote_host}
+  }
+
+  log {
+    output file /var/log/caddy/server-foundation-access.log {
+      roll_size 50MiB
+      roll_keep 10
+      roll_keep_for 720h
+    }
+    format json
+  }
+}

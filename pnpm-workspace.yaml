@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+  - packages/adapters/*
+  - packages/storage/*
+
+allowBuilds:
+  argon2: true
+  esbuild: true

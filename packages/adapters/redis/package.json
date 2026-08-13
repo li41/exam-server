@@ -1,0 +1,29 @@
+{
+  "name": "@server-foundation/redis-adapter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "typecheck": "tsc -b",
+    "build": "tsc -b",
+    "test": "vitest run",
+    "test:integration": "vitest run test/*.integration.test.ts"
+  },
+  "dependencies": {
+    "@server-foundation/domain": "workspace:*",
+    "redis": "^6.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "vitest": "^4.1.10"
+  }
+}

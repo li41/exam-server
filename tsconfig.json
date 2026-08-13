@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/api-contracts" },
+    { "path": "packages/domain" },
+    { "path": "packages/auth" },
+    { "path": "packages/testing" },
+    { "path": "packages/adapters/mysql" },
+    { "path": "packages/adapters/redis" },
+    { "path": "packages/storage/local-fs" },
+    { "path": "apps/api" }
+  ]
+}
