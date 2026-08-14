@@ -22,9 +22,21 @@ bash deploy/scripts/bootstrap-almalinux10.sh
 ## 這份文件的邊界（先看這段）
 
 `deploy/README.md` 是**服務帳號、目錄配置、release 安裝與回滾**的權威，這份不重寫它。
-這份只補它假設你已經有、但全新機器沒有的：作業系統套件、資料庫、**網路**、SELinux。
+這份只補它假設你已經有、但全新機器沒有的：作業系統套件、資料庫、**網路**。
 
 ⇒ **做完第 1-8 步，接 `deploy/README.md` 的「Create the service account and directories once」往下做。**
+
+### 但你多半不必手動照做
+
+`deploy/scripts/bootstrap-almalinux10.sh` 已經把這份文件**整份**（含 `deploy/README.md` 那段、
+建置打包、安裝 release、建第一個帳號）做成一支可重跑的腳本。
+
+```bash
+SF_ADMIN_EMAIL=you@example.com bash deploy/scripts/bootstrap-almalinux10.sh
+```
+
+**這份文件的用途改成「解釋每一步為什麼這樣做」**——腳本某步失敗時來查它的理由，
+而不是拿來照打。兩者不同步時，**以腳本為準**（它跑得過真機，文件跑不過）。
 
 ## ⚠️⚠️ 與 repo 現有資產的分歧（一定要知道）
 
@@ -109,11 +121,9 @@ WireGuard 本身就在加密（ChaCha20-Poly1305）⇒ **隧道內不需要再�
 
 ```bash
 sudo dnf -y update
-sudo dnf -y install curl tar policycoreutils-python-utils
+sudo dnf -y install curl tar ca-certificates
 sudo timedatectl set-timezone Asia/Taipei
 ```
-
-`policycoreutils-python-utils` 是之後排查 SELinux 用的（`semanage`／`audit2why`），先裝好。
 
 ## 步驟 2：Node 24
 
@@ -263,18 +273,19 @@ sudo firewall-cmd --zone=trusted --list-all      # 應看到 wg0 與 8787/tcp
 ⇒ 之後就算哪天有人把 `HOST` 改成 `0.0.0.0`，**防火牆仍然擋著**，
 不會像現在這樣「改錯了完全沒有徵兆」。**這一步花三十秒，換掉一個靜默失效點。**
 
-## 步驟 8：SELinux
+## 步驟 8：SELinux —— **本架構不使用**
 
-AlmaLinux 預設 **enforcing**，⚠️ **不要用 `setenforce 0` 關掉**——那是把問題藏起來。
+**主公 2026-08-15 裁示：不用 SELinux，正式機也會關掉。**
+腳本因此**不啟用也不檢查**它——這是明示的取捨，不是遺漏。
 
-出事時先看它到底擋了什麼：
+**放棄了什麼**：服務本身被攻破之後的那一層強制存取控制。
+SELinux 擋的是「這支程式即使拿到 root，也不准讀 `/etc/shadow`」這類事，
+前面幾步（WireGuard／防火牆／`HOST` 綁定）**一項都擋不了**——它們管的是誰連得進來，
+不是連進來之後能做什麼。
 
-```bash
-sudo ausearch -m AVC -ts recent | audit2why
-```
-
-⚠️ **我沒有 AlmaLinux 10 可以實測**，所以不給「照打就好」的指令——`audit2why` 會直接告訴你要開哪個 boolean，
-**照它說的做比照我猜的做可靠**。
+**因此**：本架構的邊界完全落在 **WireGuard ＋ firewalld ＋ `HOST` 綁定**這三者上，
+⇒ **步驟 6、7 與最後的監聽位址檢查一步都不能省**。步驟 7 那個
+`--zone=trusted --add-interface=wg0` 原本是「第二道防線」，現在它就是最後一道。
 
 ## 步驟 9：交棒 `deploy/README.md`
 
@@ -282,7 +293,8 @@ sudo ausearch -m AVC -ts recent | audit2why
 
 ### ⚠️ 環境變數有兩處要與範本不同
 
-範本是照「有反向代理」寫的，**本架構要改這兩個**：
+範本是照「有反向代理」寫的。腳本會自動改**四個**（`HOST`／`PORT`／`TRUST_PROXY_HEADERS`／`MYSQL_URL`），
+其中前兩個以外的兩個理由在此：
 
 | 變數                  | 範本值      | **本架構**                     | 為什麼                                                                               |
 | --------------------- | ----------- | ------------------------------ | ------------------------------------------------------------------------------------ |
@@ -515,8 +527,6 @@ unit 是 `ProtectSystem=strict` 且 `ReadWritePaths` 只列 `/var/lib/server-fou
 **⚠️ 仍未實測**：
 
 - **Percona 的 el10 套件**（本輪沒裝，走原廠 `mysql8.4-server`）
-- **SELinux 實際會擋哪一條**——⚠️ 而且 **AlmaLinux WSL 映像未安裝 `selinux-policy`**，
-  ⇒ **這一項在 WSL 上驗不到，必須在正式機重做。**
 - **本專案的 redis adapter 對 Valkey 的相容性**（見步驟 5）
 
 **⚠️ 屬於設計判斷、不是查證**：一台電腦一組金鑰、`AllowedIPs` 用 `/32`、
