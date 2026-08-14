@@ -5,6 +5,20 @@
 ⚠️ 使用者是**國教院內部的桌面版後台**（約 20 台），伺服器也在院內。
 **考試端（考生應試）在 Cloudflare，不經過這台機器**——不要把兩者混為一談。
 
+## ⚡ 想直接跑的話：有一支腳本把步驟 1-9 做完了
+
+```bash
+bash deploy/scripts/bootstrap-almalinux10.sh
+```
+
+可重複執行、每步做完就驗、驗不過就停；**不含任何密碼，一律互動式 `sudo`**。
+預設 `PORT=18787`（⚠️ 刻意不是 8787，理由見步驟 9）。
+
+⇒ **這份文件仍然要讀**——腳本做了什麼、為什麼那樣做、哪裡會靜默失效，都寫在下面。
+**腳本是省打字的，不是省理解的。**
+
+---
+
 ## 這份文件的邊界（先看這段）
 
 `deploy/README.md` 是**服務帳號、目錄配置、release 安裝與回滾**的權威，這份不重寫它。
@@ -103,12 +117,18 @@ sudo timedatectl set-timezone Asia/Taipei
 
 ## 步驟 2：Node 24
 
-```bash
-dnf module list nodejs
-```
+⚠️ **2026-08-14 在 AlmaLinux 10.2 實機查證，本節原本寫錯，已更正**：
 
-- **有 `nodejs:24`** → `sudo dnf -y module install nodejs:24`
-- **沒有** → `curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -` 然後 `sudo dnf -y install nodejs`
+- ❌ **`dnf module list nodejs` 會直接報 `Error: No matching Modules to list`**
+  ——**RHEL 10／AlmaLinux 10 取消了 dnf modularity**，那條分支不存在。
+- ❌ AppStream 只有 **`nodejs 22.23.1`**，沒有 24。
+
+⇒ **只有一條路：NodeSource。**（已驗 `pub_24.x/nodistro/nodejs/x86_64/repodata/repomd.xml` 回 200）
+
+```bash
+curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
+sudo dnf -y install nodejs
+```
 
 **驗證（不能跳）：**
 
@@ -128,8 +148,12 @@ sudo corepack enable && corepack prepare pnpm@11.10.0 --activate
 ## 步驟 4：資料庫（原廠 MySQL 或 Percona 二擇一）
 
 **原廠：**
+
+⚠️ **套件名是 `mysql8.4-server`，不是 `mysql-server`**（2026-08-14 實機查證）。
+AlmaLinux 10 的 AppStream **沒有** `mysql-server` 這個名字，只有帶版號的 `mysql8.4-server`（實測 8.4.9）。
+
 ```bash
-sudo dnf -y install mysql-server && sudo systemctl enable --now mysqld && sudo mysql_secure_installation
+sudo dnf -y install mysql8.4-server && sudo systemctl enable --now mysqld && sudo mysql_secure_installation
 ```
 
 **Percona Server**（程式這側完全不用改——驅動是 `mysql2`，只用到 `GET_LOCK`／`RELEASE_LOCK` 與 `CHECK`，兩者都支援）：
@@ -157,17 +181,24 @@ FLUSH PRIVILEGES;
 ⚠️ 用 `'127.0.0.1'` 不要用 `'localhost'`——MySQL 把它們當**兩個不同帳號**，而連線字串走 `127.0.0.1`。
 寫錯會得到「密碼明明對卻拒絕存取」。
 
-## 步驟 5：Redis 7.4
+## 步驟 5：Valkey（**不是 Redis**）
+
+🔴 **2026-08-14 實機查證：AlmaLinux 10 的 repo 裡沒有 `redis` 這個套件。**
+RHEL 10 因為 Redis 的授權變更把它移除了，官方替代是 **Valkey**（Redis 的分支，協定相容）。實測有 `valkey 8.0.9`。
 
 ```bash
-sudo dnf -y install redis
+sudo dnf -y install valkey
 ```
 
-`/etc/redis/redis.conf`：`bind 127.0.0.1 -::1`、`protected-mode yes`
+`/etc/valkey/valkey.conf`：`bind 127.0.0.1 -::1`、`protected-mode yes`
 
 ```bash
-sudo systemctl enable --now redis && redis-cli ping     # PONG
+sudo systemctl enable --now valkey && valkey-cli ping     # PONG
 ```
+
+⚠️ **未確認**：本專案的 redis adapter（`packages/adapters/redis`）對 **Valkey 8 的相容性尚未實測**。
+理論上協定相容，但**沒跑過就是沒跑過**。
+⇒ 若日後出現協定層問題，替代方案是從 **Remi／EPEL** 裝原生 Redis。**發現問題請回報我更新這一節。**
 
 ## 步驟 6：WireGuard（伺服器端）
 
@@ -469,8 +500,22 @@ unit 是 `ProtectSystem=strict` 且 `ReadWritePaths` 只列 `/var/lib/server-fou
 **✅ 從 repo 實際檔案讀出來的**：所有版本號、`/usr/bin/node`、API 埠 `8787`、
 十一個環境變數、目錄配置、備份由獨立腳本執行、`mysql2` 驅動與用到的 SQL 功能。
 
-**⚠️ 未在 AlmaLinux 10 上實測**：`dnf module list nodejs` 有沒有 24、Percona 的 el10 套件、
-SELinux 實際會擋哪一條。**這三處給的是「怎麼自己確認」，不是「照打就好」。**
+**✅ 2026-08-14 在 AlmaLinux 10.2 實機查證（原本標「未實測」的，三處全查了、三處全錯，已更正）**：
+
+| 原本寫 | 實機結果 |
+|---|---|
+| `dnf module list nodejs` 看有沒有 24 | ❌ **el10 取消 modularity，指令直接報錯**；AppStream 只有 nodejs 22 ⇒ 只能走 NodeSource |
+| `mysql-server` | ❌ **不存在**，實際是 `mysql8.4-server`（8.4.9） |
+| `redis` | ❌ **RHEL 10 已移除**，改 `valkey`（8.0.9） |
+
+⇒ **這三格教訓一樣**：文件裡「照 CI image 的版本推測套件名」是不可靠的，**要在目標發行版上實查**。
+另：`wireguard-tools`（1.0.20250521）與 `firewalld`（2.4.3）**都在，但 firewalld 預設未安裝**。
+
+**⚠️ 仍未實測**：
+- **Percona 的 el10 套件**（本輪沒裝，走原廠 `mysql8.4-server`）
+- **SELinux 實際會擋哪一條**——⚠️ 而且 **AlmaLinux WSL 映像未安裝 `selinux-policy`**，
+  ⇒ **這一項在 WSL 上驗不到，必須在正式機重做。**
+- **本專案的 redis adapter 對 Valkey 的相容性**（見步驟 5）
 
 **⚠️ 屬於設計判斷、不是查證**：一台電腦一組金鑰、`AllowedIPs` 用 `/32`、
 隧道內不再疊 TLS、私鑰由你產完即刪、IP 從 `.11` 起配。
