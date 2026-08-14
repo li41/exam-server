@@ -92,6 +92,41 @@ test("fails before hashing or inserting when email already exists", async () => 
   assert.equal(createCalled, false);
 });
 
+test("converts a duplicate-key race into a readable email error", async () => {
+  const users = {
+    async findByEmail() {
+      return null;
+    },
+    async create() {
+      const error = new Error("Duplicate entry 'user@example.com' for key 'uq_users_email'");
+      error.code = "ER_DUP_ENTRY";
+      error.errno = 1062;
+      throw error;
+    },
+  };
+  const passwordHasher = {
+    async hash() {
+      return "hash:generated-secret";
+    },
+  };
+
+  await assert.rejects(
+    createUser({
+      email: "user@example.com",
+      tenantId: "550e8400-e29b-41d4-a716-446655440000",
+      roles: ["member"],
+      users,
+      passwordHasher,
+      passwordFactory: () => "generated-secret",
+    }),
+    (error) => {
+      assert.equal(error.message, "A user with email user@example.com already exists.");
+      assert.equal(error.message.includes("uq_users_email"), false);
+      return true;
+    },
+  );
+});
+
 test("hashes generated password and creates exactly one user", async () => {
   const calls = [];
   const users = {
