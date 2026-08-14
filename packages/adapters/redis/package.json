@@ -16,7 +16,7 @@
     "typecheck": "tsc -b",
     "build": "tsc -b",
     "test": "vitest run",
-    "test:integration": "vitest run test/*.integration.test.ts"
+    "test:integration": "vitest run --no-file-parallelism test/*.integration.test.ts"
   },
   "dependencies": {
     "@server-foundation/domain": "workspace:*",
