@@ -19,7 +19,11 @@ export const parseCreateUserArgs = (argv) => {
   for (let index = 0; index < argv.length; index += 2) {
     const key = argv[index];
     const value = argv[index + 1];
-    if (!key?.startsWith("--") || value === undefined || value.startsWith("--")) {
+    if (
+      !key?.startsWith("--") ||
+      value === undefined ||
+      value.startsWith("--")
+    ) {
       throw new Error(usage);
     }
     if (values.has(key)) throw new Error(`Duplicate argument: ${key}.`);
@@ -28,7 +32,8 @@ export const parseCreateUserArgs = (argv) => {
 
   const allowed = new Set(["--email", "--tenant", "--roles"]);
   for (const key of values.keys()) {
-    if (!allowed.has(key)) throw new Error(`Unknown argument: ${key}. ${usage}`);
+    if (!allowed.has(key))
+      throw new Error(`Unknown argument: ${key}. ${usage}`);
   }
 
   const email = values.get("--email")?.trim().toLowerCase();
@@ -48,7 +53,9 @@ export const parseCreateUserArgs = (argv) => {
     .map((role) => role.trim())
     .filter(Boolean);
   if (roles.length === 0 || roles.some((role) => role.length > 100)) {
-    throw new Error("--roles must contain one or more comma-separated role names.");
+    throw new Error(
+      "--roles must contain one or more comma-separated role names.",
+    );
   }
   if (new Set(roles).size !== roles.length) {
     throw new Error("--roles must not contain duplicate role names.");
@@ -103,7 +110,9 @@ export const main = async ({
       passwordHasher: new Argon2PasswordHasher(),
     });
 
-    stdout.write(`Created user ${result.user.email} (${result.user.userId}).\n`);
+    stdout.write(
+      `Created user ${result.user.email} (${result.user.userId}).\n`,
+    );
     stdout.write(`Generated password: ${result.password}\n`);
     return 0;
   } catch (error) {

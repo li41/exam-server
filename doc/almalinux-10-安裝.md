@@ -93,12 +93,12 @@ WireGuard 本身就在加密（ChaCha20-Poly1305）⇒ **隧道內不需要再�
 
 ## 版本（皆取自 repo 實際設定，非推測）
 
-| 元件 | 版本 | 出處 |
-|---|---|---|
-| Node | **24** | `.github/workflows/*.yml` 的 `node-version` |
-| MySQL | **8.4** | CI service image（Percona Server 8.4 亦可，見步驟 4） |
-| Redis | **7.4** | CI service image |
-| pnpm | **11.10.0** | `package.json` 的 `packageManager` |
+| 元件  | 版本        | 出處                                                  |
+| ----- | ----------- | ----------------------------------------------------- |
+| Node  | **24**      | `.github/workflows/*.yml` 的 `node-version`           |
+| MySQL | **8.4**     | CI service image（Percona Server 8.4 亦可，見步驟 4） |
+| Redis | **7.4**     | CI service image                                      |
+| pnpm  | **11.10.0** | `package.json` 的 `packageManager`                    |
 
 ⚠️ **Node 必須裝在 `/usr/bin/node`** —— systemd unit 的 `ExecStart` 是寫死的絕對路徑
 （`deploy/systemd/server-foundation.service`）。用 nvm 裝在家目錄**會啟動失敗**。
@@ -157,6 +157,7 @@ sudo dnf -y install mysql8.4-server && sudo systemctl enable --now mysqld && sud
 ```
 
 **Percona Server**（程式這側完全不用改——驅動是 `mysql2`，只用到 `GET_LOCK`／`RELEASE_LOCK` 與 `CHECK`，兩者都支援）：
+
 ```bash
 sudo dnf -y install https://repo.percona.com/yum/percona-release-latest.noarch.rpm
 sudo percona-release setup ps84      # ⚠️ 對到 8.4，別裝成 8.0
@@ -283,10 +284,10 @@ sudo ausearch -m AVC -ts recent | audit2why
 
 範本是照「有反向代理」寫的，**本架構要改這兩個**：
 
-| 變數 | 範本值 | **本架構** | 為什麼 |
-|---|---|---|---|
-| `HOST` | `127.0.0.1` | **`10.99.0.1`**（WG 介面位址） | 沒有代理了，API 要直接聽 WG 介面 |
-| `TRUST_PROXY_HEADERS` | （依範本） | **關閉** | ⚠️ **沒有代理卻信任 `X-Forwarded-For`，客戶端可以自己偽造來源 IP，登入限流形同虛設** |
+| 變數                  | 範本值      | **本架構**                     | 為什麼                                                                               |
+| --------------------- | ----------- | ------------------------------ | ------------------------------------------------------------------------------------ |
+| `HOST`                | `127.0.0.1` | **`10.99.0.1`**（WG 介面位址） | 沒有代理了，API 要直接聽 WG 介面                                                     |
+| `TRUST_PROXY_HEADERS` | （依範本）  | **關閉**                       | ⚠️ **沒有代理卻信任 `X-Forwarded-For`，客戶端可以自己偽造來源 IP，登入限流形同虛設** |
 
 ⚠️⚠️⚠️ **`HOST` 絕對不要填 `0.0.0.0`——這是整份文件裡最重要的一行。**
 
@@ -502,16 +503,17 @@ unit 是 `ProtectSystem=strict` 且 `ReadWritePaths` 只列 `/var/lib/server-fou
 
 **✅ 2026-08-14 在 AlmaLinux 10.2 實機查證（原本標「未實測」的，三處全查了、三處全錯，已更正）**：
 
-| 原本寫 | 實機結果 |
-|---|---|
+| 原本寫                               | 實機結果                                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------------------- |
 | `dnf module list nodejs` 看有沒有 24 | ❌ **el10 取消 modularity，指令直接報錯**；AppStream 只有 nodejs 22 ⇒ 只能走 NodeSource |
-| `mysql-server` | ❌ **不存在**，實際是 `mysql8.4-server`（8.4.9） |
-| `redis` | ❌ **RHEL 10 已移除**，改 `valkey`（8.0.9） |
+| `mysql-server`                       | ❌ **不存在**，實際是 `mysql8.4-server`（8.4.9）                                        |
+| `redis`                              | ❌ **RHEL 10 已移除**，改 `valkey`（8.0.9）                                             |
 
 ⇒ **這三格教訓一樣**：文件裡「照 CI image 的版本推測套件名」是不可靠的，**要在目標發行版上實查**。
 另：`wireguard-tools`（1.0.20250521）與 `firewalld`（2.4.3）**都在，但 firewalld 預設未安裝**。
 
 **⚠️ 仍未實測**：
+
 - **Percona 的 el10 套件**（本輪沒裝，走原廠 `mysql8.4-server`）
 - **SELinux 實際會擋哪一條**——⚠️ 而且 **AlmaLinux WSL 映像未安裝 `selinux-policy`**，
   ⇒ **這一項在 WSL 上驗不到，必須在正式機重做。**

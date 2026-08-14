@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  createUser,
-  parseCreateUserArgs,
-} from "./create-user.mjs";
+import { createUser, parseCreateUserArgs } from "./create-user.mjs";
 
 test("parses and normalizes create-user arguments", () => {
   assert.deepEqual(
