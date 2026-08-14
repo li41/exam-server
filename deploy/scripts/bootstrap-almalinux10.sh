@@ -347,8 +347,12 @@ step "步驟 11：安裝 release（含 migration）"
 # ⚠️ install-release.sh 的健康檢查網址預設寫死 http://127.0.0.1:8787/health/ready。
 #    PORT 改過卻不覆寫，它會探測失敗並【自動 rollback】——
 #    而且 rollback 是「成功」的行為，退出碼看起來很正常。
+# ⚠️ 一律用 `bash <路徑>` 叫，不靠執行位。
+#    2026-08-15 實測：install-release.sh 在 git 裡是 100644（已一併修成 100755），
+#    而 sudo 對不可執行的檔案回報的是 **"command not found"** ——訊息完全指錯方向。
+#    tarball 解開、檔案系統掛 noexec 等情況也會重現，走 bash 就都免疫。
 sudo SERVER_FOUNDATION_HEALTH_URL="http://${SF_HOST}:${SF_PORT}/health/ready" \
-     "$REPO_DIR/deploy/scripts/install-release.sh" "$ARCHIVE" "$RELEASE_VERSION_VALUE"
+     bash "$REPO_DIR/deploy/scripts/install-release.sh" "$ARCHIVE" "$RELEASE_VERSION_VALUE"
 ok "install-release.sh 回報成功"
 
 # ══════════════════════════════════════════════════════════════
