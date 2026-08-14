@@ -14,6 +14,15 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const duplicateEmailError = (email) =>
+  new Error(`A user with email ${email} already exists.`);
+
+const isDuplicateEntryError = (error) =>
+  error !== null &&
+  typeof error === "object" &&
+  (("code" in error && error.code === "ER_DUP_ENTRY") ||
+    ("errno" in error && error.errno === 1062));
+
 export const parseCreateUserArgs = (argv) => {
   const values = new Map();
   for (let index = 0; index < argv.length; index += 2) {
@@ -67,19 +76,26 @@ export const createUser = async ({
   userIdFactory = randomUUID,
 }) => {
   if (await users.findByEmail(email)) {
-    throw new Error(`A user with email ${email} already exists.`);
+    throw duplicateEmailError(email);
   }
 
   const password = passwordFactory();
   if (!password) throw new Error("Generated password was empty.");
   const passwordHash = await passwordHasher.hash(password);
-  const user = await users.create({
-    userId: userIdFactory(),
-    email,
-    tenantId,
-    roles,
-    passwordHash,
-  });
+
+  let user;
+  try {
+    user = await users.create({
+      userId: userIdFactory(),
+      email,
+      tenantId,
+      roles,
+      passwordHash,
+    });
+  } catch (error) {
+    if (isDuplicateEntryError(error)) throw duplicateEmailError(email);
+    throw error;
+  }
 
   return { user, password };
 };
