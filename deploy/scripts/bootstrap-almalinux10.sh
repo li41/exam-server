@@ -160,7 +160,12 @@ sudo install -d -m 0750 -o root -g "$SERVICE_USER" /etc/server-foundation
 # 重跑時沿用既有密碼；否則產新的。
 # ⚠️ 不沿用會壞事：env 換了新密碼、DB 帳號還是舊的 ⇒ 重跑一次就把自己鎖在外面。
 DB_PASSWORD=""
-if [ -f "$ENV_FILE" ]; then
+# ⚠️⚠️ 一定要 `sudo test -f`，不能用 `[ -f ]`。
+#    ENV_FILE 在 /etc/server-foundation（0750 root:server-foundation）底下，
+#    一般使用者對該目錄沒有 x 權限 ⇒ **`[ -f ]` 一律回假**，
+#    於是這整段「沿用既有密碼」永遠不會觸發，每次重跑都換新密碼、把自己鎖在外面。
+#    2026-08-15 實測就是這樣壞的：檢查方法本身看不到它要找的東西。
+if sudo test -f "$ENV_FILE"; then
   existing="$(sudo grep -E '^MYSQL_URL=' "$ENV_FILE" 2>/dev/null || true)"
   if [ -n "$existing" ] && ! printf '%s' "$existing" | grep -q 'CHANGE_ME'; then
     DB_PASSWORD="$(printf '%s' "$existing" | sed -E 's|^MYSQL_URL=mysql://[^:]+:([^@]*)@.*$|\1|')"
@@ -172,17 +177,26 @@ if [ -z "$DB_PASSWORD" ]; then
   ok "已產生新的資料庫密碼（只寫進 ${ENV_FILE}，不顯示、不留 log）"
 fi
 
-# ⚠️ MySQL 的 'user'@'localhost' 與 'user'@'127.0.0.1' 是兩個不同帳號。
-#    連線字串寫 127.0.0.1 就必須建 @'127.0.0.1' 那個，建錯會得到 access denied。
+# ⚠️⚠️ MySQL 的 'user'@'localhost' 與 'user'@'127.0.0.1' 是**兩個不同帳號**，
+#    而「連線字串寫 127.0.0.1 就該建 @'127.0.0.1'」是**錯的**：
+#    MySQL 預設 skip_name_resolve=OFF ⇒ 它會把來源 IP **反解成主機名**再比對，
+#    127.0.0.1 反解成 localhost ⇒ 實際比對到的是 @'localhost'。
+#    2026-08-15 實測：只建 @'127.0.0.1' 會得到
+#      ERROR 1045 Access denied for user 'x'@'localhost'
+#    ——訊息裡的 'localhost' 就是證據，但很容易被當成「我明明連的是 127.0.0.1」而看漏。
+#    ⇒ **兩個都建**，這樣 skip_name_resolve 開或關都能連。
 # ⚠️ 密碼經 stdin 餵進去，不出現在命令列（ps 看得到命令列參數）。
 sudo mysql --connect-expired-password <<EOSQL || die "無法以 root 連線 MySQL。請先跑 mysql_secure_installation 或確認 socket 認證。"
 CREATE DATABASE IF NOT EXISTS \`${SF_DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${SF_DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
 ALTER USER '${SF_DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
 GRANT ALL ON \`${SF_DB_NAME}\`.* TO '${SF_DB_USER}'@'127.0.0.1';
+CREATE USER IF NOT EXISTS '${SF_DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+ALTER USER '${SF_DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+GRANT ALL ON \`${SF_DB_NAME}\`.* TO '${SF_DB_USER}'@'localhost';
 FLUSH PRIVILEGES;
 EOSQL
-ok "資料庫 ${SF_DB_NAME} 與帳號 ${SF_DB_USER}@127.0.0.1"
+ok "資料庫 ${SF_DB_NAME} 與帳號 ${SF_DB_USER}@{127.0.0.1,localhost}"
 
 MYSQL_URL_VALUE="mysql://${SF_DB_USER}:${DB_PASSWORD}@127.0.0.1:3306/${SF_DB_NAME}"
 
@@ -192,9 +206,15 @@ MYCNF="$(mktemp)"
 chmod 0600 "$MYCNF"
 trap 'rm -f "$MYCNF"' EXIT
 printf '[client]\nuser=%s\npassword=%s\n' "$SF_DB_USER" "$DB_PASSWORD" > "$MYCNF"
-mysql --defaults-extra-file="$MYCNF" --protocol=TCP -h 127.0.0.1 \
-      -e "USE \`${SF_DB_NAME}\`; SELECT 1;" >/dev/null 2>&1 \
-  || die "應用帳號連不上資料庫——GRANT 過了但實連失敗，先查 @'127.0.0.1' 是否真的建起來"
+# ⚠️ **不要吞 stderr**。這裡的兩種失敗長得一樣但成因天差地遠：
+#      ERROR 2003 ... (113)  ＝ 連不到（EHOSTUNREACH，多半是防火牆擋 loopback）
+#      ERROR 1045 ...        ＝ 連得到但認證失敗（帳號主機名不對）
+#    先前這行寫 2>&1 到 /dev/null，害我拿著「實連失敗」四個字查錯方向。
+if ! DBERR="$(mysql --defaults-extra-file="$MYCNF" --protocol=TCP -h 127.0.0.1 \
+                    -e "USE \`${SF_DB_NAME}\`; SELECT 1;" 2>&1)"; then
+  printf '  實際錯誤：%s\n' "$(printf '%s' "$DBERR" | head -2)"
+  die "應用帳號連不上資料庫（錯誤原文在上一行，2003＝網路被擋、1045＝帳號主機名不對）"
+fi
 rm -f "$MYCNF"; trap - EXIT
 ok "已用應用帳號實連驗證通過"
 
@@ -265,6 +285,12 @@ if [ "$SF_SETUP_FIREWALL" = "1" ]; then
   sudo dnf -y install firewalld
   sudo systemctl enable --now firewalld
   sudo firewall-cmd --permanent --add-port="${SF_WG_PORT}/udp"
+  # ⚠️⚠️ 這一行不能省，否則**服務連不上自己的資料庫**。
+  #    firewalld 起來之後 lo 是「no zone」⇒ 落到 default zone（public）⇒ 被 REJECT，
+  #    應用程式打 127.0.0.1:3306 會拿到 errno 113（EHOSTUNREACH）。
+  #    2026-08-15 實測撞到：第一輪測連線時 firewalld 還沒裝所以過了，
+  #    第二輪它已經在跑，同一條連線就死了——**只跑一次是驗不出來的**。
+  sudo firewall-cmd --permanent --zone=trusted --add-interface=lo
   # ⭐ 第二道防線：把 wg0 劃進 trusted zone，只有它能碰 API 埠。
   #    綁「介面」而不是 IP 範圍是刻意的——介面是實打實的隧道出口，
   #    偽造來源位址繞不過。這樣就算日後有人把 HOST 改成 0.0.0.0，
@@ -291,10 +317,14 @@ ok "目錄"
 sudo chown -R "$SERVICE_USER:$SERVICE_USER" /var/lib/server-foundation /var/backups/server-foundation
 ok "storage/backup 擁有者已收斂為 ${SERVICE_USER}"
 
-if [ ! -f "$ENV_FILE" ]; then
+# ⚠️ 同上：一定要 sudo test -f，`[ -f ]` 在 0750 的目錄底下一律回假，
+#    會導致每次重跑都用範本蓋掉既有 env（含已填好的簽章密鑰）。
+if ! sudo test -f "$ENV_FILE"; then
   sudo install -m 0600 -o root -g "$SERVICE_USER" \
     "$REPO_DIR/deploy/env/server-foundation.env.example" "$ENV_FILE"
   ok "已從範本建立 ${ENV_FILE}"
+else
+  ok "${ENV_FILE} 已存在（不覆蓋）"
 fi
 # ⚠️ 範本是照「有反向代理」寫的，本架構要改四個值：
 #   HOST                 → 綁隧道介面，絕不可 0.0.0.0（範本是 127.0.0.1）
