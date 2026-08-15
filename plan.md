@@ -1,12 +1,12 @@
 # server-foundation 實作計畫
 
-> 本文件於 `main@2c3bd872a9c007be7913c678eccf7cffb961a3ce` 重新複驗。
-> 判準不是「曾經規劃過」，而是 repo 或已記錄的實機／CI 證據能不能指出它真的存在。
-> 目前第一個要服務真實使用者的目標，是 **院內單一 VPS 的 `vps-mysql` profile，Windows 桌面後台經 WireGuard 存取**；Cloudflare 與 Google profile 是後續能力，不應混進第一批使用者的上線阻塞條件。
+> 本文件於 `main@2c3bd872a9c007be7913c678eccf7cffb961a3ce` 重新複驗。判準不是「曾經規劃過」，而是 repo 或已記錄的實機／CI 證據能不能指出它真的存在。
+>
+> 第一個要服務真實使用者的目標，是**院內單一 VPS 的 `vps-mysql` profile，Windows 桌面後台經 WireGuard 存取**。Cloudflare 與 Google profile 是後續能力，不應混進第一批使用者的上線阻塞條件。
 
 ## 1. 目標與不變條件
 
-`server-foundation` 要讓桌面 App 經由 HTTPS 或受保護的私有網路 API 使用後端資料與檔案服務，而不是直接持有 MySQL、D1、Sheets、Drive、Redis/Valkey 等 provider 憑證。
+`server-foundation` 要讓桌面 App 經由受保護的 API 使用後端資料與檔案服務，而不是直接持有 MySQL、D1、Sheets、Drive、Redis/Valkey 等 provider 憑證。
 
 共同原則：
 
@@ -20,9 +20,9 @@
 
 目前規劃的 deployment profile：
 
-1. `vps-mysql`：Node API + MySQL + Redis/Valkey + private filesystem。**目前實作與上線工作的主線。**
-2. `cloudflare-d1-r2`：Cloudflare Workers + D1 + R2。尚未實作。
-3. `google-sheets-drive`：Google Sheets + Google Drive。尚未實作，定位為低併發／內部工具 profile。
+- `vps-mysql`：Node API + MySQL + Redis/Valkey + private filesystem。**目前實作與上線工作的主線。**
+- `cloudflare-d1-r2`：Cloudflare Workers + D1 + R2。尚未實作。
+- `google-sheets-drive`：Google Sheets + Google Drive。尚未實作，定位為低併發／內部工具 profile。
 
 ## 2. 目前架構
 
@@ -47,7 +47,9 @@ server-foundation
 
 ## 3. Phase 狀態：哪些做了、真正還缺什麼
 
-### Phase 0：決策與契約 — **部分完成，不再宣稱整個 Phase 已完成**
+### Phase 0：決策與契約 — 部分完成
+
+不再宣稱整個 Phase 已完成。
 
 已完成：
 
@@ -61,9 +63,9 @@ server-foundation
 - 原計畫要求的 ADR（provider 邊界、檔案生命週期、Google consistency、D1 migration）沒有形成 repo 內可查的 ADR 文件集。
 - 原計畫要求的「可讓多個 provider 共跑的 provider contract test suite」尚未形成；目前 testing package 有 fake，但沒有一套能拿 MySQL、D1、Sheets adapter 逐一套用的共用 suite。
 
-這兩項是架構治理缺口，不是目前 `vps-mysql` 第一批院內使用者的直接上線阻塞；在第二個真實 provider 開工前必須補，否則 provider 間語意容易漂移。
+這兩項是架構治理缺口，不是目前 `vps-mysql` 第一批院內使用者的直接上線阻塞。在第二個真實 provider 開工前必須補，否則 provider 間語意容易漂移。
 
-### Phase 1：Node API 核心 — **完成**
+### Phase 1：Node API 核心 — 完成
 
 證據：
 
@@ -74,7 +76,9 @@ server-foundation
 
 原 Phase 1 的「不接真資料庫也能用 fake adapter 測 API」仍成立，無需改成待辦。
 
-### Phase 2：VPS + MySQL — **核心服務與乾淨機部署已完成；營運風險另列於 Phase 7**
+### Phase 2：VPS + MySQL — 核心服務與乾淨機部署已完成
+
+營運風險不再混寫成 Phase 2 功能缺口，統一列於 Phase 7。
 
 已完成：
 
@@ -92,9 +96,9 @@ server-foundation
 - **公開 TLS / Caddy**：目前院內正式架構是 WireGuard overlay，API 不對院內實體網卡公開，傳輸加密由 WireGuard 提供；`doc/almalinux-10-安裝.md` 已明確記錄此取捨。若未來改成 public ingress，才重新把 Caddy/TLS 列為必要上線條件。
 - 「VPS 部署尚未達成」與「正式 restore 演練尚未完成」都是過期敘述，已刪除。
 
-仍需要做、但屬營運而不是 Phase 2 功能實作的項目：off-site backup、真實目標主機的 reboot／網路邊界驗證、外部告警。詳見 Phase 7 與第 5 節。
+仍需要做、但屬營運而不是 Phase 2 功能實作的項目，是 off-site backup、真實目標主機的 reboot／網路邊界驗證、外部告警。詳見 Phase 7 與第 5 節。
 
-### Phase 3：檔案生命週期 — **`vps-mysql` 的 local-fs 垂直切片已完成**
+### Phase 3：檔案生命週期 — `vps-mysql` 的 local-fs 垂直切片已完成
 
 已完成：
 
@@ -108,49 +112,51 @@ server-foundation
 
 因此舊文「正式演練與部署仍未完成」已不成立。未來 R2／Drive 的檔案生命週期屬 Phase 5／6，不拿來降低這個 `vps-mysql` slice 的完成狀態。
 
-### Phase 4：Desktop API adapter — **`exam-server` 這個 repo 無法證明完成**
+### Phase 4：Desktop API adapter — `exam-server` 這個 repo 無法證明完成
 
 本 repo 能證明 API contract、auth、retry 所需的 server 行為與檔案 API；但 desktop adapter 位於另一個 repo，不在本工單允許的作業範圍。
 
 上線前仍需要取得外部驗收證據，至少要證明真桌面 App 經 WireGuard 對這台 server 能完成：
 
-- login / refresh / 401 recovery；
-- loading／timeout／retry；
-- CRUD；
-- upload progress／cancel／download；
+- login / refresh / 401 recovery。
+- loading／timeout／retry。
+- CRUD。
+- upload progress／cancel／download。
 - fake → real API adapter 切換不需要改業務 UI。
 
-這裡刻意不寫「Phase 4 尚未完成」這種無法行動的句子；具體缺的是**跨 repo 的桌面端 E2E 驗收證據**，不是 `exam-server` 再加一段 server code。
+這裡刻意不寫「Phase 4 尚未完成」這種無法行動的句子。具體缺的是**跨 repo 的桌面端 E2E 驗收證據**，不是 `exam-server` 再加一段 server code。
 
-### Phase 5：Cloudflare D1 + R2 — **尚未實作，缺口明確**
+### Phase 5：Cloudflare D1 + R2 — 尚未實作，缺口明確
 
 目前 repo 沒有 `apps/api-worker/`、D1 adapter、R2 storage adapter 或 Wrangler local integration suite。
 
 未來若要啟用此 profile，需完成：
 
-- Worker API app 與 bindings；
-- D1 schema／migration／repository；
-- R2 upload/download（含 multipart 或 signed URL 策略）；
-- Cloudflare session adapter；
+- Worker API app 與 bindings。
+- D1 schema／migration／repository。
+- R2 upload/download（含 multipart 或 signed URL 策略）。
+- Cloudflare session adapter。
 - local-mode integration tests 與共用 contract suite。
 
 這不是第一批 `vps-mysql` 院內使用者的上線阻塞。
 
-### Phase 6：Google Sheets + Drive — **尚未實作，缺口明確**
+### Phase 6：Google Sheets + Drive — 尚未實作，缺口明確
 
 目前 repo 沒有 Sheets repository、Drive storage adapter、StorageConnection/OAuth token store 或 reconciliation job。
 
 未來若要啟用此 profile，需完成：
 
-- StorageConnection / OAuth 與 refresh token 加密保存；
-- Sheets stable ID／version／quota backoff；
-- Drive resumable upload 與 metadata state machine；
-- 跨 Sheets/Drive 中斷補償與 reconciliation；
+- StorageConnection / OAuth 與 refresh token 加密保存。
+- Sheets stable ID／version／quota backoff。
+- Drive resumable upload 與 metadata state machine。
+- 跨 Sheets/Drive 中斷補償與 reconciliation。
 - mock／sandbox contract tests。
 
 這也不是第一批 `vps-mysql` 院內使用者的上線阻塞。
 
-### Phase 7：營運與恢復 — **部分完成；把「功能已存在」與「真機殘餘風險」分開**
+### Phase 7：營運與恢復 — 部分完成
+
+把「功能已存在」與「真機殘餘風險」分開。
 
 已完成：
 
@@ -190,17 +196,29 @@ Release Artifact gate 雖然會真的 package、production-only install、migrat
 
 以下只列目前院內 `vps-mysql` 單 VPS + WireGuard 目標中，**不做就容易真的出事**的項目。
 
-1. **把正式 backup 自動送到不同故障域，定義 retention，並至少從 off-site copy 恢復一次。**  
-   不做的後果：VPS／磁碟與同機 backup 一起損毀時，MySQL 與檔案即使有完善的 restore 程式也沒有可還原資料。
+### 正式 backup 必須離開同一故障域
 
-2. **在真正要上線的 AlmaLinux 主機做一次「冷啟動 + 網路邊界」驗收。** 至少包含 reboot 後服務自動回來、`/health/ready` 正常、授權 WireGuard peer 可達、未授權院內 LAN 不可達。  
-   不做的後果：CI 全綠仍可能在主機重啟後停機，或因 HOST/firewalld/實體介面差異把 API 暴露到不該到的網路／反過來讓合法桌面連不上。
+把正式 backup 自動送到不同故障域，定義 retention，並至少從 off-site copy 恢復一次。
 
-3. **建立最小外部 health monitoring / alerting。** 不要求先上完整 metrics 平台，但要有獨立於 server process 的東西定期檢查可用性並通知維運者。  
-   不做的後果：服務、MySQL、Valkey 或 storage 掛掉時，可能一直到使用者報案才知道。
+不做的後果：VPS／磁碟與同機 backup 一起損毀時，MySQL 與檔案即使有完善的 restore 程式也沒有可還原資料。
 
-4. **取得真桌面 App 經 WireGuard 的 E2E 驗收證據。** 這不在 `exam-server` repo 內實作，但上線前必須證明 login/refresh、CRUD、timeout/retry、檔案 upload/download/cancel 走真 server 都成立。  
-   不做的後果：只能證明 server 自己健康，不能證明真正使用者的產品路徑可用。
+### 真正目標主機要做一次冷啟動與網路邊界驗收
+
+至少包含 reboot 後服務自動回來、`/health/ready` 正常、授權 WireGuard peer 可達、未授權院內 LAN 不可達。
+
+不做的後果：CI 全綠仍可能在主機重啟後停機，或因 HOST/firewalld/實體介面差異把 API 暴露到不該到的網路，或反過來讓合法桌面連不上。
+
+### 必須有最小外部 health monitoring / alerting
+
+不要求先上完整 metrics 平台，但要有獨立於 server process 的東西定期檢查可用性並通知維運者。
+
+不做的後果：服務、MySQL、Valkey 或 storage 掛掉時，可能一直到使用者報案才知道。
+
+### 必須取得真桌面 App 經 WireGuard 的 E2E 驗收證據
+
+這不在 `exam-server` repo 內實作，但上線前必須證明 login/refresh、CRUD、timeout/retry、檔案 upload/download/cancel 走真 server 都成立。
+
+不做的後果：只能證明 server 自己健康，不能證明真正使用者的產品路徑可用。
 
 ### 第一批使用者不必被這些項目卡住
 
@@ -212,18 +230,16 @@ Release Artifact gate 雖然會真的 package、production-only install、migrat
 
 ## 6. 證據索引
 
-| 主張 | 證據 |
-| --- | --- |
-| 使用者建立流程存在且有測試 | `scripts/create-user.mjs`、`scripts/create-user.test.mjs`、`package.json` 的 `test:create-user` |
-| AlmaLinux 10 可從乾淨環境裝到服務與第一個帳號 | `deploy/scripts/bootstrap-almalinux10.sh`、`doc/almalinux-10-安裝.md`、`c93042891cf363f29dd04cc1fd121043ef0799f0` 及其後續實跑修正 |
-| backup/restore rehearsal 真的 mutate 再 restore | `scripts/backup-restore-rehearsal.mjs` |
-| rehearsal 每次在 CI 跑 | `.github/workflows/verify.yml`、`.github/workflows/release.yml` 的 `Rehearse backup and restore` |
-| release path 真的走 package/install/migration/systemd/readiness | `.github/workflows/release.yml`，#12 merge `46de6ae` |
-| first-install / rollback self-loop 也有負向 gate | `.github/workflows/release.yml`，#14 merge `2c3bd87` |
-| structured log / request ID / audit / readiness 有測試 | `apps/api/test/observability.test.ts` |
-| local filesystem lifecycle 有實作與測試 | `packages/storage/local-fs/`、`apps/api/test/files*.test.ts` |
-| D1/R2 尚未實作 | 目前 repo tree 無 `apps/api-worker/`、D1/R2 adapter |
-| Google profile 尚未實作 | 目前 repo tree 無 Sheets/Drive adapter 或 StorageConnection/OAuth implementation |
+- 使用者建立流程存在且有測試：`scripts/create-user.mjs`、`scripts/create-user.test.mjs`、`package.json` 的 `test:create-user`。
+- AlmaLinux 10 可從乾淨環境裝到服務與第一個帳號：`deploy/scripts/bootstrap-almalinux10.sh`、`doc/almalinux-10-安裝.md`、`c93042891cf363f29dd04cc1fd121043ef0799f0` 及其後續實跑修正。
+- backup/restore rehearsal 真的 mutate 再 restore：`scripts/backup-restore-rehearsal.mjs`。
+- rehearsal 每次在 CI 跑：`.github/workflows/verify.yml`、`.github/workflows/release.yml` 的 `Rehearse backup and restore`。
+- release path 真的走 package/install/migration/systemd/readiness：`.github/workflows/release.yml`，#12 merge `46de6ae`。
+- first-install / rollback self-loop 也有負向 gate：`.github/workflows/release.yml`，#14 merge `2c3bd87`。
+- structured log / request ID / audit / readiness 有測試：`apps/api/test/observability.test.ts`。
+- local filesystem lifecycle 有實作與測試：`packages/storage/local-fs/`、`apps/api/test/files*.test.ts`。
+- D1/R2 尚未實作：目前 repo tree 無 `apps/api-worker/`、D1/R2 adapter。
+- Google profile 尚未實作：目前 repo tree 無 Sheets/Drive adapter 或 StorageConnection/OAuth implementation。
 
 ## 7. 後續 provider 規劃
 
