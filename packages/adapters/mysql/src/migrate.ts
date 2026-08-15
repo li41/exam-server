@@ -27,6 +27,10 @@ export const defaultMigrations: Migration[] = [
     id: "005_idempotency",
     file: new URL("../schema/005_idempotency.sql", import.meta.url),
   },
+  {
+    id: "006_question_bank",
+    file: new URL("../schema/006_question_bank.sql", import.meta.url),
+  },
 ];
 
 const migrationLockName = "server-foundation:schema-migrations";

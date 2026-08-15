@@ -5,5 +5,6 @@ export * from "./idempotency-store.js";
 export * from "./item-repository.js";
 export * from "./migrate.js";
 export * from "./pool.js";
+export * from "./question-bank-repository.js";
 export * from "./transaction.js";
 export * from "./user-repository.js";

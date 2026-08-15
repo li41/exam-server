@@ -9,6 +9,7 @@ import {
   MySqlFileMetadataStore,
   MySqlIdempotencyStore,
   MySqlItemRepository,
+  MySqlQuestionBankRepository,
   MySqlUserRepository,
 } from "@server-foundation/mysql-adapter";
 import {
@@ -19,11 +20,16 @@ import {
   LocalFileStorage,
   startFileCleanupJob,
 } from "@server-foundation/local-fs-storage";
-import { createInMemoryItemRepository } from "@server-foundation/testing";
+import {
+  createInMemoryItemRepository,
+  createInMemoryQuestionBankRepository,
+} from "@server-foundation/testing";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { gracefulShutdown } from "./graceful-shutdown.js";
 import { createJsonLogger, serializeError } from "./logger.js";
+import { QuestionAwareBlobStorage } from "./question-aware-blob-storage.js";
+import { mountQuestionBankRoutes } from "./question-bank-routes.js";
 
 const config = loadConfig();
 const logger = createJsonLogger();
@@ -41,16 +47,19 @@ const main = async () => {
     await redisClient.connect();
   }
 
-  const blobStorage = config.fileStorageRoot
+  const questionBankRepository = pool
+    ? new MySqlQuestionBankRepository(pool)
+    : createInMemoryQuestionBankRepository();
+  const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
         {},
         pool ? new MySqlFileMetadataStore(pool) : undefined,
       )
     : undefined;
-  await blobStorage?.initialize();
-  const fileCleanupJob = blobStorage
-    ? startFileCleanupJob(blobStorage, {
+  await localBlobStorage?.initialize();
+  const fileCleanupJob = localBlobStorage
+    ? startFileCleanupJob(localBlobStorage, {
         intervalMs: config.fileCleanupIntervalMs,
         onCleaned: (count) =>
           logger.info("file_cleanup_completed", { cleanedCount: count }),
@@ -75,6 +84,9 @@ const main = async () => {
   const itemRepository = pool
     ? new MySqlItemRepository(pool)
     : createInMemoryItemRepository();
+  const blobStorage = localBlobStorage
+    ? new QuestionAwareBlobStorage(localBlobStorage, questionBankRepository)
+    : undefined;
   const auditLog = pool ? new MySqlAuditLog(pool) : undefined;
 
   const readinessChecks: Record<string, () => Promise<void>> = {};
@@ -114,6 +126,15 @@ const main = async () => {
     logger,
   });
 
+  mountQuestionBankRoutes(app, {
+    repository: questionBankRepository,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
   const server = serve({
     fetch: app.fetch,
     hostname: config.host,
@@ -127,6 +148,7 @@ const main = async () => {
     dataStore: pool ? "mysql" : "in-memory",
     authentication: authenticationService ? "enabled" : "disabled",
     privateFiles: blobStorage ? "enabled" : "disabled",
+    questionBank: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
