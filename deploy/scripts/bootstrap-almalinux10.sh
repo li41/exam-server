@@ -396,6 +396,36 @@ ok "release: $(basename "$ARCHIVE")"
 
 # ══════════════════════════════════════════════════════════════
 step "步驟 11：安裝 release（含 migration）"
+
+# ⚠️ install-release.sh 遇到「同版本目錄已存在」會直接拒絕：
+#      release already exists: /opt/server-foundation/releases/vX
+#    而它在 migration 失敗時**不會清掉自己剛建的目錄** ⇒ 下一次重跑必定卡在這裡。
+#    2026-08-15 實測撞到（前一輪死在 tsc 缺失，留下半成品目錄）。
+RELEASE_TARGET="/opt/server-foundation/releases/${RELEASE_VERSION_VALUE}"
+if sudo test -d "$RELEASE_TARGET"; then
+  CURRENT_LINK_TARGET="$(sudo readlink -f /opt/server-foundation/current 2>/dev/null || true)"
+  if [ "$CURRENT_LINK_TARGET" = "$RELEASE_TARGET" ] \
+     && systemctl is-active --quiet server-foundation 2>/dev/null \
+     && curl -fsS "http://${SF_HOST}:${SF_PORT}/health/ready" >/dev/null 2>&1; then
+    ok "${RELEASE_VERSION_VALUE} 已是現行版本且服務健康 ⇒ 跳過安裝"
+    SKIP_INSTALL=1
+  else
+    # ⚠️ 只在「它不是現行版本」時才刪。現行版本底下有正在服務的程式，刪了會當場斷線。
+    #    路徑護欄：兩個變數都不可為空，且必須落在 releases/ 底下。
+    [ -n "$RELEASE_VERSION_VALUE" ] || die "RELEASE_VERSION_VALUE 為空，拒絕刪除"
+    case "$RELEASE_TARGET" in
+      /opt/server-foundation/releases/?*) : ;;
+      *) die "拒絕刪除非預期路徑：$RELEASE_TARGET" ;;
+    esac
+    warn "偵測到上一輪失敗留下的 ${RELEASE_VERSION_VALUE}（非現行版本）⇒ 清掉重裝"
+    sudo rm -rf "$RELEASE_TARGET"
+    SKIP_INSTALL=0
+  fi
+else
+  SKIP_INSTALL=0
+fi
+
+if [ "$SKIP_INSTALL" = "0" ]; then
 # ⚠️ install-release.sh 的健康檢查網址預設寫死 http://127.0.0.1:8787/health/ready。
 #    PORT 改過卻不覆寫，它會探測失敗並【自動 rollback】——
 #    而且 rollback 是「成功」的行為，退出碼看起來很正常。
@@ -403,9 +433,10 @@ step "步驟 11：安裝 release（含 migration）"
 #    2026-08-15 實測：install-release.sh 在 git 裡是 100644（已一併修成 100755），
 #    而 sudo 對不可執行的檔案回報的是 **"command not found"** ——訊息完全指錯方向。
 #    tarball 解開、檔案系統掛 noexec 等情況也會重現，走 bash 就都免疫。
-sudo SERVER_FOUNDATION_HEALTH_URL="http://${SF_HOST}:${SF_PORT}/health/ready" \
-     bash "$REPO_DIR/deploy/scripts/install-release.sh" "$ARCHIVE" "$RELEASE_VERSION_VALUE"
-ok "install-release.sh 回報成功"
+  sudo SERVER_FOUNDATION_HEALTH_URL="http://${SF_HOST}:${SF_PORT}/health/ready" \
+       bash "$REPO_DIR/deploy/scripts/install-release.sh" "$ARCHIVE" "$RELEASE_VERSION_VALUE"
+  ok "install-release.sh 回報成功"
+fi
 
 # ══════════════════════════════════════════════════════════════
 step "步驟 12：驗證（⚠️ 不看退出碼，看實際狀態）"
