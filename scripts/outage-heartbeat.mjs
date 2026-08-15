@@ -53,7 +53,12 @@ export const normalizePingUrl = (raw) => {
   if (!raw || raw === "CHANGE_ME") {
     throw new Error("HEALTHCHECKS_PING_URL is not configured");
   }
-  const url = new URL(raw);
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("HEALTHCHECKS_PING_URL is invalid");
+  }
   if (url.protocol !== "https:") {
     throw new Error("HEALTHCHECKS_PING_URL must use https");
   }
