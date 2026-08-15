@@ -11,17 +11,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
-  DEFAULT_RETENTION_COUNT,
-  applyRetention,
-  buildRetentionPlan,
+  DEFAULT_R2_RESTORE_ENV_FILE,
   createBackupArchive,
-  createR2Client,
-  formatRetentionPlan,
-  loadR2Config,
+  createR2ReadClient,
+  createWriteOnlyUploadClient,
+  loadUploadConfig,
   parseDataEnv,
 } from "./offsite-r2.mjs";
-import { runOffsiteBackup } from "./offsite-backup.mjs";
 import { restoreOffsiteBackup } from "./offsite-restore.mjs";
+import workerModule, {
+  handleRequest,
+} from "../deploy/cloudflare/offsite-backup-worker.mjs";
 
 const roots = [];
 const temporaryRoot = async (prefix) => {
@@ -36,11 +36,22 @@ test.afterEach(async () => {
   );
 });
 
-const writeR2Env = async (root, extra = "") => {
-  const path = join(root, "r2.env");
+const writeUploadEnv = async (root, content) => {
+  const path = join(root, "upload.env");
   await writeFile(
     path,
-    `R2_ACCOUNT_ID=abc123\nR2_BUCKET=test-bucket\nR2_ACCESS_KEY_ID=test-access\nR2_SECRET_ACCESS_KEY=test-secret\nR2_PREFIX=server-foundation/backups\n${extra}`,
+    content ??
+      "OFFSITE_UPLOAD_URL=https://backup.example.test/upload\nOFFSITE_UPLOAD_TOKEN=test-upload-secret\nR2_PREFIX=server-foundation/backups\n",
+    { mode: 0o600 },
+  );
+  return path;
+};
+
+const writeReadEnv = async (root) => {
+  const path = join(root, "read.env");
+  await writeFile(
+    path,
+    "R2_ACCOUNT_ID=abc123\nR2_BUCKET=test-bucket\nR2_ACCESS_KEY_ID=read-only-access\nR2_SECRET_ACCESS_KEY=read-only-secret\nR2_PREFIX=server-foundation/backups\n",
     { mode: 0o600 },
   );
   return path;
@@ -58,110 +69,165 @@ const writeAppEnv = async (root) => {
 
 test("credential parsing treats values as data instead of shell", () => {
   const values = parseDataEnv(
-    "R2_ACCOUNT_ID=abc123\nR2_SECRET_ACCESS_KEY=$(touch /tmp/should-not-run)\n",
+    "OFFSITE_UPLOAD_TOKEN=$(touch /tmp/should-not-run)\nR2_PREFIX=a=b\n",
   );
-  assert.equal(values.R2_SECRET_ACCESS_KEY, "$(touch /tmp/should-not-run)");
+  assert.equal(values.OFFSITE_UPLOAD_TOKEN, "$(touch /tmp/should-not-run)");
+  assert.equal(values.R2_PREFIX, "a=b");
 });
 
-test("R2 credential file rejects unknown keys and CHANGE_ME", async () => {
-  const root = await temporaryRoot("offsite-config-");
-  const unknown = await writeR2Env(root, "SHELL_COMMAND=echo-no\n");
-  await assert.rejects(loadR2Config(unknown), /unsupported R2 credential key/u);
-
-  await writeFile(
-    unknown,
-    "R2_ACCOUNT_ID=CHANGE_ME\nR2_BUCKET=test-bucket\nR2_ACCESS_KEY_ID=test\nR2_SECRET_ACCESS_KEY=test\n",
+test("steady-state upload config rejects legacy R2 credentials", async () => {
+  const root = await temporaryRoot("offsite-write-only-config-");
+  const legacy = await writeUploadEnv(
+    root,
+    "R2_ACCOUNT_ID=abc123\nR2_BUCKET=test-bucket\nR2_ACCESS_KEY_ID=old-write-key\nR2_SECRET_ACCESS_KEY=old-write-secret\n",
   );
   await assert.rejects(
-    loadR2Config(unknown),
-    /R2_ACCOUNT_ID must be configured/u,
+    loadUploadConfig(legacy),
+    /unsupported upload credential key/u,
   );
+
+  const insecure = await writeUploadEnv(
+    root,
+    "OFFSITE_UPLOAD_URL=http://backup.example.test/upload\nOFFSITE_UPLOAD_TOKEN=x\n",
+  );
+  await assert.rejects(loadUploadConfig(insecure), /must use https/u);
 });
 
-test("retention keeps the newest 30 backups and marks only older copies for deletion", () => {
-  const objects = Array.from({ length: 32 }, (_, index) => ({
-    key: `server-foundation/backups/backup-${String(index).padStart(2, "0")}.tar.gz`,
-    lastModified: new Date(Date.UTC(2026, 7, index + 1)).toISOString(),
-  }));
-  const plan = buildRetentionPlan(objects);
-  assert.equal(plan.keep.length, DEFAULT_RETENTION_COUNT);
-  assert.equal(plan.delete.length, 2);
-  assert.match(plan.keep[0].key, /backup-31\.tar\.gz$/u);
-  assert.match(plan.delete[0].key, /backup-01\.tar\.gz$/u);
-  assert.match(plan.delete[1].key, /backup-00\.tar\.gz$/u);
-
-  const output = formatRetentionPlan(plan);
-  assert.match(output, /會保留 \(30\)/u);
-  assert.match(output, /會刪除 \(2\)/u);
-});
-
-test("retention is fail-closed when the remote list cannot be read", async () => {
-  const deleted = [];
-  const client = {
-    listObjects: async () => {
-      throw new Error("R2 unavailable");
-    },
-    deleteObject: async (key) => deleted.push(key),
-  };
-  await assert.rejects(
-    applyRetention({
-      client,
+test("write-only client uses multipart and never puts the upload secret in URLs", async () => {
+  const root = await temporaryRoot("offsite-write-only-client-");
+  const filePath = join(root, "backup.tar.gz");
+  await writeFile(filePath, "abcdefghijklmnopqrstuvwxyz");
+  const calls = [];
+  const client = createWriteOnlyUploadClient(
+    {
+      uploadUrl: new URL("https://backup.example.test/upload"),
+      uploadToken: "secret-must-stay-in-header",
       prefix: "server-foundation/backups",
-      output: () => undefined,
-    }),
-    /R2 unavailable/u,
-  );
-  assert.deepEqual(deleted, []);
-});
-
-test("off-site --dry-run lists keep/delete decisions without changing remote data", async () => {
-  const root = await temporaryRoot("offsite-dry-run-");
-  const r2EnvFile = await writeR2Env(root);
-  const deleted = [];
-  const output = [];
-  const plan = await runOffsiteBackup({
-    dryRun: true,
-    r2EnvFile,
-    keepCount: 2,
-    client: {
-      listObjects: async () => [
-        {
-          key: "server-foundation/backups/backup-new.tar.gz",
-          lastModified: "2026-08-15T03:00:00.000Z",
-        },
-        {
-          key: "server-foundation/backups/backup-middle.tar.gz",
-          lastModified: "2026-08-14T03:00:00.000Z",
-        },
-        {
-          key: "server-foundation/backups/backup-old.tar.gz",
-          lastModified: "2026-08-13T03:00:00.000Z",
-        },
-      ],
-      deleteObject: async (key) => deleted.push(key),
-      putObject: async () => assert.fail("dry-run must not upload"),
+      partSizeBytes: 8,
     },
-    output: (line) => output.push(line),
-  });
-  assert.equal(plan.keep.length, 2);
-  assert.equal(plan.delete.length, 1);
-  assert.deepEqual(deleted, []);
-  assert.match(output.join("\n"), /DELETE .*backup-old\.tar\.gz/u);
+    {
+      fetchImpl: async (url, init) => {
+        const parsed = new URL(url);
+        calls.push({ url: parsed.href, init });
+        const action = parsed.searchParams.get("action");
+        if (action === "mpu-create") {
+          return Response.json({
+            key: parsed.searchParams.get("key"),
+            uploadId: "upload-1",
+          });
+        }
+        if (action === "mpu-uploadpart") {
+          const partNumber = Number(parsed.searchParams.get("partNumber"));
+          return Response.json({ partNumber, etag: `etag-${partNumber}` });
+        }
+        if (action === "mpu-complete") {
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`unexpected action ${action}`);
+      },
+    },
+  );
+
+  const result = await client.putObject(
+    "server-foundation/backups/backup-test.tar.gz",
+    filePath,
+  );
+  assert.equal(result.partCount, 4);
+  assert.equal(calls.filter((call) => call.init.method === "PUT").length, 4);
+  assert.ok(
+    calls.every((call) =>
+      call.init.headers.authorization.endsWith("secret-must-stay-in-header"),
+    ),
+  );
+  assert.ok(
+    calls.every((call) => !call.url.includes("secret-must-stay-in-header")),
+  );
 });
 
-test("R2 client signs ListObjectsV2 against the account endpoint", async () => {
+test("Worker HTTP surface is upload-only and refuses overwrite", async () => {
+  let createCalls = 0;
+  const bucket = {
+    head: async () => null,
+    createMultipartUpload: async (key, options) => {
+      createCalls += 1;
+      assert.equal(options.customMetadata.sha256.length, 64);
+      return { key, uploadId: "upload-1" };
+    },
+    resumeMultipartUpload: () => ({
+      uploadPart: async (partNumber) => ({
+        partNumber,
+        etag: `etag-${partNumber}`,
+      }),
+      complete: async () => ({ httpEtag: '"done"' }),
+    }),
+  };
+  const env = {
+    BACKUP_BUCKET: bucket,
+    BACKUP_PREFIX: "server-foundation/backups",
+    UPLOAD_TOKEN: "worker-secret",
+  };
+  const base =
+    "https://worker.example.test/?key=server-foundation%2Fbackups%2Fbackup-a.tar.gz";
+  const auth = { authorization: "Bearer worker-secret" };
+
+  const getResponse = await handleRequest(
+    new Request(base, { headers: auth }),
+    env,
+  );
+  assert.equal(getResponse.status, 405);
+  const deleteResponse = await handleRequest(
+    new Request(base, { method: "DELETE", headers: auth }),
+    env,
+  );
+  assert.equal(deleteResponse.status, 405);
+
+  const createResponse = await handleRequest(
+    new Request(`${base}&action=mpu-create`, {
+      method: "POST",
+      headers: {
+        ...auth,
+        "x-backup-sha256": "a".repeat(64),
+      },
+    }),
+    env,
+  );
+  assert.equal(createResponse.status, 200);
+  assert.equal(createCalls, 1);
+
+  const overwriteResponse = await handleRequest(
+    new Request(`${base}&action=mpu-create`, {
+      method: "POST",
+      headers: {
+        ...auth,
+        "x-backup-sha256": "b".repeat(64),
+      },
+    }),
+    {
+      ...env,
+      BACKUP_BUCKET: { ...bucket, head: async () => ({ key: "exists" }) },
+    },
+  );
+  assert.equal(overwriteResponse.status, 409);
+});
+
+test("Worker exposes no scheduled retention/delete path to the host", () => {
+  assert.equal(typeof workerModule.fetch, "function");
+  assert.equal(workerModule.scheduled, undefined);
+});
+
+test("restore R2 client exposes read/list only", async () => {
   const requests = [];
-  const client = createR2Client(
+  const client = createR2ReadClient(
     {
       accountId: "abc123",
       bucket: "test-bucket",
-      accessKeyId: "access-key",
-      secretAccessKey: "secret-key",
+      accessKeyId: "read-key",
+      secretAccessKey: "read-secret",
       prefix: "server-foundation/backups",
     },
     {
       fetchImpl: async (url, init) => {
-        requests.push({ url, init });
+        requests.push({ url: String(url), init });
         return new Response(
           `<?xml version="1.0"?><ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>server-foundation%2Fbackups%2Fbackup-a.tar.gz</Key><LastModified>2026-08-15T01:00:00.000Z</LastModified></Contents></ListBucketResult>`,
           { status: 200 },
@@ -170,23 +236,14 @@ test("R2 client signs ListObjectsV2 against the account endpoint", async () => {
     },
   );
   const objects = await client.listObjects();
-  assert.deepEqual(objects, [
-    {
-      key: "server-foundation/backups/backup-a.tar.gz",
-      lastModified: "2026-08-15T01:00:00.000Z",
-    },
-  ]);
-  assert.match(
-    requests[0].url,
-    /^https:\/\/abc123\.r2\.cloudflarestorage\.com\/test-bucket\?/u,
-  );
-  assert.match(requests[0].url, /list-type=2/u);
-  assert.match(requests[0].init.headers.authorization, /^AWS4-HMAC-SHA256 /u);
-  assert.doesNotMatch(requests[0].url, /secret-key/u);
+  assert.equal(objects.length, 1);
+  assert.equal(client.putObject, undefined);
+  assert.equal(client.deleteObject, undefined);
+  assert.ok(requests.every((request) => request.init.method === "GET"));
 });
 
-test("off-site restore downloads and extracts the remote archive before restore", async () => {
-  const root = await temporaryRoot("offsite-restore-");
+test("off-site restore still downloads and extracts before restore", async () => {
+  const root = await temporaryRoot("offsite-read-only-restore-");
   const backupDirectory = join(root, "backup-remote-roundtrip");
   await mkdir(join(backupDirectory, "files"), { recursive: true });
   await mkdir(join(backupDirectory, "metadata"), { recursive: true });
@@ -194,15 +251,14 @@ test("off-site restore downloads and extracts the remote archive before restore"
   await writeFile(join(backupDirectory, "mysql.sql"), "fake dump\n");
   await writeFile(join(backupDirectory, "files", "sentinel.txt"), "from-r2\n");
 
-  const archiveRoot = join(root, "archive");
   const { archivePath } = await createBackupArchive({
     backupDirectory,
-    workRoot: archiveRoot,
+    workRoot: join(root, "archive"),
   });
   const remoteObject = join(root, "remote.tar.gz");
   await copyFile(archivePath, remoteObject);
 
-  const r2EnvFile = await writeR2Env(root);
+  const r2EnvFile = await writeReadEnv(root);
   const appEnvFile = await writeAppEnv(root);
   const objectKey = "server-foundation/backups/backup-remote-roundtrip.tar.gz";
   let restoredFrom = null;
@@ -232,31 +288,28 @@ test("off-site restore downloads and extracts the remote archive before restore"
   });
   assert.ok(restoredFrom);
   assert.equal(result.objectKey, objectKey);
+  assert.match(DEFAULT_R2_RESTORE_ENV_FILE, /^\/run\//u);
 });
 
-test("installer preserves an existing credential file and wires the daily timer", async () => {
+test("installer keeps upload secret separate from ephemeral read-only restore secret", async () => {
   const installer = await readFile(
     new URL("../deploy/scripts/install-offsite-backup.sh", import.meta.url),
     "utf8",
   );
-  const timer = await readFile(
-    new URL(
-      "../deploy/systemd/server-foundation-offsite-backup.timer",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  const example = await readFile(
+  const uploadExample = await readFile(
     new URL("../deploy/offsite-backup.env.example", import.meta.url),
     "utf8",
   );
+  const restoreExample = await readFile(
+    new URL("../deploy/offsite-restore.env.example", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(installer, /if ! sudo test -f "\$R2_ENV_FILE"; then/u);
-  assert.match(installer, /install -m 0600 -o root -g root/u);
-  assert.match(installer, /已存在（保留既有 credentials）/u);
-  assert.match(installer, /grep -q '=CHANGE_ME\$'/u);
-  assert.match(timer, /OnCalendar=\*-\*-\* 03:30:00/u);
-  assert.match(timer, /RandomizedDelaySec=30m/u);
-  assert.match(timer, /Persistent=true/u);
-  assert.match(example, /R2_SECRET_ACCESS_KEY=CHANGE_ME/u);
+  assert.match(installer, /R2_ACCESS_KEY_ID\|R2_SECRET_ACCESS_KEY/u);
+  assert.match(installer, /disable --now "\$TIMER"/u);
+  assert.match(installer, /不覆蓋/u);
+  assert.match(uploadExample, /OFFSITE_UPLOAD_TOKEN=CHANGE_ME/u);
+  assert.doesNotMatch(uploadExample, /R2_SECRET_ACCESS_KEY/u);
+  assert.match(restoreExample, /Object Read only/u);
+  assert.match(restoreExample, /R2_SECRET_ACCESS_KEY=CHANGE_ME/u);
 });
