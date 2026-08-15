@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -92,15 +93,211 @@ jobs:
       - name: Rehearse backup and restore
         run: corepack pnpm backup:rehearse
 
+      - name: Resolve safe release identifier
+        id: release
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            raw="pr-${PR_NUMBER}-${GITHUB_RUN_ID}"
+          else
+            raw="${GITHUB_REF_NAME:-run-${GITHUB_RUN_ID}}"
+          fi
+          release_id="$(printf '%s' "$raw" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
+          test -n "$release_id"
+          echo "id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "Release identifier: $release_id"
+
+      - name: Simulate restrictive packaged file mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_entrypoint="apps/api/dist/server.js"
+          test -f "$runtime_entrypoint"
+          chmod 0600 "$runtime_entrypoint"
+          mode="$(stat -c '%a' "$runtime_entrypoint")"
+          if [ "$mode" != "600" ]; then
+            echo "failed to prepare restrictive packaged file mode: $runtime_entrypoint is $mode" >&2
+            exit 1
+          fi
+          echo "Packager permission hazard prepared: $runtime_entrypoint mode=$mode"
+
       - name: Package release
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.release.outputs.id }}
         run: corepack pnpm release:package
+
+      - name: Prepare real systemd release environment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -x deploy/scripts/install-release.sh || {
+            echo "install-release.sh is not executable" >&2
+            exit 1
+          }
+          test -x deploy/scripts/rollback-release.sh || {
+            echo "rollback-release.sh is not executable" >&2
+            exit 1
+          }
+
+          # actions/setup-node puts Node/Corepack in the toolcache. The production
+          # unit and installer deliberately use the system paths, so expose the
+          # selected Node 24/Corepack there without changing repository behavior.
+          node_bin="$(command -v node)"
+          corepack_bin="$(command -v corepack)"
+          if [ "$node_bin" != "/usr/bin/node" ]; then
+            sudo ln -sf "$node_bin" /usr/bin/node
+          fi
+          if [ "$corepack_bin" != "/usr/bin/corepack" ]; then
+            sudo ln -sf "$corepack_bin" /usr/bin/corepack
+          fi
+          /usr/bin/node --version | grep -q '^v24\.'
+          sudo /usr/bin/corepack pnpm --version
+
+          if ! id -u server-foundation >/dev/null 2>&1; then
+            sudo useradd --system --home /var/lib/server-foundation --shell /usr/sbin/nologin server-foundation
+          fi
+          sudo install -d -m 0750 -o root -g server-foundation /etc/server-foundation
+
+          cat > /tmp/server-foundation.env <<'EOF'
+          NODE_ENV=production
+          HOST=127.0.0.1
+          PORT=8787
+          MYSQL_URL=mysql://root:root@127.0.0.1:3306/foundation_release_test
+          REDIS_URL=redis://127.0.0.1:6379
+          FILE_STORAGE_ROOT=/var/lib/server-foundation/storage
+          TRUST_PROXY_HEADERS=false
+          FILE_CLEANUP_INTERVAL_SECONDS=300
+          IDEMPOTENCY_TTL_SECONDS=86400
+          SHUTDOWN_TIMEOUT_SECONDS=30
+          BACKUP_ROOT=/tmp/server-foundation-release-backups
+          EOF
+          sudo install -m 0600 -o root -g root /tmp/server-foundation.env /etc/server-foundation/server-foundation.env
+          sudo install -m 0644 deploy/systemd/server-foundation.service /etc/systemd/system/server-foundation.service
+          sudo systemctl daemon-reload
+
+      - name: Install packaged release through production path
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          test -f "$archive"
+
+          # Exercise the historical permission hazard directly: the deployment
+          # process runs with a restrictive umask. The production installer must
+          # normalize both archived files and files materialized by pnpm.
+          if ! sudo bash -c 'umask 077; SERVER_FOUNDATION_HEALTH_URL="$1" "$2" "$3" "$4"' _ \
+            http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID"; then
+            sudo systemctl status server-foundation --no-pager || true
+            sudo journalctl -u server-foundation --no-pager -n 80 || true
+            exit 1
+          fi
+
+          sudo systemctl is-active --quiet server-foundation
+          curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
+
+          expected="/opt/server-foundation/releases/${RELEASE_ID}"
+          actual="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$actual" != "$expected" ]; then
+            echo "current symlink mismatch: expected $expected, got $actual" >&2
+            exit 1
+          fi
+
+          migration_count="$(mysql --batch --skip-column-names \
+            --protocol=TCP -h 127.0.0.1 -uroot -proot foundation_release_test \
+            -e 'SELECT COUNT(*) FROM schema_migrations')"
+          if [ "$migration_count" -lt 5 ]; then
+            echo "migration gate expected at least 5 applied migrations, got $migration_count" >&2
+            exit 1
+          fi
+          echo "Release path healthy; applied migrations: $migration_count"
+
+      - name: Install same package as a second release
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          second_release_id="${RELEASE_ID}-next"
+
+          if ! sudo bash -c 'umask 077; SERVER_FOUNDATION_HEALTH_URL="$1" "$2" "$3" "$4"' _ \
+            http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$second_release_id"; then
+            sudo systemctl status server-foundation --no-pager || true
+            sudo journalctl -u server-foundation --no-pager -n 80 || true
+            exit 1
+          fi
+          sudo systemctl is-active --quiet server-foundation
+          curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
+
+          expected="/opt/server-foundation/releases/${second_release_id}"
+          actual="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$actual" != "$expected" ]; then
+            echo "second release did not become current: expected $expected, got $actual" >&2
+            exit 1
+          fi
+          echo "Second release healthy and current: $second_release_id"
+
+      - name: Reject an existing release without moving current
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          expected_current="/opt/server-foundation/releases/${RELEASE_ID}-next"
+          current_before="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$current_before" != "$expected_current" ]; then
+            echo "precondition failed: expected current $expected_current, got $current_before" >&2
+            exit 1
+          fi
+
+          set +e
+          output="$(sudo env SERVER_FOUNDATION_HEALTH_URL=http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID" 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+
+          if [ "$status" -eq 0 ]; then
+            echo "existing release unexpectedly reinstalled successfully" >&2
+            exit 1
+          fi
+          expected_error="release already exists: /opt/server-foundation/releases/${RELEASE_ID}"
+          if ! grep -Fqx "$expected_error" <<<"$output"; then
+            echo "expected named immutable-release failure: $expected_error" >&2
+            exit 1
+          fi
+
+          current_after="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$current_after" != "$current_before" ]; then
+            echo "current changed after rejected reinstall: before=$current_before after=$current_after" >&2
+            exit 1
+          fi
+          sudo systemctl is-active --quiet server-foundation
+          curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
+          echo "Existing release rejected and current remained unchanged: $current_after"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: server-foundation-${{ github.ref_name }}
+          name: server-foundation-${{ steps.release.outputs.id }}
           path: release/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Clean up release-path systemd state
+        if: always()
+        shell: bash
+        run: |
+          sudo systemctl stop server-foundation >/dev/null 2>&1 || true
+          sudo rm -f /etc/systemd/system/server-foundation.service
+          sudo systemctl daemon-reload >/dev/null 2>&1 || true
+          sudo rm -rf /opt/server-foundation /etc/server-foundation /var/lib/server-foundation
