@@ -262,10 +262,17 @@ if [ "$SF_SETUP_WIREGUARD" = "1" ]; then
   sudo dnf -y install wireguard-tools
   if [ ! -f /etc/wireguard/server.key ]; then
     sudo install -d -m 0700 /etc/wireguard
-    umask 077
-    wg genkey | sudo tee /etc/wireguard/server.key >/dev/null
-    sudo chmod 0600 /etc/wireguard/server.key
-    sudo sh -c 'wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub'
+    # ⚠️⚠️ umask 一定要關在子 shell 裡。
+    #    2026-08-15 實測：原本這裡是裸的 `umask 077`，**一路漏到步驟 10 的 pnpm build**，
+    #    於是所有建置產物變成 0600 ⇒ 打包進 tarball ⇒ 解開後服務帳號讀不到自己的程式。
+    #    ⚠️ 而 Node 對「讀不到」報的是 `MODULE_NOT_FOUND`，
+    #       看起來像檔案不存在，實際上檔案就在那裡、只是沒權限。
+    (
+      umask 077
+      wg genkey | sudo tee /etc/wireguard/server.key >/dev/null
+      sudo chmod 0600 /etc/wireguard/server.key
+      sudo sh -c 'wg pubkey < /etc/wireguard/server.key > /etc/wireguard/server.pub'
+    )
     ok "已產伺服器金鑰對"
   else
     ok "伺服器金鑰已存在（不覆蓋）"
