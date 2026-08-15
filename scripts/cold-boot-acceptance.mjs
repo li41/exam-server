@@ -54,9 +54,7 @@ export function validateListenerBoundary(listeners, host, port) {
   if (["0.0.0.0", "::", "[::]", "*"].includes(host)) {
     throw new Error(`HOST must not be a wildcard listener: ${host}`);
   }
-  const expected = host.includes(":")
-    ? `[${host}]:${port}`
-    : `${host}:${port}`;
+  const expected = host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`;
   if (listeners.length !== 1 || listeners[0] !== expected) {
     throw new Error(
       `expected ss column 4 to contain only ${expected}; got ${listeners.length ? listeners.join(", ") : "none"}`,
@@ -139,9 +137,7 @@ export async function runAcceptance({
 
   let pidOne;
   try {
-    pidOne = (
-      await command("ps", ["-p", "1", "-o", "comm="])
-    ).stdout.trim();
+    pidOne = (await command("ps", ["-p", "1", "-o", "comm="])).stdout.trim();
   } catch {
     pidOne = "unknown";
   }
@@ -198,8 +194,7 @@ export async function runAcceptance({
     ],
     [
       "mysql-autostart",
-      async () =>
-        command("systemctl", ["is-enabled", "--quiet", mysqlService]),
+      async () => command("systemctl", ["is-enabled", "--quiet", mysqlService]),
     ],
     [
       "valkey-autostart",

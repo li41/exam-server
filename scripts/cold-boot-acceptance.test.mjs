@@ -30,8 +30,7 @@ test("listener validation uses ss column 4, not peer column 5", () => {
 
 test("listener validation rejects wildcard or extra local listeners", () => {
   assert.throws(
-    () =>
-      validateListenerBoundary(["0.0.0.0:18787"], "0.0.0.0", "18787"),
+    () => validateListenerBoundary(["0.0.0.0:18787"], "0.0.0.0", "18787"),
     /must not be a wildcard/u,
   );
   assert.throws(
