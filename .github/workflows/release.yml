@@ -124,6 +124,24 @@ jobs:
           fi
           echo "Packager permission hazard prepared: $runtime_entrypoint mode=$mode"
 
+      - name: Mutation 2 - restore build-time tsc in migrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('packages/adapters/mysql/package.json')
+          text = path.read_text()
+          needle = '    "migrate": "node scripts/migrate.mjs",'
+          replacement = '    "migrate": "tsc -b && node scripts/migrate.mjs",'
+          count = text.count(needle)
+          if count != 1:
+              raise SystemExit(f'MUTATION_2_PRECONDITION expected exactly 1 migrate target, found {count}')
+          path.write_text(text.replace(needle, replacement, 1))
+          print('MUTATION_2_APPLIED exactly 1 migrate target')
+          PY
+
       - name: Package release
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.id }}
@@ -143,9 +161,6 @@ jobs:
             exit 1
           }
 
-          # actions/setup-node puts Node/Corepack in the toolcache. The production
-          # unit and installer deliberately use the system paths, so expose the
-          # selected Node 24/Corepack there without changing repository behavior.
           node_bin="$(command -v node)"
           corepack_bin="$(command -v corepack)"
           if [ "$node_bin" != "/usr/bin/node" ]; then
@@ -187,10 +202,6 @@ jobs:
           set -euo pipefail
           archive="release/server-foundation-${RELEASE_ID}.tar.gz"
           test -f "$archive"
-
-          # Exercise the historical permission hazard directly: the deployment
-          # process runs with a restrictive umask. The production installer must
-          # normalize both archived files and files materialized by pnpm.
           if ! sudo bash -c 'umask 077; SERVER_FOUNDATION_HEALTH_URL="$1" "$2" "$3" "$4"' _ \
             http://127.0.0.1:8787/health/ready \
             ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID"; then
@@ -201,7 +212,6 @@ jobs:
 
           sudo systemctl is-active --quiet server-foundation
           curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
-
           expected="/opt/server-foundation/releases/${RELEASE_ID}"
           actual="$(sudo readlink -f /opt/server-foundation/current)"
           if [ "$actual" != "$expected" ]; then
@@ -226,7 +236,6 @@ jobs:
           set -euo pipefail
           archive="release/server-foundation-${RELEASE_ID}.tar.gz"
           second_release_id="${RELEASE_ID}-next"
-
           if ! sudo bash -c 'umask 077; SERVER_FOUNDATION_HEALTH_URL="$1" "$2" "$3" "$4"' _ \
             http://127.0.0.1:8787/health/ready \
             ./deploy/scripts/install-release.sh "$archive" "$second_release_id"; then
@@ -236,7 +245,6 @@ jobs:
           fi
           sudo systemctl is-active --quiet server-foundation
           curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
-
           expected="/opt/server-foundation/releases/${second_release_id}"
           actual="$(sudo readlink -f /opt/server-foundation/current)"
           if [ "$actual" != "$expected" ]; then
@@ -275,7 +283,6 @@ jobs:
             echo "expected named immutable-release failure: $expected_error" >&2
             exit 1
           fi
-
           current_after="$(sudo readlink -f /opt/server-foundation/current)"
           if [ "$current_after" != "$current_before" ]; then
             echo "current changed after rejected reinstall: before=$current_before after=$current_after" >&2
