@@ -1,0 +1,11 @@
+[Unit]
+Description=Send server-foundation outage heartbeat every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=server-foundation-outage-heartbeat.service
+
+[Install]
+WantedBy=timers.target

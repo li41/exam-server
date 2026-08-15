@@ -1,0 +1,33 @@
+[Unit]
+Description=server-foundation external outage heartbeat
+Wants=network-online.target
+After=network-online.target server-foundation.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/node /usr/local/sbin/server-foundation-outage-heartbeat
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/etc/server-foundation
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=server-foundation-outage-heartbeat
