@@ -9,6 +9,7 @@ const MANAGED_BEGIN = '# BEGIN exam-server managed WireGuard peers';
 const MANAGED_END = '# END exam-server managed WireGuard peers';
 const WG_INTERFACE = 'wg0';
 const DEFAULT_CONFIG = '/etc/wireguard/wg0.conf';
+const DEFAULT_ENV_FILE = '/etc/server-foundation/wireguard-peer-sync.env';
 
 function fail(message) {
   throw new Error(message);
@@ -72,6 +73,48 @@ export function validateApprovedPeers(payload) {
   });
 
   return { asOf: new Date(payload.as_of).toISOString(), peers };
+}
+
+export function parseCredentialFile(content) {
+  const values = {};
+  for (const [index, rawLine] of String(content).split(/\r?\n/).entries()) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const separator = line.indexOf('=');
+    if (separator <= 0) fail(`credentials line ${index + 1} must be KEY=VALUE`);
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (key !== 'CF_BASE' && key !== 'CF_TOKEN') {
+      fail(`credentials line ${index + 1} has unsupported key: ${key}`);
+    }
+    if (Object.hasOwn(values, key)) fail(`credentials file has duplicate ${key}`);
+    values[key] = value;
+  }
+  return values;
+}
+
+export async function loadCredentials({ env = process.env, envFile = DEFAULT_ENV_FILE } = {}) {
+  let baseUrl = typeof env.CF_BASE === 'string' ? env.CF_BASE.trim() : '';
+  let token = typeof env.CF_TOKEN === 'string' ? env.CF_TOKEN.trim() : '';
+
+  if (!baseUrl || !token) {
+    let fileValues;
+    try {
+      fileValues = parseCredentialFile(await readFile(envFile, 'utf8'));
+    } catch (error) {
+      if (error && typeof error === 'object' && error.code === 'ENOENT') {
+        fail(`credentials file not found: ${envFile}`);
+      }
+      throw error;
+    }
+    baseUrl ||= fileValues.CF_BASE ?? '';
+    token ||= fileValues.CF_TOKEN ?? '';
+  }
+
+  if (!baseUrl) fail(`CF_BASE is required (environment or ${envFile})`);
+  if (!token) fail(`CF_TOKEN is required (environment or ${envFile})`);
+  if (token === 'CHANGE_ME') fail(`CF_TOKEN is still CHANGE_ME in ${envFile}`);
+  return { baseUrl, token };
 }
 
 export async function fetchApprovedPeers({ baseUrl, token, fetchImpl = fetch }) {
@@ -208,16 +251,20 @@ export async function applyConfig({ configPath = DEFAULT_CONFIG, approved, dryRu
 }
 
 function usage() {
-  console.error('usage: CF_BASE=https://... CF_TOKEN=... node scripts/sync-wireguard-peers.mjs [--dry-run] [--config /etc/wireguard/wg0.conf]');
+  console.error(
+    'usage: node sync-wireguard-peers.mjs [--dry-run] [--config /etc/wireguard/wg0.conf] [--env-file /etc/server-foundation/wireguard-peer-sync.env]',
+  );
 }
 
 async function main() {
   const args = process.argv.slice(2);
   let dryRun = false;
   let configPath = DEFAULT_CONFIG;
+  let envFile = DEFAULT_ENV_FILE;
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === '--dry-run') dryRun = true;
     else if (args[i] === '--config' && args[i + 1]) configPath = args[++i];
+    else if (args[i] === '--env-file' && args[i + 1]) envFile = args[++i];
     else {
       usage();
       process.exitCode = 2;
@@ -225,7 +272,8 @@ async function main() {
     }
   }
 
-  const approved = await fetchApprovedPeers({ baseUrl: process.env.CF_BASE, token: process.env.CF_TOKEN });
+  const { baseUrl, token } = await loadCredentials({ envFile });
+  const approved = await fetchApprovedPeers({ baseUrl, token });
   await applyConfig({ configPath, approved, dryRun });
   if (!dryRun) console.log(`applied ${approved.peers.length} peer(s) from ${approved.asOf}`);
 }
