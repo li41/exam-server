@@ -4,6 +4,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createBackup } from "./backup.mjs";
 import { withMySqlOptionFile } from "./backup-common.mjs";
+import {
+  deploymentIdentityFromValues,
+  mismatchedDeploymentIdentityForRehearsal,
+} from "./deployment-identity.mjs";
 import { restoreBackup } from "./restore.mjs";
 
 const requireEnvironment = (name) => {
@@ -48,10 +52,44 @@ const runMysqlQuery = async ({ mysqlUrl, sql, mysqlBin = "mysql" }) =>
       }),
   );
 
+const proveIdentityMismatchIsRejected = async ({
+  backupDirectory,
+  mysqlUrl,
+  storageRoot,
+  deploymentIdentity,
+  mysqlBin,
+}) => {
+  const wrongIdentity = mismatchedDeploymentIdentityForRehearsal(
+    deploymentIdentity,
+  );
+  try {
+    await restoreBackup({
+      backupDirectory,
+      mysqlUrl,
+      storageRoot,
+      deploymentIdentity: wrongIdentity,
+      confirmation: "YES",
+      mysqlBin,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Backup deployment identity mismatch")
+    ) {
+      return true;
+    }
+    throw error;
+  }
+  throw new Error(
+    "Backup/restore rehearsal expected a deployment identity mismatch to be rejected.",
+  );
+};
+
 export const rehearseBackupRestore = async ({
   mysqlUrl,
   storageRoot,
   backupRoot,
+  deploymentIdentity,
   confirmation,
   mysqlBin = "mysql",
   mysqldumpBin = "mysqldump",
@@ -82,7 +120,7 @@ export const rehearseBackupRestore = async ({
     "rehearsal-sentinel.json",
   );
   await writeFile(filePath, `${marker}\n`, { mode: 0o600 });
-  await writeFile(metadataPath, JSON.stringify({ marker }, null, 2) + "\n", {
+  await writeFile(metadataPath, `${JSON.stringify({ marker }, null, 2)}\n`, {
     mode: 0o600,
   });
 
@@ -96,7 +134,16 @@ export const rehearseBackupRestore = async ({
     mysqlUrl,
     storageRoot: targetStorageRoot,
     backupRoot: targetBackupRoot,
+    deploymentIdentity,
     mysqldumpBin,
+  });
+
+  const identityMismatchRejected = await proveIdentityMismatchIsRejected({
+    backupDirectory: backup.backupDirectory,
+    mysqlUrl,
+    storageRoot: targetStorageRoot,
+    deploymentIdentity,
+    mysqlBin,
   });
 
   await runMysqlQuery({
@@ -110,6 +157,7 @@ export const rehearseBackupRestore = async ({
     backupDirectory: backup.backupDirectory,
     mysqlUrl,
     storageRoot: targetStorageRoot,
+    deploymentIdentity,
     confirmation: "YES",
     mysqlBin,
   });
@@ -131,6 +179,7 @@ export const rehearseBackupRestore = async ({
   return {
     marker,
     backupDirectory: backup.backupDirectory,
+    identityMismatchRejected,
     restoredDatabase: true,
     restoredStorage: true,
   };
@@ -141,6 +190,7 @@ const main = async () => {
     mysqlUrl: requireEnvironment("MYSQL_URL"),
     storageRoot: requireEnvironment("FILE_STORAGE_ROOT"),
     backupRoot: requireEnvironment("BACKUP_ROOT"),
+    deploymentIdentity: deploymentIdentityFromValues(process.env),
     confirmation: process.env.BACKUP_REHEARSAL_CONFIRM,
     mysqlBin: process.env.MYSQL_BIN ?? "mysql",
     mysqldumpBin: process.env.MYSQLDUMP_BIN ?? "mysqldump",
