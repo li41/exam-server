@@ -453,12 +453,21 @@ sudo systemctl is-active --quiet server-foundation \
 ok "服務 active"
 
 # ⚠️ 這是唯一驗得出「靜默失效」的一步：HOST 填錯不會有任何錯誤訊息。
-LISTEN="$(sudo ss -ltnp 2>/dev/null | grep -E "[:.]${SF_PORT}\b" || true)"
-[ -n "$LISTEN" ] || die "沒有任何程式在聽 ${SF_PORT}"
-if printf '%s' "$LISTEN" | grep -qE '0\.0\.0\.0|\[::\]'; then
+# ⚠️⚠️ 只能看**本地位址欄（第 4 欄）**，不可以 grep 整行。
+#    `ss -ltnp` 的第 5 欄是對端位址，而所有 IPv4 listener 的對端欄位
+#    都是字面的 `0.0.0.0:*`：
+#        LISTEN 0 4096  127.0.0.1:33306   0.0.0.0:*
+#                       ^^^^^^^^^^ 第4欄    ^^^^^^^^^ 第5欄，永遠長這樣
+#    ⇒ 拿整行去 grep '0.0.0.0' 會**無條件命中**，這道檢查就永遠失敗。
+#    2026-08-15 實測：服務其實好好地綁在 127.0.0.1，我卻據此判它暴露在網段上，
+#    然後去追一個不存在的缺陷。**探針錯了比沒有探針更花時間。**
+LISTEN_LOCAL="$(sudo ss -ltn 2>/dev/null | awk 'NR>1 {print $4}' \
+                 | grep -E "[:.]${SF_PORT}\$" || true)"
+[ -n "$LISTEN_LOCAL" ] || die "沒有任何程式在聽 ${SF_PORT}"
+if printf '%s\n' "$LISTEN_LOCAL" | grep -qE '^(0\.0\.0\.0|\*|\[?::\]?):'; then
   die "❌ 服務開在 0.0.0.0:${SF_PORT} —— 對整個院內網段暴露。檢查 ${ENV_FILE} 的 HOST。"
 fi
-ok "監聽位址正確：$(printf '%s' "$LISTEN" | awk '{print $4}')"
+ok "監聽位址正確：${LISTEN_LOCAL}"
 
 curl -fsS "http://${SF_HOST}:${SF_PORT}/health/ready" >/dev/null \
   || die "/health/ready 不通"
