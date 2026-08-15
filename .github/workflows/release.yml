@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -48,6 +49,49 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+
+      - name: Probe systemd availability on GitHub runner
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -u
+          echo "PID 1: $(ps -p 1 -o comm=)"
+          systemctl --version
+
+          unit_name="codex-systemd-probe.service"
+          unit_path="/etc/systemd/system/$unit_name"
+          cat > /tmp/codex-systemd-probe.service <<'EOF'
+          [Unit]
+          Description=Codex GitHub runner systemd probe
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/bin/sleep infinity
+          EOF
+
+          cleanup() {
+            sudo systemctl stop "$unit_name" >/dev/null 2>&1 || true
+            sudo rm -f "$unit_path"
+            sudo systemctl daemon-reload >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          sudo install -m 0644 /tmp/codex-systemd-probe.service "$unit_path"
+
+          set +e
+          {
+            sudo systemctl daemon-reload
+            sudo systemctl start "$unit_name"
+            sudo systemctl is-active "$unit_name"
+          } 2>&1 | tee /tmp/codex-systemd-probe.log
+          probe_rc=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "SYSTEMD_PROBE=available"
+          else
+            echo "SYSTEMD_PROBE=unavailable"
+            echo "systemd probe exit code: $probe_rc"
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
