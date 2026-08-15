@@ -62,8 +62,18 @@ chown -R root:root "$target"
 chmod -R u=rwX,go=rX "$target"
 MYSQL_URL="$mysql_url" corepack pnpm --dir "$target" --filter @server-foundation/mysql-adapter migrate
 
-# MUTATION #14: restore the historical first-install previous resolution bug.
-previous="$(readlink -f "$current_link" 2>/dev/null || true)"
+# ⚠️ 一定要先確認 current 真的是一條既存的 symlink 才取它的目標。
+#    原本直接 `readlink -f "$current_link"`：當 current **還不存在**時，
+#    readlink -f 會回傳**那條路徑本身**，於是 previous=/opt/server-foundation/current。
+#    等下面 mv 建好 symlink 之後，`[ -d "$previous" ]` 就變成真，
+#    回滾時 `ln -s "$previous"` 產生 **current -> current 的自環**，
+#    服務從此起不來（CHDIR: Too many levels of symbolic links），而且重跑也修不回來。
+#    2026-08-15 首次安裝失敗時實際發生過。
+if [ -L "$current_link" ]; then
+  previous="$(readlink -f "$current_link" 2>/dev/null || true)"
+else
+  previous=""
+fi
 next_link="${current_link}.next"
 rm -f "$next_link"
 ln -s "$target" "$next_link"
@@ -85,8 +95,8 @@ if [ "$healthy" = true ]; then
 fi
 
 echo "release $release_id failed readiness check" >&2
-# MUTATION #14: remove the second self-loop guard so the historical defect is observable.
-if [ -n "$previous" ] && [ -d "$previous" ]; then
+# ⚠️ 第二道保險：previous 絕不可等於 current_link 本身（否則就是自環）。
+if [ -n "$previous" ] && [ "$previous" != "$current_link" ] && [ -d "$previous" ]; then
   rm -f "$next_link"
   ln -s "$previous" "$next_link"
   mv -Tf "$next_link" "$current_link"
