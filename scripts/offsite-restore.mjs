@@ -6,19 +6,19 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   DEFAULT_APP_ENV_FILE,
-  DEFAULT_R2_ENV_FILE,
-  buildRetentionPlan,
-  createR2Client,
+  DEFAULT_R2_RESTORE_ENV_FILE,
+  createR2ReadClient,
   extractBackupArchive,
+  latestBackupObject,
   loadBackupAppConfig,
-  loadR2Config,
+  loadR2ReadConfig,
 } from "./offsite-r2.mjs";
 
 const parseArgs = (argv) => {
   const options = {
     objectKey: null,
     appEnvFile: DEFAULT_APP_ENV_FILE,
-    r2EnvFile: DEFAULT_R2_ENV_FILE,
+    r2EnvFile: DEFAULT_R2_RESTORE_ENV_FILE,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -42,14 +42,15 @@ const assertObjectKey = (key, prefix) => {
     `^${escapedPrefix}/backup-[A-Za-z0-9._-]+\\.tar\\.gz$`,
     "u",
   );
-  if (!pattern.test(key))
+  if (!pattern.test(key)) {
     throw new Error(`invalid off-site backup key: ${key}`);
+  }
   return key;
 };
 
 const latestObjectKey = async (client, prefix) => {
   const objects = await client.listObjects(prefix);
-  const latest = buildRetentionPlan(objects, { prefix, keepCount: 1 }).keep[0];
+  const latest = latestBackupObject(objects, prefix);
   if (!latest) throw new Error(`no off-site backups found under ${prefix}/`);
   return latest.key;
 };
@@ -57,7 +58,7 @@ const latestObjectKey = async (client, prefix) => {
 export const restoreOffsiteBackup = async ({
   objectKey = null,
   appEnvFile = DEFAULT_APP_ENV_FILE,
-  r2EnvFile = DEFAULT_R2_ENV_FILE,
+  r2EnvFile = DEFAULT_R2_RESTORE_ENV_FILE,
   confirmation,
   client: clientOverride,
   restoreImpl,
@@ -67,9 +68,9 @@ export const restoreOffsiteBackup = async ({
       "Set RESTORE_CONFIRM=YES to run a destructive off-site restore.",
     );
   }
-  const r2Config = await loadR2Config(r2EnvFile);
+  const r2Config = await loadR2ReadConfig(r2EnvFile);
   const appConfig = await loadBackupAppConfig(appEnvFile);
-  const client = clientOverride ?? createR2Client(r2Config);
+  const client = clientOverride ?? createR2ReadClient(r2Config);
   const selectedKey = assertObjectKey(
     objectKey ?? (await latestObjectKey(client, r2Config.prefix)),
     r2Config.prefix,
