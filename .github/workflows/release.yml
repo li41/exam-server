@@ -179,32 +179,6 @@ jobs:
           sudo install -m 0644 deploy/systemd/server-foundation.service /etc/systemd/system/server-foundation.service
           sudo systemctl daemon-reload
 
-      - name: Prime root pnpm store with restrictive modes
-        shell: bash
-        env:
-          RELEASE_ID: ${{ steps.release.outputs.id }}
-        run: |
-          set -euo pipefail
-          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
-          prime_root="/tmp/server-foundation-pnpm-prime"
-          test -f "$archive"
-
-          sudo rm -rf "$prime_root"
-          sudo install -d -m 0700 "$prime_root"
-          sudo tar -xzf "$archive" -C "$prime_root"
-          sudo bash -c 'umask 077; /usr/bin/corepack pnpm --dir "$1" install --prod --frozen-lockfile' _ "$prime_root"
-
-          store_path="$(sudo /usr/bin/corepack pnpm store path)"
-          test -d "$store_path"
-          sudo find "$store_path" -type f -exec chmod 0600 {} +
-          restrictive_sample="$(sudo find "$store_path" -type f -perm 0600 -print -quit)"
-          if [ -z "$restrictive_sample" ]; then
-            echo "failed to prime restrictive pnpm store modes at $store_path" >&2
-            exit 1
-          fi
-          echo "Restrictive pnpm store prepared; sample: $restrictive_sample"
-          sudo rm -rf "$prime_root"
-
       - name: Install packaged release through production path
         shell: bash
         env:
@@ -213,8 +187,17 @@ jobs:
           set -euo pipefail
           archive="release/server-foundation-${RELEASE_ID}.tar.gz"
           test -f "$archive"
-          sudo env SERVER_FOUNDATION_HEALTH_URL=http://127.0.0.1:8787/health/ready \
-            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID"
+
+          # Exercise the historical permission hazard directly: the deployment
+          # process runs with a restrictive umask. The production installer must
+          # normalize both archived files and files materialized by pnpm.
+          if ! sudo bash -c 'umask 077; SERVER_FOUNDATION_HEALTH_URL="$1" "$2" "$3" "$4"' _ \
+            http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID"; then
+            sudo systemctl status server-foundation --no-pager || true
+            sudo journalctl -u server-foundation --no-pager -n 80 || true
+            exit 1
+          fi
 
           sudo systemctl is-active --quiet server-foundation
           curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
@@ -244,8 +227,13 @@ jobs:
           archive="release/server-foundation-${RELEASE_ID}.tar.gz"
           second_release_id="${RELEASE_ID}-next"
 
-          sudo env SERVER_FOUNDATION_HEALTH_URL=http://127.0.0.1:8787/health/ready \
-            ./deploy/scripts/install-release.sh "$archive" "$second_release_id"
+          if ! sudo bash -c 'umask 077; SERVER_FOUNDATION_HEALTH_URL="$1" "$2" "$3" "$4"' _ \
+            http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$second_release_id"; then
+            sudo systemctl status server-foundation --no-pager || true
+            sudo journalctl -u server-foundation --no-pager -n 80 || true
+            exit 1
+          fi
           sudo systemctl is-active --quiet server-foundation
           curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
 
