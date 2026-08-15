@@ -69,6 +69,29 @@ die()  { printf '  \033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 is_wsl() { grep -qi microsoft /proc/version 2>/dev/null; }
 
+# ⚠️⚠️ firewalld 一旦啟用，**服務會連不上自己的資料庫**，除非明確放行 loopback。
+#    症狀：應用程式打 127.0.0.1:3306 得到 errno 113（EHOSTUNREACH），
+#          看起來像 MySQL 沒開，其實是被 REJECT。
+#
+#    2026-08-15 實測（AlmaLinux 10.2）兩種寫法的差別：
+#      --add-interface=lo        ❌ 這台無效
+#      --add-source=127.0.0.0/8  ✅ 有效
+#    原因：這台除了 lo 還有 loopback0（WSL mirrored networking 生的），
+#    流量走的不是 lo ⇒ 介面比對不中，來源位址比對才中。
+#    ⚠️ 正式機（沒有 loopback0）慣例上 lo 規則就夠了，但來源規則在兩邊都成立且無害
+#    ——來源 127/8 的封包本來就不可能從外網進來（核心的 martian 過濾會先擋掉）。
+#    ⇒ 兩個都加。
+#
+#    ⚠️ 這個函式在步驟 5（測資料庫前）與步驟 8（設定防火牆時）各叫一次：
+#    重跑時 firewalld 已經在跑，若只在步驟 8 才修，步驟 5 就先死了。
+ensure_loopback_trusted() {
+  command -v firewall-cmd >/dev/null 2>&1 || return 0
+  systemctl is-active --quiet firewalld 2>/dev/null || return 0
+  sudo firewall-cmd --permanent --zone=trusted --add-interface=lo >/dev/null 2>&1 || true
+  sudo firewall-cmd --permanent --zone=trusted --add-source=127.0.0.0/8 >/dev/null 2>&1 || true
+  sudo firewall-cmd --reload >/dev/null 2>&1 || true
+}
+
 # ⚠️ 這支會多次 sudo。先要一次，之後才不會在中途卡住等密碼。
 sudo -v || die "需要 sudo 權限"
 
@@ -206,6 +229,9 @@ MYCNF="$(mktemp)"
 chmod 0600 "$MYCNF"
 trap 'rm -f "$MYCNF"' EXIT
 printf '[client]\nuser=%s\npassword=%s\n' "$SF_DB_USER" "$DB_PASSWORD" > "$MYCNF"
+# ⚠️ 重跑情境：firewalld 可能已經在跑並擋著 loopback ⇒ 先放行再測，否則必死於 2003
+ensure_loopback_trusted
+
 # ⚠️ **不要吞 stderr**。這裡的兩種失敗長得一樣但成因天差地遠：
 #      ERROR 2003 ... (113)  ＝ 連不到（EHOSTUNREACH，多半是防火牆擋 loopback）
 #      ERROR 1045 ...        ＝ 連得到但認證失敗（帳號主機名不對）
@@ -285,12 +311,8 @@ if [ "$SF_SETUP_FIREWALL" = "1" ]; then
   sudo dnf -y install firewalld
   sudo systemctl enable --now firewalld
   sudo firewall-cmd --permanent --add-port="${SF_WG_PORT}/udp"
-  # ⚠️⚠️ 這一行不能省，否則**服務連不上自己的資料庫**。
-  #    firewalld 起來之後 lo 是「no zone」⇒ 落到 default zone（public）⇒ 被 REJECT，
-  #    應用程式打 127.0.0.1:3306 會拿到 errno 113（EHOSTUNREACH）。
-  #    2026-08-15 實測撞到：第一輪測連線時 firewalld 還沒裝所以過了，
-  #    第二輪它已經在跑，同一條連線就死了——**只跑一次是驗不出來的**。
-  sudo firewall-cmd --permanent --zone=trusted --add-interface=lo
+  # ⚠️ 放行 loopback，否則服務連不上自己的資料庫（理由見檔案上方 ensure_loopback_trusted）
+  ensure_loopback_trusted
   # ⭐ 第二道防線：把 wg0 劃進 trusted zone，只有它能碰 API 埠。
   #    綁「介面」而不是 IP 範圍是刻意的——介面是實打實的隧道出口，
   #    偽造來源位址繞不過。這樣就算日後有人把 HOST 改成 0.0.0.0，
