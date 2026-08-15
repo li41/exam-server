@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "exam-server-offsite-backup",
+  "main": "./offsite-backup-worker.mjs",
+  "compatibility_date": "2026-08-15",
+  "r2_buckets": [
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "CHANGE_ME"
+    }
+  ],
+  "vars": {
+    "BACKUP_PREFIX": "server-foundation/backups"
+  }
+}
