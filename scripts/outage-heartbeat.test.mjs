@@ -26,15 +26,12 @@ test("ping URL must be configured and use HTTPS", () => {
   );
 });
 
-test(
-  "health URL follows server HOST and PORT without changing the boundary",
-  () => {
-    assert.equal(
-      healthUrlFromServerEnv({ HOST: "10.99.0.1", PORT: "18787" }).href,
-      "http://10.99.0.1:18787/health/ready",
-    );
-  },
-);
+test("health URL follows server HOST and PORT without changing the boundary", () => {
+  assert.equal(
+    healthUrlFromServerEnv({ HOST: "10.99.0.1", PORT: "18787" }).href,
+    "http://10.99.0.1:18787/health/ready",
+  );
+});
 
 test("readiness requires mysql, redis, and storage to all be ok", () => {
   validateReadiness({
@@ -135,33 +132,30 @@ test("unhealthy service withholds success heartbeat", async () => {
   assert.deepEqual(calls, ["http://10.99.0.1:18787/health/ready"]);
 });
 
-test(
-  "test alert sends the failure signal without probing local readiness",
-  async () => {
-    const calls = [];
-    await runHeartbeat(
-      { testAlert: true },
-      {
-        config: {
-          pingUrl: new URL("https://hc-ping.com/secret-check"),
-          healthUrl: new URL("http://10.99.0.1:18787/health/ready"),
-          healthTimeoutSeconds: 1,
-          pingTimeoutSeconds: 1,
-          pingRetries: 3,
-        },
-        fetchImpl: async (url) => {
-          calls.push(String(url));
-          return new Response("OK", { status: 200 });
-        },
-        sleepImpl: async () => {},
-        log: () => {},
+test("test alert sends the failure signal without probing local readiness", async () => {
+  const calls = [];
+  await runHeartbeat(
+    { testAlert: true },
+    {
+      config: {
+        pingUrl: new URL("https://hc-ping.com/secret-check"),
+        healthUrl: new URL("http://10.99.0.1:18787/health/ready"),
+        healthTimeoutSeconds: 1,
+        pingTimeoutSeconds: 1,
+        pingRetries: 3,
       },
-    );
-    assert.deepEqual(calls, ["https://hc-ping.com/secret-check/fail"]);
-    const failureUrl = signalUrlFor(
-      new URL("https://hc-ping.com/secret-check"),
-      "failure",
-    );
-    assert.equal(failureUrl.href, "https://hc-ping.com/secret-check/fail");
-  },
-);
+      fetchImpl: async (url) => {
+        calls.push(String(url));
+        return new Response("OK", { status: 200 });
+      },
+      sleepImpl: async () => {},
+      log: () => {},
+    },
+  );
+  assert.deepEqual(calls, ["https://hc-ping.com/secret-check/fail"]);
+  const failureUrl = signalUrlFor(
+    new URL("https://hc-ping.com/secret-check"),
+    "failure",
+  );
+  assert.equal(failureUrl.href, "https://hc-ping.com/secret-check/fail");
+});
