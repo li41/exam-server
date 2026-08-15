@@ -50,49 +50,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Probe systemd availability on GitHub runner
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          set -u
-          echo "PID 1: $(ps -p 1 -o comm=)"
-          systemctl --version
-
-          unit_name="codex-systemd-probe.service"
-          unit_path="/etc/systemd/system/$unit_name"
-          cat > /tmp/codex-systemd-probe.service <<'EOF'
-          [Unit]
-          Description=Codex GitHub runner systemd probe
-
-          [Service]
-          Type=simple
-          ExecStart=/usr/bin/sleep infinity
-          EOF
-
-          cleanup() {
-            sudo systemctl stop "$unit_name" >/dev/null 2>&1 || true
-            sudo rm -f "$unit_path"
-            sudo systemctl daemon-reload >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          sudo install -m 0644 /tmp/codex-systemd-probe.service "$unit_path"
-
-          set +e
-          {
-            sudo systemctl daemon-reload
-            sudo systemctl start "$unit_name"
-            sudo systemctl is-active "$unit_name"
-          } 2>&1 | tee /tmp/codex-systemd-probe.log
-          probe_rc=${PIPESTATUS[0]}
-          set -e
-
-          if [ "$probe_rc" -eq 0 ]; then
-            echo "SYSTEMD_PROBE=available"
-          else
-            echo "SYSTEMD_PROBE=unavailable"
-            echo "systemd probe exit code: $probe_rc"
-          fi
-
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -136,15 +93,133 @@ jobs:
       - name: Rehearse backup and restore
         run: corepack pnpm backup:rehearse
 
+      - name: Resolve safe release identifier
+        id: release
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            raw="pr-${PR_NUMBER}-${GITHUB_RUN_ID}"
+          else
+            raw="${GITHUB_REF_NAME:-run-${GITHUB_RUN_ID}}"
+          fi
+          release_id="$(printf '%s' "$raw" | sed -E 's/[^A-Za-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
+          test -n "$release_id"
+          echo "id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "Release identifier: $release_id"
+
       - name: Package release
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.release.outputs.id }}
         run: corepack pnpm release:package
+
+      - name: Prepare real systemd release environment
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -x deploy/scripts/install-release.sh || {
+            echo "install-release.sh is not executable" >&2
+            exit 1
+          }
+          test -x deploy/scripts/rollback-release.sh || {
+            echo "rollback-release.sh is not executable" >&2
+            exit 1
+          }
+
+          # actions/setup-node puts Node/Corepack in the toolcache. The production
+          # unit and installer deliberately use the system paths, so expose the
+          # selected Node 24/Corepack there without changing repository behavior.
+          node_bin="$(command -v node)"
+          corepack_bin="$(command -v corepack)"
+          if [ "$node_bin" != "/usr/bin/node" ]; then
+            sudo ln -sf "$node_bin" /usr/bin/node
+          fi
+          if [ "$corepack_bin" != "/usr/bin/corepack" ]; then
+            sudo ln -sf "$corepack_bin" /usr/bin/corepack
+          fi
+          /usr/bin/node --version | grep -q '^v24\.'
+          sudo /usr/bin/corepack pnpm --version
+
+          if ! id -u server-foundation >/dev/null 2>&1; then
+            sudo useradd --system --home /var/lib/server-foundation --shell /usr/sbin/nologin server-foundation
+          fi
+          sudo install -d -m 0750 -o root -g server-foundation /etc/server-foundation
+
+          cat > /tmp/server-foundation.env <<'EOF'
+          NODE_ENV=production
+          HOST=127.0.0.1
+          PORT=8787
+          MYSQL_URL=mysql://root:root@127.0.0.1:3306/foundation_release_test
+          REDIS_URL=redis://127.0.0.1:6379
+          FILE_STORAGE_ROOT=/var/lib/server-foundation/storage
+          TRUST_PROXY_HEADERS=false
+          FILE_CLEANUP_INTERVAL_SECONDS=300
+          IDEMPOTENCY_TTL_SECONDS=86400
+          SHUTDOWN_TIMEOUT_SECONDS=30
+          BACKUP_ROOT=/tmp/server-foundation-release-backups
+          EOF
+          sudo install -m 0600 -o root -g root /tmp/server-foundation.env /etc/server-foundation/server-foundation.env
+          sudo install -m 0644 deploy/systemd/server-foundation.service /etc/systemd/system/server-foundation.service
+          sudo systemctl daemon-reload
+
+      - name: Install packaged release through production path
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          test -f "$archive"
+          sudo env SERVER_FOUNDATION_HEALTH_URL=http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID"
+
+          sudo systemctl is-active --quiet server-foundation
+          curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
+
+          expected="/opt/server-foundation/releases/${RELEASE_ID}"
+          actual="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$actual" != "$expected" ]; then
+            echo "current symlink mismatch: expected $expected, got $actual" >&2
+            exit 1
+          fi
+
+          migration_count="$(mysql --batch --skip-column-names \
+            --protocol=TCP -h 127.0.0.1 -uroot -proot foundation_release_test \
+            -e 'SELECT COUNT(*) FROM schema_migrations')"
+          if [ "$migration_count" -lt 5 ]; then
+            echo "migration gate expected at least 5 applied migrations, got $migration_count" >&2
+            exit 1
+          fi
+          echo "Release path healthy; applied migrations: $migration_count"
+
+      - name: Reinstall same packaged release
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          sudo env SERVER_FOUNDATION_HEALTH_URL=http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID"
+          sudo systemctl is-active --quiet server-foundation
+          curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
 
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: server-foundation-${{ github.ref_name }}
+          name: server-foundation-${{ steps.release.outputs.id }}
           path: release/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Clean up release-path systemd state
+        if: always()
+        shell: bash
+        run: |
+          sudo systemctl stop server-foundation >/dev/null 2>&1 || true
+          sudo rm -f /etc/systemd/system/server-foundation.service
+          sudo systemctl daemon-reload >/dev/null 2>&1 || true
+          sudo rm -rf /opt/server-foundation /etc/server-foundation /var/lib/server-foundation
