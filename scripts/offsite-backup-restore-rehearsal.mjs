@@ -5,15 +5,19 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   DEFAULT_APP_ENV_FILE,
-  DEFAULT_R2_ENV_FILE,
+  DEFAULT_R2_RESTORE_ENV_FILE,
+  DEFAULT_UPLOAD_ENV_FILE,
   createBackupArchive,
-  createR2Client,
+  createR2ReadClient,
+  createWriteOnlyUploadClient,
   extractBackupArchive,
   loadBackupAppConfig,
-  loadR2Config,
+  loadR2ReadConfig,
+  loadUploadConfig,
+  objectKeyForBackup,
 } from "./offsite-r2.mjs";
 
 const runMysqlQuery = async ({ mysqlUrl, sql, mysqlBin = "mysql" }) => {
@@ -57,10 +61,12 @@ const runMysqlQuery = async ({ mysqlUrl, sql, mysqlBin = "mysql" }) => {
 export const rehearseOffsiteBackupRestore = async ({
   confirmation,
   appEnvFile = DEFAULT_APP_ENV_FILE,
-  r2EnvFile = DEFAULT_R2_ENV_FILE,
+  uploadEnvFile = DEFAULT_UPLOAD_ENV_FILE,
+  r2EnvFile = DEFAULT_R2_RESTORE_ENV_FILE,
   mysqlBin = "mysql",
   mysqldumpBin = "mysqldump",
-  client: clientOverride,
+  uploadClient: uploadClientOverride,
+  readClient: readClientOverride,
 }) => {
   if (confirmation !== "YES_I_UNDERSTAND_THIS_IS_DESTRUCTIVE") {
     throw new Error(
@@ -69,8 +75,14 @@ export const rehearseOffsiteBackupRestore = async ({
   }
 
   const appConfig = await loadBackupAppConfig(appEnvFile);
-  const r2Config = await loadR2Config(r2EnvFile);
-  const client = clientOverride ?? createR2Client(r2Config);
+  const uploadConfig = await loadUploadConfig(uploadEnvFile);
+  const r2Config = await loadR2ReadConfig(r2EnvFile);
+  if (uploadConfig.prefix !== r2Config.prefix) {
+    throw new Error("upload and restore R2_PREFIX values must match");
+  }
+  const uploadClient =
+    uploadClientOverride ?? createWriteOnlyUploadClient(uploadConfig);
+  const readClient = readClientOverride ?? createR2ReadClient(r2Config);
   await mkdir(join(appConfig.storageRoot, "files"), {
     recursive: true,
     mode: 0o700,
@@ -110,14 +122,17 @@ export const rehearseOffsiteBackupRestore = async ({
   const workRoot = await mkdtemp(
     join(tmpdir(), "server-foundation-offsite-rehearsal-"),
   );
-  const objectKey = `${r2Config.prefix}/rehearsal/${basename(backup.backupDirectory)}.tar.gz`;
+  const objectKey = objectKeyForBackup(
+    uploadConfig.prefix,
+    backup.backupDirectory,
+  );
   let previousStorageRoot = null;
   try {
     const archive = await createBackupArchive({
       backupDirectory: backup.backupDirectory,
       workRoot,
     });
-    await client.putObject(objectKey, archive.archivePath);
+    await uploadClient.putObject(objectKey, archive.archivePath);
 
     // Remove the local copy before mutation. From here on, recovery can only use R2.
     await rm(backup.backupDirectory, { recursive: true, force: true });
@@ -131,7 +146,7 @@ export const rehearseOffsiteBackupRestore = async ({
     });
 
     const downloadedArchive = join(workRoot, "downloaded.tar.gz");
-    await client.getObjectToFile(objectKey, downloadedArchive);
+    await readClient.getObjectToFile(objectKey, downloadedArchive);
     const downloadedBackup = await extractBackupArchive({
       archivePath: downloadedArchive,
       workRoot: join(workRoot, "extracted"),
@@ -161,12 +176,12 @@ export const rehearseOffsiteBackupRestore = async ({
       restoredDatabase: true,
       restoredStorage: true,
       restoredFromOffsite: true,
+      remoteObjectRetainedForCloudflareRetention: true,
     };
   } finally {
     if (previousStorageRoot) {
       await rm(previousStorageRoot, { recursive: true, force: true });
     }
-    await client.deleteObject(objectKey).catch(() => undefined);
     await rm(workRoot, { recursive: true, force: true });
   }
 };
@@ -175,7 +190,10 @@ const main = async () => {
   const result = await rehearseOffsiteBackupRestore({
     confirmation: process.env.OFFSITE_REHEARSAL_CONFIRM,
     appEnvFile: process.env.OFFSITE_APP_ENV_FILE ?? DEFAULT_APP_ENV_FILE,
-    r2EnvFile: process.env.OFFSITE_R2_ENV_FILE ?? DEFAULT_R2_ENV_FILE,
+    uploadEnvFile:
+      process.env.OFFSITE_UPLOAD_ENV_FILE ?? DEFAULT_UPLOAD_ENV_FILE,
+    r2EnvFile:
+      process.env.OFFSITE_R2_ENV_FILE ?? DEFAULT_R2_RESTORE_ENV_FILE,
     mysqlBin: process.env.MYSQL_BIN ?? "mysql",
     mysqldumpBin: process.env.MYSQLDUMP_BIN ?? "mysqldump",
   });

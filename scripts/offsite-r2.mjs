@@ -1,19 +1,28 @@
 import { createHash, createHmac } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { spawn } from "node:child_process";
 
-export const DEFAULT_R2_ENV_FILE = "/etc/server-foundation/offsite-backup.env";
+export const DEFAULT_UPLOAD_ENV_FILE =
+  "/etc/server-foundation/offsite-backup.env";
+export const DEFAULT_R2_RESTORE_ENV_FILE =
+  "/run/server-foundation/offsite-restore.env";
 export const DEFAULT_APP_ENV_FILE =
   "/etc/server-foundation/server-foundation.env";
-export const DEFAULT_RETENTION_COUNT = 30;
 export const DEFAULT_R2_PREFIX = "server-foundation/backups";
+export const DEFAULT_UPLOAD_PART_SIZE_MIB = 8;
 
 const EMPTY_SHA256 = createHash("sha256").update("").digest("hex");
-const R2_KEYS = new Set([
+const UPLOAD_KEYS = new Set([
+  "OFFSITE_UPLOAD_URL",
+  "OFFSITE_UPLOAD_TOKEN",
+  "OFFSITE_UPLOAD_PART_SIZE_MIB",
+  "R2_PREFIX",
+]);
+const R2_READ_KEYS = new Set([
   "R2_ACCOUNT_ID",
   "R2_BUCKET",
   "R2_ACCESS_KEY_ID",
@@ -61,10 +70,47 @@ const normalizePrefix = (value) => {
   return prefix;
 };
 
-export const loadR2Config = async (path = DEFAULT_R2_ENV_FILE) => {
+const positiveInteger = (value, fallback, name) => {
+  const candidate =
+    value === undefined || value === "" ? fallback : Number(value);
+  if (!Number.isSafeInteger(candidate) || candidate <= 0) {
+    fail(`${name} must be a positive integer`);
+  }
+  return candidate;
+};
+
+export const loadUploadConfig = async (path = DEFAULT_UPLOAD_ENV_FILE) => {
   const values = parseDataEnv(await readFile(path, "utf8"));
   for (const key of Object.keys(values)) {
-    if (!R2_KEYS.has(key)) fail(`unsupported R2 credential key: ${key}`);
+    if (!UPLOAD_KEYS.has(key))
+      fail(`unsupported upload credential key: ${key}`);
+  }
+  const url = new URL(requireValue(values, "OFFSITE_UPLOAD_URL"));
+  if (url.protocol !== "https:") fail("OFFSITE_UPLOAD_URL must use https");
+  if (url.username || url.password || url.hash) {
+    fail("OFFSITE_UPLOAD_URL contains unsupported URL components");
+  }
+  const partSizeMiB = positiveInteger(
+    values.OFFSITE_UPLOAD_PART_SIZE_MIB,
+    DEFAULT_UPLOAD_PART_SIZE_MIB,
+    "OFFSITE_UPLOAD_PART_SIZE_MIB",
+  );
+  if (partSizeMiB < 5 || partSizeMiB > 64) {
+    fail("OFFSITE_UPLOAD_PART_SIZE_MIB must be between 5 and 64");
+  }
+  return {
+    uploadUrl: url,
+    uploadToken: requireValue(values, "OFFSITE_UPLOAD_TOKEN"),
+    prefix: normalizePrefix(values.R2_PREFIX),
+    partSizeBytes: partSizeMiB * 1024 * 1024,
+  };
+};
+
+export const loadR2ReadConfig = async (path = DEFAULT_R2_RESTORE_ENV_FILE) => {
+  const values = parseDataEnv(await readFile(path, "utf8"));
+  for (const key of Object.keys(values)) {
+    if (!R2_READ_KEYS.has(key))
+      fail(`unsupported R2 read credential key: ${key}`);
   }
   const accountId = requireValue(values, "R2_ACCOUNT_ID");
   const bucket = requireValue(values, "R2_BUCKET");
@@ -211,67 +257,37 @@ const responseDetail = async (response) => {
   return text.replace(/\s+/gu, " ").trim().slice(0, 300);
 };
 
-export const createR2Client = (config, { fetchImpl = fetch } = {}) => {
+export const createR2ReadClient = (config, { fetchImpl = fetch } = {}) => {
   const host = `${config.accountId}.r2.cloudflarestorage.com`;
   const endpoint = `https://${host}`;
 
-  const request = async ({
-    method,
-    key = "",
-    queryEntries = [],
-    payloadHash = EMPTY_SHA256,
-    headers = {},
-    body,
-  }) => {
+  const request = async ({ key = "", queryEntries = [] }) => {
     const path = canonicalPath(config.bucket, key);
     const signed = signR2Request({
-      method,
+      method: "GET",
       host,
       path,
       queryEntries,
-      headers,
-      payloadHash,
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey,
     });
     const url = `${endpoint}${path}${signed.query ? `?${signed.query}` : ""}`;
     const response = await fetchImpl(url, {
-      method,
+      method: "GET",
       headers: signed.headers,
-      ...(body ? { body, duplex: "half" } : {}),
     });
     if (!response.ok) {
       const detail = await responseDetail(response);
       fail(
-        `R2 ${method} failed with HTTP ${response.status}${
-          detail ? `: ${detail}` : ""
-        }`,
+        `R2 GET failed with HTTP ${response.status}${detail ? `: ${detail}` : ""}`,
       );
     }
     return response;
   };
 
   return {
-    async putObject(key, filePath) {
-      const fileStat = await stat(filePath);
-      const payloadHash = await sha256File(filePath);
-      const response = await request({
-        method: "PUT",
-        key,
-        payloadHash,
-        headers: {
-          "content-length": fileStat.size,
-          "content-type": "application/gzip",
-          "x-amz-meta-sha256": payloadHash,
-        },
-        body: createReadStream(filePath),
-      });
-      await response.arrayBuffer();
-      return { sha256: payloadHash };
-    },
-
     async getObjectToFile(key, destinationPath) {
-      const response = await request({ method: "GET", key });
+      const response = await request({ key });
       const expectedSha256 = response.headers.get("x-amz-meta-sha256");
       if (!expectedSha256 || !/^[a-f0-9]{64}$/u.test(expectedSha256)) {
         fail(`R2 object ${key} is missing x-amz-meta-sha256`);
@@ -306,7 +322,7 @@ export const createR2Client = (config, { fetchImpl = fetch } = {}) => {
         if (continuationToken) {
           queryEntries.push(["continuation-token", continuationToken]);
         }
-        const response = await request({ method: "GET", queryEntries });
+        const response = await request({ queryEntries });
         const page = parseListObjectsXml(await response.text());
         objects.push(...page.objects);
         continuationToken = page.isTruncated
@@ -316,13 +332,124 @@ export const createR2Client = (config, { fetchImpl = fetch } = {}) => {
       } while (continuationToken);
       return objects;
     },
-
-    async deleteObject(key) {
-      const response = await request({ method: "DELETE", key });
-      await response.arrayBuffer();
-    },
   };
 };
+
+const uploadRequest = async ({
+  config,
+  action,
+  method,
+  fetchImpl,
+  key,
+  uploadId,
+  partNumber,
+  headers = {},
+  body,
+}) => {
+  const url = new URL(config.uploadUrl);
+  url.searchParams.set("action", action);
+  if (key) url.searchParams.set("key", key);
+  if (uploadId) url.searchParams.set("uploadId", uploadId);
+  if (partNumber) url.searchParams.set("partNumber", String(partNumber));
+  const response = await fetchImpl(url, {
+    method,
+    headers: {
+      authorization: `Bearer ${config.uploadToken}`,
+      ...headers,
+    },
+    ...(body === undefined ? {} : { body }),
+  });
+  if (!response.ok) {
+    const detail = await responseDetail(response);
+    fail(
+      `write-only upload ${action} failed with HTTP ${response.status}${
+        detail ? `: ${detail}` : ""
+      }`,
+    );
+  }
+  return response;
+};
+
+export const createWriteOnlyUploadClient = (
+  config,
+  { fetchImpl = fetch } = {},
+) => ({
+  async probe() {
+    await uploadRequest({
+      config,
+      action: "probe",
+      method: "POST",
+      fetchImpl,
+    });
+  },
+
+  async putObject(key, filePath) {
+    const payloadSha256 = await sha256File(filePath);
+    const fileStat = await stat(filePath);
+    const createResponse = await uploadRequest({
+      config,
+      action: "mpu-create",
+      method: "POST",
+      fetchImpl,
+      key,
+      headers: { "x-backup-sha256": payloadSha256 },
+    });
+    const created = await createResponse.json();
+    if (!created || typeof created.uploadId !== "string" || !created.uploadId) {
+      fail("write-only upload create returned no uploadId");
+    }
+
+    const parts = [];
+    const file = await open(filePath, "r");
+    try {
+      let offset = 0;
+      let partNumber = 1;
+      while (offset < fileStat.size) {
+        const length = Math.min(config.partSizeBytes, fileStat.size - offset);
+        const buffer = Buffer.allocUnsafe(length);
+        const { bytesRead } = await file.read(buffer, 0, length, offset);
+        if (bytesRead <= 0) fail("unexpected end of backup archive");
+        const partResponse = await uploadRequest({
+          config,
+          action: "mpu-uploadpart",
+          method: "PUT",
+          fetchImpl,
+          key,
+          uploadId: created.uploadId,
+          partNumber,
+          headers: { "content-type": "application/octet-stream" },
+          body: buffer.subarray(0, bytesRead),
+        });
+        const uploaded = await partResponse.json();
+        if (
+          !uploaded ||
+          uploaded.partNumber !== partNumber ||
+          typeof uploaded.etag !== "string" ||
+          !uploaded.etag
+        ) {
+          fail(`write-only upload part ${partNumber} returned invalid metadata`);
+        }
+        parts.push({ partNumber, etag: uploaded.etag });
+        offset += bytesRead;
+        partNumber += 1;
+      }
+    } finally {
+      await file.close();
+    }
+
+    await uploadRequest({
+      config,
+      action: "mpu-complete",
+      method: "POST",
+      fetchImpl,
+      key,
+      uploadId: created.uploadId,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ parts }),
+    });
+    return { sha256: payloadSha256, partCount: parts.length };
+  },
+});
 
 export const sha256File = async (path) => {
   const hash = createHash("sha256");
@@ -336,10 +463,11 @@ const run = (command, args) =>
     child.once("error", rejectRun);
     child.once("close", (code) => {
       if (code === 0) resolveRun();
-      else
+      else {
         rejectRun(
           new Error(`${command} exited with code ${code ?? "unknown"}`),
         );
+      }
     });
   });
 
@@ -395,60 +523,11 @@ const backupObject = (object, prefix) => {
   return { ...object, timestamp };
 };
 
-export const buildRetentionPlan = (
-  objects,
-  { prefix = DEFAULT_R2_PREFIX, keepCount = DEFAULT_RETENTION_COUNT } = {},
-) => {
-  if (!Number.isSafeInteger(keepCount) || keepCount < 1) {
-    fail("retention keepCount must be at least 1");
-  }
-  const backups = objects
+export const latestBackupObject = (objects, prefix = DEFAULT_R2_PREFIX) =>
+  objects
     .map((object) => backupObject(object, prefix))
     .filter(Boolean)
     .sort(
       (left, right) =>
         right.timestamp - left.timestamp || left.key.localeCompare(right.key),
-    );
-  return {
-    keep: backups.slice(0, keepCount),
-    delete: backups.slice(keepCount),
-  };
-};
-
-export const formatRetentionPlan = (plan) => {
-  const lines = [`會保留 (${plan.keep.length})`];
-  if (plan.keep.length === 0) lines.push("  (無)");
-  else {
-    lines.push(
-      ...plan.keep.map(
-        (object) => `  KEEP ${object.lastModified} ${object.key}`,
-      ),
-    );
-  }
-  lines.push(`會刪除 (${plan.delete.length})`);
-  if (plan.delete.length === 0) lines.push("  (無)");
-  else {
-    lines.push(
-      ...plan.delete.map(
-        (object) => `  DELETE ${object.lastModified} ${object.key}`,
-      ),
-    );
-  }
-  return lines.join("\n");
-};
-
-export const applyRetention = async ({
-  client,
-  prefix,
-  keepCount = DEFAULT_RETENTION_COUNT,
-  dryRun = false,
-  output = console.log,
-}) => {
-  const objects = await client.listObjects(prefix);
-  const plan = buildRetentionPlan(objects, { prefix, keepCount });
-  output(formatRetentionPlan(plan));
-  if (!dryRun) {
-    for (const object of plan.delete) await client.deleteObject(object.key);
-  }
-  return plan;
-};
+    )[0] ?? null;
