@@ -12,6 +12,60 @@
     "updatedAt": "2026-08-10T00:00:00.000Z",
     "deletedAt": null
   },
+  "CreateQuestionSchema": {
+    "code": "Q-001",
+    "categoryId": null,
+    "type": "single_choice",
+    "difficulty": 3,
+    "stem": "Fixture question",
+    "options": [{ "id": "a", "text": "A" }, { "id": "b", "text": "B" }],
+    "answer": { "value": "a" },
+    "explanation": null,
+    "aiRubric": null,
+    "points": 1,
+    "tags": ["fixture"],
+    "status": "enabled",
+    "media": []
+  },
+  "UpdateQuestionSchema": { "stem": "Updated fixture question", "version": 1 },
+  "DeleteQuestionQuerySchema": { "version": "1" },
+  "QuestionSchema": {
+    "id": "question-1",
+    "tenantId": "company-opaque",
+    "code": "Q-001",
+    "categoryId": null,
+    "createdBy": "user-1",
+    "type": "single_choice",
+    "difficulty": 3,
+    "stem": "Fixture question",
+    "options": [{ "id": "a", "text": "A" }, { "id": "b", "text": "B" }],
+    "answer": { "value": "a" },
+    "explanation": null,
+    "aiRubric": null,
+    "points": 1,
+    "tags": ["fixture"],
+    "status": "enabled",
+    "usageCount": 0,
+    "version": 1,
+    "media": [],
+    "createdAt": "2026-08-10T00:00:00.000Z",
+    "updatedAt": "2026-08-10T00:00:00.000Z",
+    "deletedAt": null
+  },
+  "CreateQuestionCategorySchema": { "parentId": null, "name": "Fixture category", "sortOrder": 0 },
+  "UpdateQuestionCategorySchema": { "parentId": null, "name": "Updated category", "sortOrder": 1, "version": 1 },
+  "DeleteQuestionCategoryQuerySchema": { "version": "1" },
+  "QuestionCategorySchema": {
+    "id": "category-1",
+    "tenantId": "company-opaque",
+    "parentId": null,
+    "name": "Fixture category",
+    "sortOrder": 0,
+    "version": 1,
+    "createdAt": "2026-08-10T00:00:00.000Z",
+    "updatedAt": "2026-08-10T00:00:00.000Z",
+    "deletedAt": null
+  },
   "FileMetadataSchema": {
     "fileId": "file-1",
     "ownerId": "user-1",
@@ -31,10 +85,7 @@
     "tenantId": "tenant-1",
     "roles": ["member"]
   },
-  "LoginRequestSchema": {
-    "email": "fixture@example.com",
-    "password": "correct horse battery staple"
-  },
+  "LoginRequestSchema": { "email": "fixture@example.com", "password": "correct horse battery staple" },
   "RefreshRequestSchema": { "refreshToken": "refresh-token" },
   "AuthTokenResponseSchema": {
     "accessToken": "access-token",
