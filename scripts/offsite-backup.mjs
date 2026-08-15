@@ -6,13 +6,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   DEFAULT_APP_ENV_FILE,
-  DEFAULT_R2_ENV_FILE,
-  DEFAULT_RETENTION_COUNT,
-  applyRetention,
+  DEFAULT_UPLOAD_ENV_FILE,
   createBackupArchive,
-  createR2Client,
+  createWriteOnlyUploadClient,
   loadBackupAppConfig,
-  loadR2Config,
+  loadUploadConfig,
   objectKeyForBackup,
 } from "./offsite-r2.mjs";
 
@@ -20,15 +18,15 @@ const parseArgs = (argv) => {
   const options = {
     dryRun: false,
     appEnvFile: DEFAULT_APP_ENV_FILE,
-    r2EnvFile: DEFAULT_R2_ENV_FILE,
+    uploadEnvFile: DEFAULT_UPLOAD_ENV_FILE,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--app-env" && argv[index + 1]) {
       options.appEnvFile = argv[++index];
-    } else if (arg === "--r2-env" && argv[index + 1]) {
-      options.r2EnvFile = argv[++index];
+    } else if (arg === "--upload-env" && argv[index + 1]) {
+      options.uploadEnvFile = argv[++index];
     } else {
       throw new Error(`unknown or incomplete argument: ${arg}`);
     }
@@ -39,23 +37,20 @@ const parseArgs = (argv) => {
 export const runOffsiteBackup = async ({
   dryRun = false,
   appEnvFile = DEFAULT_APP_ENV_FILE,
-  r2EnvFile = DEFAULT_R2_ENV_FILE,
-  keepCount = DEFAULT_RETENTION_COUNT,
+  uploadEnvFile = DEFAULT_UPLOAD_ENV_FILE,
   client: clientOverride,
   createBackupImpl,
   output = console.log,
 }) => {
-  const r2Config = await loadR2Config(r2EnvFile);
-  const client = clientOverride ?? createR2Client(r2Config);
+  const uploadConfig = await loadUploadConfig(uploadEnvFile);
+  const client = clientOverride ?? createWriteOnlyUploadClient(uploadConfig);
 
   if (dryRun) {
-    return applyRetention({
-      client,
-      prefix: r2Config.prefix,
-      keepCount,
-      dryRun: true,
-      output,
-    });
+    await client.probe();
+    output(
+      "write-only dry-run: upload endpoint/auth ok; no local backup, R2 list, read, delete, or upload was performed",
+    );
+    return { dryRun: true, remoteMutation: false };
   }
 
   const appConfig = await loadBackupAppConfig(appEnvFile);
@@ -69,22 +64,19 @@ export const runOffsiteBackup = async ({
       workRoot,
     });
     const objectKey = objectKeyForBackup(
-      r2Config.prefix,
+      uploadConfig.prefix,
       backup.backupDirectory,
     );
-    await client.putObject(objectKey, archive.archivePath);
-    output(`已上傳 ${objectKey} sha256=${archive.sha256}`);
-    const retention = await applyRetention({
-      client,
-      prefix: r2Config.prefix,
-      keepCount,
-      dryRun: false,
-      output,
-    });
+    const uploaded = await client.putObject(objectKey, archive.archivePath);
+    output(
+      `已上傳 ${objectKey} sha256=${archive.sha256} parts=${uploaded.partCount}`,
+    );
+    output("retention 由 R2 Object Lifecycle 執行；院內主機不具 R2 delete capability");
     return {
       backupDirectory: backup.backupDirectory,
       objectKey,
-      retention,
+      sha256: archive.sha256,
+      partCount: uploaded.partCount,
     };
   } finally {
     await rm(workRoot, { recursive: true, force: true });
@@ -94,11 +86,7 @@ export const runOffsiteBackup = async ({
 const main = async () => {
   const options = parseArgs(process.argv.slice(2));
   const result = await runOffsiteBackup(options);
-  if (options.dryRun) {
-    console.log("dry-run: 未建立本機備份、未上傳、未刪除任何 R2 物件");
-  } else {
-    console.log(JSON.stringify(result, null, 2));
-  }
+  console.log(JSON.stringify(result, null, 2));
 };
 
 if (
