@@ -90,7 +90,18 @@ for _ in {1..30}; do
 done
 
 if [ "$healthy" = true ]; then
-  echo "release $release_id is healthy and active"
+  # A release is not considered fully deployed until the service will also
+  # return after a host reboot. `enable` is idempotent, so every successful
+  # release also repairs older hosts that were active but never enabled.
+  if ! systemctl enable "$service"; then
+    echo "release $release_id is healthy but failed to enable $service for boot" >&2
+    exit 1
+  fi
+  if ! systemctl is-enabled --quiet "$service"; then
+    echo "release $release_id is healthy but $service is not enabled for boot" >&2
+    exit 1
+  fi
+  echo "release $release_id is healthy, active, and enabled for boot"
   exit 0
 fi
 
