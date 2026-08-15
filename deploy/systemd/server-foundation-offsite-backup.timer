@@ -1,0 +1,11 @@
+[Unit]
+Description=Run server-foundation off-site backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=server-foundation-offsite-backup.service
+
+[Install]
+WantedBy=timers.target
