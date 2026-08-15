@@ -1,6 +1,6 @@
 # server-foundation 實作計畫
 
-> 本文件於 `main@2c3bd872a9c007be7913c678eccf7cffb961a3ce` 重新複驗。判準不是「曾經規劃過」，而是 repo 或已記錄的實機／CI 證據能不能指出它真的存在。
+> 本文件於 `main@2c3bd872a9c007be7913c678eccf7cffb961a3ce` 重新複驗；off-site backup 狀態於 `main@a81f11fb58560fc61278b697ef10761614142c5f` 再次核對。判準不是「曾經規劃過」，而是 repo 或已記錄的實機／CI 證據能不能指出它真的存在。
 >
 > 第一個要服務真實使用者的目標，是**院內單一 VPS 的 `vps-mysql` profile，Windows 桌面後台經 WireGuard 存取**。Cloudflare 與 Google profile 是後續能力，不應混進第一批使用者的上線阻塞條件。
 
@@ -96,7 +96,7 @@ server-foundation
 - **公開 TLS / Caddy**：目前院內正式架構是 WireGuard overlay，API 不對院內實體網卡公開，傳輸加密由 WireGuard 提供；`doc/almalinux-10-安裝.md` 已明確記錄此取捨。若未來改成 public ingress，才重新把 Caddy/TLS 列為必要上線條件。
 - 「VPS 部署尚未達成」與「正式 restore 演練尚未完成」都是過期敘述，已刪除。
 
-仍需要做、但屬營運而不是 Phase 2 功能實作的項目，是 off-site backup、真實目標主機的 reboot／網路邊界驗證、外部告警。詳見 Phase 7 與第 5 節。
+仍需要做、但屬營運而不是 Phase 2 功能實作的項目，是 off-site backup 真機驗收、真實目標主機的 reboot／網路邊界驗證、外部告警。詳見 Phase 7 與第 5 節。
 
 ### Phase 3：檔案生命週期 — `vps-mysql` 的 local-fs 垂直切片已完成
 
@@ -138,7 +138,7 @@ server-foundation
 - Cloudflare session adapter。
 - local-mode integration tests 與共用 contract suite。
 
-這不是第一批 `vps-mysql` 院內使用者的上線阻塞。
+這不是第一批 `vps-mysql` 院內使用者的上線阻塞。此處的「R2 adapter 尚未實作」是指 `cloudflare-d1-r2` application storage profile；Phase 7 的 R2 異地備份只是 `vps-mysql` 的營運備份目的地，不等於完成該 provider profile。
 
 ### Phase 6：Google Sheets + Drive — 尚未實作，缺口明確
 
@@ -162,13 +162,14 @@ server-foundation
 
 - MySQL + private files 的 backup／restore tooling：`scripts/backup.mjs`、`scripts/restore.mjs`。
 - destructive backup → mutate → restore → verify rehearsal，而且 PR/main Verify 與 Release Artifact 都會跑。
+- **repo-side off-site backup tooling**：Cloudflare R2 upload/download、最近 30 份 retention、`--dry-run`、每日 systemd timer，以及會先刪本機演練 copy 再從 R2 restore 的 rehearsal path 已納入 repo；基本測試使用 fake R2 驗證 transport、retention 與 restore wiring。
 - `vps-mysql` 的 package/install/rollback/systemd/readiness path 已由 release CI 實跑。
 - structured log、request correlation、audit log、`/health/live`、`/health/ready` 已有實作與測試；`deploy/README.md` 說明 journald 操作。
 - AlmaLinux 10 clean-host bootstrap 已實跑並留下多輪實機修正紀錄。
 
 仍缺的具體營運能力：
 
-- **off-site backup 與 retention**：現在 tooling 能產生／還原 backup，但 repo 沒有證據顯示正式資料會被排程複製到不同故障域、套用 retention，並從 off-site copy 做過恢復。
+- **off-site backup 真機驗收**：repo-side tooling 已存在，但還沒有證據顯示真實 AlmaLinux 主機用真 R2 credential 完成一次「排程備份送到不同故障域 → 從 off-site copy 還原並驗證」。在這次真機演練成功前，這一格仍未完成。
 - **外部監測／告警**：現在有 health endpoint 與 log，但 repo 沒有會在服務故障時主動通知人的監測／告警配置。完整 metrics stack 可以後做，但第一批使用者至少需要 outage detection。
 - **真實目標主機 reboot 驗收**：CI 會跑 systemd，bootstrap 會 enable 服務，但 GitHub-hosted Ubuntu gate 不等於一台正式 AlmaLinux 主機真的 reboot 後能自動恢復服務。
 - **正式網路邊界驗收**：需要在目標主機上從授權 WireGuard peer 與未授權院內網路各測一次，確認 API 只在設計的 overlay 可達；CI 不能證明 firewalld／實體介面／上游網路設備的真實效果。
@@ -196,11 +197,11 @@ Release Artifact gate 雖然會真的 package、production-only install、migrat
 
 以下只列目前院內 `vps-mysql` 單 VPS + WireGuard 目標中，**不做就容易真的出事**的項目。
 
-### 正式 backup 必須離開同一故障域
+### 正式 backup 必須完成一次真實異地還原驗收
 
-把正式 backup 自動送到不同故障域，定義 retention，並至少從 off-site copy 恢復一次。
+repo 已有 R2 每日排程、最近 30 份 retention、dry-run 與從 off-site copy 還原的程式路徑；上線前仍必須在真實 AlmaLinux 主機用真 R2 credential 跑一次 `server-foundation-offsite-rehearse` 並成功。這一步未完成前，不把 off-site DR 標成已驗收。
 
-不做的後果：VPS／磁碟與同機 backup 一起損毀時，MySQL 與檔案即使有完善的 restore 程式也沒有可還原資料。
+不做的後果：VPS／磁碟與同機 backup 一起損毀時，即使 repo-side tooling 看起來完整，仍沒有真實環境證據證明異地 copy 可成功取回並恢復 MySQL 與檔案。
 
 ### 真正目標主機要做一次冷啟動與網路邊界驗收
 
@@ -234,11 +235,12 @@ Release Artifact gate 雖然會真的 package、production-only install、migrat
 - AlmaLinux 10 可從乾淨環境裝到服務與第一個帳號：`deploy/scripts/bootstrap-almalinux10.sh`、`doc/almalinux-10-安裝.md`、`c93042891cf363f29dd04cc1fd121043ef0799f0` 及其後續實跑修正。
 - backup/restore rehearsal 真的 mutate 再 restore：`scripts/backup-restore-rehearsal.mjs`。
 - rehearsal 每次在 CI 跑：`.github/workflows/verify.yml`、`.github/workflows/release.yml` 的 `Rehearse backup and restore`。
+- off-site R2 repo tooling：`scripts/offsite-r2.mjs`、`scripts/offsite-backup.mjs`、`scripts/offsite-restore.mjs`、`scripts/offsite-backup-restore-rehearsal.mjs`、`deploy/scripts/install-offsite-backup.sh`、systemd timer 與 `doc/offsite-backup.md`；repo tests 使用 fake R2，真 AlmaLinux/R2 rehearsal 仍待完成。
 - release path 真的走 package/install/migration/systemd/readiness：`.github/workflows/release.yml`，#12 merge `46de6ae`。
 - first-install / rollback self-loop 也有負向 gate：`.github/workflows/release.yml`，#14 merge `2c3bd87`。
 - structured log / request ID / audit / readiness 有測試：`apps/api/test/observability.test.ts`。
 - local filesystem lifecycle 有實作與測試：`packages/storage/local-fs/`、`apps/api/test/files*.test.ts`。
-- D1/R2 尚未實作：目前 repo tree 無 `apps/api-worker/`、D1/R2 adapter。
+- D1/R2 application profile 尚未實作：目前 repo tree 無 `apps/api-worker/`、D1/R2 application adapter。
 - Google profile 尚未實作：目前 repo tree 無 Sheets/Drive adapter 或 StorageConnection/OAuth implementation。
 
 ## 7. 後續 provider 規劃
@@ -265,6 +267,7 @@ Release Artifact gate 雖然會真的 package、production-only install、migrat
 - `README.md`
 - `deploy/README.md`
 - `doc/almalinux-10-安裝.md`
+- `doc/offsite-backup.md`
 - `.github/workflows/verify.yml`
 - `.github/workflows/release.yml`
 - [Cloudflare D1](https://developers.cloudflare.com/d1/)
