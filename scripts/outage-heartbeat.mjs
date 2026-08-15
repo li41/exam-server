@@ -63,7 +63,9 @@ export const normalizePingUrl = (raw) => {
     throw new Error("HEALTHCHECKS_PING_URL must use https");
   }
   if (url.username || url.password || url.hash) {
-    throw new Error("HEALTHCHECKS_PING_URL contains unsupported URL components");
+    throw new Error(
+      "HEALTHCHECKS_PING_URL contains unsupported URL components",
+    );
   }
   url.pathname = url.pathname.replace(/\/+$/u, "");
   if (!url.pathname || url.pathname === "/") {
@@ -82,7 +84,11 @@ export const healthUrlFromServerEnv = (serverEnv) => {
 };
 
 export const validateReadiness = (payload) => {
-  if (!payload || payload.status !== "ok" || typeof payload.checks !== "object") {
+  if (
+    !payload ||
+    payload.status !== "ok" ||
+    typeof payload.checks !== "object"
+  ) {
     throw new Error("readiness status is not ok");
   }
   for (const name of REQUIRED_READY_CHECKS) {
@@ -140,14 +146,16 @@ export const sendSignal = async (
       if (attempt < retries) await sleepImpl(attempt * 1000);
     }
   }
-  const message = lastError instanceof Error ? lastError.message : "unknown error";
+  const message =
+    lastError instanceof Error ? lastError.message : "unknown error";
   throw new Error(
     `heartbeat delivery failed after ${retries} attempts: ${message}`,
   );
 };
 
 export const loadConfig = async ({ readFileImpl = readFile } = {}) => {
-  const alertEnvFile = process.env.OUTAGE_ALERT_ENV_FILE ?? DEFAULT_ALERT_ENV_FILE;
+  const alertEnvFile =
+    process.env.OUTAGE_ALERT_ENV_FILE ?? DEFAULT_ALERT_ENV_FILE;
   const serverEnvFile =
     process.env.SERVER_FOUNDATION_ENV_FILE ?? DEFAULT_SERVER_ENV_FILE;
   const alertEnv = parseDataEnv(await readFileImpl(alertEnvFile, "utf8"), {
