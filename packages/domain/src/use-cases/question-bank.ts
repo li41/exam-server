@@ -185,7 +185,9 @@ export const validateKnownQuestionShape = (
     }
     for (const [index, item] of answer.right_items.entries()) {
       if (phpEmpty(phpTrim(item))) {
-        validationError(`matching right-side item ${index + 1} cannot be empty.`);
+        validationError(
+          `matching right-side item ${index + 1} cannot be empty.`,
+        );
       }
     }
     if (!Array.isArray(answer.pairs) || answer.pairs.length < 2) {
@@ -235,7 +237,9 @@ export const validateKnownQuestionShape = (
       validationError("fill_blank requires a blanks answer array.");
     }
     if (answer.blanks.length !== blankCount) {
-      validationError("fill_blank answer count must match the ___ marker count.");
+      validationError(
+        "fill_blank answer count must match the ___ marker count.",
+      );
     }
     for (const [index, blank] of answer.blanks.entries()) {
       if (phpEmpty(phpTrim(blank))) {
@@ -266,7 +270,9 @@ export const validateKnownQuestionShape = (
     for (const [index, blankValue] of answer.blanks.entries()) {
       const blank = jsonObject(blankValue);
       if (!blank || !Array.isArray(blank.options) || blank.options.length < 2) {
-        validationError(`dropdown blank ${index + 1} requires at least two options.`);
+        validationError(
+          `dropdown blank ${index + 1} requires at least two options.`,
+        );
       }
       for (const [optionIndex, optionText] of blank.options.entries()) {
         if (phpEmpty(phpTrim(optionText))) {
@@ -282,7 +288,9 @@ export const validateKnownQuestionShape = (
       }
       const correct = blank.correct as number;
       if (correct < 0 || correct >= blank.options.length) {
-        validationError(`dropdown blank ${index + 1} correct index is invalid.`);
+        validationError(
+          `dropdown blank ${index + 1} correct index is invalid.`,
+        );
       }
     }
     return;
@@ -469,9 +477,7 @@ export const validateKnownQuestionShape = (
       const axis = jsonObject(chart[key]);
       if (!axis || phpEmpty(axis.enabled)) return;
       if (phpEmpty(phpTrim(axis.name))) {
-        validationError(
-          `development_drawing ${label} axis requires a name.`,
-        );
+        validationError(`development_drawing ${label} axis requires a name.`);
       }
       if (
         !isSet(axis, "min") ||
@@ -513,9 +519,7 @@ export const validateKnownQuestionShape = (
         );
       }
       if (lineNames.includes(name)) {
-        validationError(
-          `development_drawing line name ${name} is duplicated.`,
-        );
+        validationError(`development_drawing line name ${name} is duplicated.`);
       }
       lineNames.push(name);
       if (!Array.isArray(line.points) || line.points.length < 2) {

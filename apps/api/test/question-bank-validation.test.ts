@@ -3,10 +3,7 @@ import {
   DomainError,
   validateKnownQuestionShape,
 } from "@server-foundation/domain";
-import type {
-  Question,
-  QuestionType,
-} from "@server-foundation/api-contracts";
+import type { Question, QuestionType } from "@server-foundation/api-contracts";
 
 type Shape = Pick<Question, "type" | "stem" | "options" | "answer">;
 
@@ -144,10 +141,7 @@ describe("question bank PHP validation parity", () => {
       ),
     );
     expectInvalid(shape("fill_blank", { blanks: ["1"] }), "___ marker");
-    expectInvalid(
-      shape("fill_blank", {}, null, "___"),
-      "blanks answer array",
-    );
+    expectInvalid(shape("fill_blank", {}, null, "___"), "blanks answer array");
     expectInvalid(
       shape("fill_blank", { blanks: ["1"] }, null, "___ + ___"),
       "answer count",
@@ -166,10 +160,7 @@ describe("question bank PHP validation parity", () => {
     const valid = { blanks: [{ options: ["A", "B"], correct: 0 }] };
     expectValid(shape("dropdown", valid, null, "Choose ___"));
     expectInvalid(shape("dropdown", valid), "___ marker");
-    expectInvalid(
-      shape("dropdown", {}, null, "___"),
-      "configuration array",
-    );
+    expectInvalid(shape("dropdown", {}, null, "___"), "configuration array");
     expectInvalid(
       shape("dropdown", { blanks: [] }, null, "___"),
       "blank count",
@@ -193,12 +184,7 @@ describe("question bank PHP validation parity", () => {
       "option 2 cannot be empty",
     );
     expectInvalid(
-      shape(
-        "dropdown",
-        { blanks: [{ options: ["A", "B"] }] },
-        null,
-        "___",
-      ),
+      shape("dropdown", { blanks: [{ options: ["A", "B"] }] }, null, "___"),
       "integer correct index",
     );
     expectInvalid(
@@ -226,11 +212,10 @@ describe("question bank PHP validation parity", () => {
       "two items",
     );
     expectInvalid(
-      shape(
-        "choice_short_answer",
-        valid,
-        [options[0]!, { id: "b", text: "0" }],
-      ),
+      shape("choice_short_answer", valid, [
+        options[0]!,
+        { id: "b", text: "0" },
+      ]),
       "item 2 cannot be empty",
     );
     expectInvalid(
@@ -320,64 +305,46 @@ describe("question bank PHP validation parity", () => {
       shape("drawing", { board: { xMin: 0, xMax: 1, yMin: 0 } }),
       "incomplete",
     );
+    expectInvalid(shape("drawing", { board: { ...board, xMin: 10 } }), "xMin");
+    expectInvalid(shape("drawing", { board: { ...board, yMin: 5 } }), "yMin");
     expectInvalid(
-      shape("drawing", { board: { ...board, xMin: 10 } }),
-      "xMin",
-    );
-    expectInvalid(
-      shape("drawing", { board: { ...board, yMin: 5 } }),
-      "yMin",
-    );
-    expectInvalid(
-      shape(
-        "drawing",
-        {
-          board,
-          backgroundImage: { url: "", position: [0, 0], size: [1, 1] },
-        },
-      ),
+      shape("drawing", {
+        board,
+        backgroundImage: { url: "", position: [0, 0], size: [1, 1] },
+      }),
       "URL is invalid",
     );
     expectInvalid(
-      shape(
-        "drawing",
-        {
-          board,
-          backgroundImage: {
-            url: "image.png",
-            position: [0],
-            size: [1, 1],
-          },
+      shape("drawing", {
+        board,
+        backgroundImage: {
+          url: "image.png",
+          position: [0],
+          size: [1, 1],
         },
-      ),
+      }),
       "position is invalid",
     );
     expectInvalid(
-      shape(
-        "drawing",
-        {
-          board,
-          backgroundImage: {
-            url: "image.png",
-            position: [0, 0],
-            size: [1],
-          },
+      shape("drawing", {
+        board,
+        backgroundImage: {
+          url: "image.png",
+          position: [0, 0],
+          size: [1],
         },
-      ),
+      }),
       "size is invalid",
     );
     expectInvalid(
-      shape(
-        "drawing",
-        {
-          board,
-          backgroundImage: {
-            url: "image.png",
-            position: [0, 0],
-            size: [1, 0],
-          },
+      shape("drawing", {
+        board,
+        backgroundImage: {
+          url: "image.png",
+          position: [0, 0],
+          size: [1, 0],
         },
-      ),
+      }),
       "size must be positive",
     );
     expectInvalid(
@@ -394,60 +361,53 @@ describe("question bank PHP validation parity", () => {
       xAxis: { enabled: true, name: "X", min: 0, max: 10, interval: 1 },
       yAxis: { enabled: true, name: "Y", min: -5, max: 5, interval: 1 },
     };
-    const lines = [{ name: "Line A", points: [[0, 0], [1, 1]] }];
+    const lines = [
+      {
+        name: "Line A",
+        points: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+    ];
     expectValid(shape("development_drawing", { chart, lines }));
     expectInvalid(shape("development_drawing", { lines }), "chart settings");
     expectInvalid(
-      shape(
-        "development_drawing",
-        {
-          chart: { ...chart, xAxis: { ...chart.xAxis, name: "0" } },
-          lines,
-        },
-      ),
+      shape("development_drawing", {
+        chart: { ...chart, xAxis: { ...chart.xAxis, name: "0" } },
+        lines,
+      }),
       "X axis requires a name",
     );
     expectInvalid(
-      shape(
-        "development_drawing",
-        {
-          chart: {
-            ...chart,
-            xAxis: { enabled: true, name: "X", min: 0, max: 10 },
-          },
-          lines,
+      shape("development_drawing", {
+        chart: {
+          ...chart,
+          xAxis: { enabled: true, name: "X", min: 0, max: 10 },
         },
-      ),
+        lines,
+      }),
       "X axis settings are incomplete",
     );
     expectInvalid(
-      shape(
-        "development_drawing",
-        {
-          chart: { ...chart, xAxis: { ...chart.xAxis, min: 10 } },
-          lines,
-        },
-      ),
+      shape("development_drawing", {
+        chart: { ...chart, xAxis: { ...chart.xAxis, min: 10 } },
+        lines,
+      }),
       "X axis min",
     );
     expectInvalid(
-      shape(
-        "development_drawing",
-        {
-          chart: { ...chart, xAxis: { ...chart.xAxis, interval: 0 } },
-          lines,
-        },
-      ),
+      shape("development_drawing", {
+        chart: { ...chart, xAxis: { ...chart.xAxis, interval: 0 } },
+        lines,
+      }),
       "X axis interval",
     );
     expectInvalid(
-      shape(
-        "development_drawing",
-        {
-          chart: { ...chart, yAxis: { ...chart.yAxis, max: -5 } },
-          lines,
-        },
-      ),
+      shape("development_drawing", {
+        chart: { ...chart, yAxis: { ...chart.yAxis, max: -5 } },
+        lines,
+      }),
       "Y axis min",
     );
     expectInvalid(
@@ -459,7 +419,10 @@ describe("question bank PHP validation parity", () => {
         chart,
         lines: Array.from({ length: 11 }, (_, index) => ({
           name: `L${index}`,
-          points: [[0, 0], [1, 1]],
+          points: [
+            [0, 0],
+            [1, 1],
+          ],
         })),
       }),
       "at most ten lines",
@@ -467,7 +430,15 @@ describe("question bank PHP validation parity", () => {
     expectInvalid(
       shape("development_drawing", {
         chart,
-        lines: [{ name: "0", points: [[0, 0], [1, 1]] }],
+        lines: [
+          {
+            name: "0",
+            points: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+        ],
       }),
       "requires a name",
     );
@@ -475,8 +446,20 @@ describe("question bank PHP validation parity", () => {
       shape("development_drawing", {
         chart,
         lines: [
-          { name: "Same", points: [[0, 0], [1, 1]] },
-          { name: "Same", points: [[2, 2], [3, 3]] },
+          {
+            name: "Same",
+            points: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+          {
+            name: "Same",
+            points: [
+              [2, 2],
+              [3, 3],
+            ],
+          },
         ],
       }),
       "duplicated",
@@ -499,9 +482,7 @@ describe("question bank PHP validation parity", () => {
 
   it("validates interactive field names and duplicates", () => {
     expectValid(shape("interactive", {}));
-    expectValid(
-      shape("interactive", { fields: ["", "answer_1", "_score"] }),
-    );
+    expectValid(shape("interactive", { fields: ["", "answer_1", "_score"] }));
     expectInvalid(
       shape("interactive", { fields: ["bad-name"] }),
       "field name bad-name is invalid",
@@ -547,12 +528,7 @@ describe("question bank PHP validation parity", () => {
       "answer count",
     );
     expectInvalid(
-      shape(
-        "drag_drop",
-        { blanks: ["a", "missing"] },
-        options,
-        "___ then ___",
-      ),
+      shape("drag_drop", { blanks: ["a", "missing"] }, options, "___ then ___"),
       "invalid option",
     );
     expectInvalid(
