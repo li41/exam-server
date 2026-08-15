@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
   fetchApprovedPeers,
   formatPlan,
+  loadCredentials,
   makePlan,
+  parseCredentialFile,
   parseCurrentPeerKeys,
   renderManagedConfig,
   validateApprovedPeers,
@@ -96,4 +101,70 @@ test('treats upstream HTTP failure as a hard failure', async () => {
     }),
     /HTTP 503/,
   );
+});
+
+test('loads CF credentials from a file without putting the token in argv', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wg-sync-credentials-'));
+  const envFile = join(directory, 'wireguard-peer-sync.env');
+  try {
+    await writeFile(
+      envFile,
+      '# root-only credential file\nCF_BASE=https://control.example.test\nCF_TOKEN=test-secret-token\n',
+      { mode: 0o600 },
+    );
+    assert.deepEqual(await loadCredentials({ env: {}, envFile }), {
+      baseUrl: 'https://control.example.test',
+      token: 'test-secret-token',
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('credential parser is data-only and rejects unexpected keys', () => {
+  assert.deepEqual(parseCredentialFile('CF_BASE=https://control.example.test\nCF_TOKEN=a=b=c\n'), {
+    CF_BASE: 'https://control.example.test',
+    CF_TOKEN: 'a=b=c',
+  });
+  assert.throws(() => parseCredentialFile('CF_TOKEN=x\nRUN_THIS=touch /tmp/pwned\n'), /unsupported key/);
+});
+
+test('refuses the bootstrap placeholder token before contacting CF', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wg-sync-placeholder-'));
+  const envFile = join(directory, 'wireguard-peer-sync.env');
+  try {
+    await writeFile(envFile, 'CF_BASE=https://control.example.test\nCF_TOKEN=CHANGE_ME\n');
+    await assert.rejects(loadCredentials({ env: {}, envFile }), /CF_TOKEN is still CHANGE_ME/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('bootstrap installs a root-only credential file once and documents the manual flow', async () => {
+  const bootstrap = await readFile(
+    new URL('../deploy/scripts/bootstrap-almalinux10.sh', import.meta.url),
+    'utf8',
+  );
+  const start = bootstrap.indexOf('step "步驟 7b：WireGuard peer 同步器"');
+  const end = bootstrap.indexOf('step "步驟 8：防火牆', start);
+  assert.ok(start >= 0 && end > start, 'expected a dedicated WireGuard sync install block');
+  const installBlock = bootstrap.slice(start, end);
+
+  assert.match(installBlock, /sudo install -m 0755 -o root -g root/);
+  assert.match(installBlock, /sync-wireguard-peers\.mjs" "\$WG_SYNC_BIN"/);
+  assert.match(installBlock, /if ! sudo test -f "\$WG_SYNC_ENV_FILE"; then/);
+  assert.match(installBlock, /sudo install -m 0600 -o root -g root \/dev\/null "\$WG_SYNC_ENV_FILE"/);
+  assert.match(installBlock, /CF_TOKEN=CHANGE_ME/);
+  assert.match(installBlock, /已存在，保留既有 CF_TOKEN/);
+  assert.match(installBlock, /sudo chmod 0600 "\$WG_SYNC_ENV_FILE"/);
+  assert.match(installBlock, /sudo chown root:root "\$WG_SYNC_ENV_FILE"/);
+
+  const createPosition = installBlock.indexOf('CF_TOKEN=CHANGE_ME');
+  const preservePosition = installBlock.indexOf('已存在，保留既有 CF_TOKEN');
+  assert.ok(createPosition >= 0 && preservePosition > createPosition);
+  assert.doesNotMatch(installBlock.slice(preservePosition), /cat > .*WG_SYNC_ENV_FILE/);
+
+  assert.match(bootstrap, /sudo \$\{WG_SYNC_BIN\} --dry-run/);
+  assert.match(bootstrap, /只要「會移除」不是 0/);
+  assert.match(bootstrap, /fail closed，不改 wg0\.conf/);
 });
