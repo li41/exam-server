@@ -158,10 +158,10 @@ test(
       },
     );
     assert.deepEqual(calls, ["https://hc-ping.com/secret-check/fail"]);
-    assert.equal(
-      signalUrlFor(new URL("https://hc-ping.com/secret-check"), "failure")
-        .href,
-      "https://hc-ping.com/secret-check/fail",
+    const failureUrl = signalUrlFor(
+      new URL("https://hc-ping.com/secret-check"),
+      "failure",
     );
+    assert.equal(failureUrl.href, "https://hc-ping.com/secret-check/fail");
   },
 );
