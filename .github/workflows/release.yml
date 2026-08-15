@@ -110,6 +110,20 @@ jobs:
           echo "id=$release_id" >> "$GITHUB_OUTPUT"
           echo "Release identifier: $release_id"
 
+      - name: Simulate restrictive packaged file mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_entrypoint="apps/api/dist/server.js"
+          test -f "$runtime_entrypoint"
+          chmod 0600 "$runtime_entrypoint"
+          mode="$(stat -c '%a' "$runtime_entrypoint")"
+          if [ "$mode" != "600" ]; then
+            echo "failed to prepare restrictive packaged file mode: $runtime_entrypoint is $mode" >&2
+            exit 1
+          fi
+          echo "Packager permission hazard prepared: $runtime_entrypoint mode=$mode"
+
       - name: Package release
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.id }}
@@ -164,6 +178,32 @@ jobs:
           sudo install -m 0600 -o root -g root /tmp/server-foundation.env /etc/server-foundation/server-foundation.env
           sudo install -m 0644 deploy/systemd/server-foundation.service /etc/systemd/system/server-foundation.service
           sudo systemctl daemon-reload
+
+      - name: Prime root pnpm store with restrictive modes
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          prime_root="/tmp/server-foundation-pnpm-prime"
+          test -f "$archive"
+
+          sudo rm -rf "$prime_root"
+          sudo install -d -m 0700 "$prime_root"
+          sudo tar -xzf "$archive" -C "$prime_root"
+          sudo bash -c 'umask 077; /usr/bin/corepack pnpm --dir "$1" install --prod --frozen-lockfile' _ "$prime_root"
+
+          store_path="$(sudo /usr/bin/corepack pnpm store path)"
+          test -d "$store_path"
+          sudo find "$store_path" -type f -exec chmod 0600 {} +
+          restrictive_sample="$(sudo find "$store_path" -type f -perm 0600 -print -quit)"
+          if [ -z "$restrictive_sample" ]; then
+            echo "failed to prime restrictive pnpm store modes at $store_path" >&2
+            exit 1
+          fi
+          echo "Restrictive pnpm store prepared; sample: $restrictive_sample"
+          sudo rm -rf "$prime_root"
 
       - name: Install packaged release through production path
         shell: bash
