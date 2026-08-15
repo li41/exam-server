@@ -43,7 +43,8 @@ export const runOffsiteBackup = async ({
   createBackupImpl,
   output = console.log,
 }) => {
-  const deploymentIdentity = await loadDeploymentIdentityFromEnvFile(appEnvFile);
+  const deploymentIdentity =
+    await loadDeploymentIdentityFromEnvFile(appEnvFile);
   const uploadConfig = await loadUploadConfig(uploadEnvFile);
   const client = clientOverride ?? createWriteOnlyUploadClient(uploadConfig);
 

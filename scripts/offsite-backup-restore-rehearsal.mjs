@@ -110,7 +110,8 @@ export const rehearseOffsiteBackupRestore = async ({
   }
 
   const appConfig = await loadBackupAppConfig(appEnvFile);
-  const deploymentIdentity = await loadDeploymentIdentityFromEnvFile(appEnvFile);
+  const deploymentIdentity =
+    await loadDeploymentIdentityFromEnvFile(appEnvFile);
   const uploadConfig = await loadUploadConfig(uploadEnvFile);
   const r2Config = await loadR2ReadConfig(r2EnvFile);
   if (uploadConfig.prefix !== r2Config.prefix) {

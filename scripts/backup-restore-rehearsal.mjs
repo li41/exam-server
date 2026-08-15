@@ -59,9 +59,8 @@ const proveIdentityMismatchIsRejected = async ({
   deploymentIdentity,
   mysqlBin,
 }) => {
-  const wrongIdentity = mismatchedDeploymentIdentityForRehearsal(
-    deploymentIdentity,
-  );
+  const wrongIdentity =
+    mismatchedDeploymentIdentityForRehearsal(deploymentIdentity);
   try {
     await restoreBackup({
       backupDirectory,

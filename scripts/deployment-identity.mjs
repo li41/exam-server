@@ -32,7 +32,9 @@ const companyId = (value) => {
   }
   const parsed = Number(normalized);
   if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`${DEPLOYMENT_COMPANY_ID_KEY} exceeds JavaScript safe integer range.`);
+    throw new Error(
+      `${DEPLOYMENT_COMPANY_ID_KEY} exceeds JavaScript safe integer range.`,
+    );
   }
   return parsed;
 };
@@ -61,11 +63,16 @@ export const loadDeploymentIdentityFromEnvFile = async (path) => {
     const separator = line.indexOf("=");
     if (separator <= 0) continue;
     const key = line.slice(0, separator).trim();
-    if (key !== DEPLOYMENT_COMPANY_ID_KEY && key !== DEPLOYMENT_PROJECT_ID_KEY) {
+    if (
+      key !== DEPLOYMENT_COMPANY_ID_KEY &&
+      key !== DEPLOYMENT_PROJECT_ID_KEY
+    ) {
       continue;
     }
     if (Object.hasOwn(values, key)) {
-      throw new Error(`Deployment identity env has duplicate ${key} at line ${index + 1}.`);
+      throw new Error(
+        `Deployment identity env has duplicate ${key} at line ${index + 1}.`,
+      );
     }
     values[key] = line.slice(separator + 1).trim();
   }
