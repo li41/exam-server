@@ -18,7 +18,8 @@
     "build": "tsc -b",
     "test": "vitest run test/cursor.test.ts test/migrate.test.ts",
     "test:integration": "vitest run test/*.integration.test.ts",
-    "migrate": "tsc -b && node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "migrate:build": "tsc -b && node scripts/migrate.mjs"
   },
   "dependencies": {
     "@server-foundation/api-contracts": "workspace:*",
