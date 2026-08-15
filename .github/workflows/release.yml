@@ -285,6 +285,91 @@ jobs:
           curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
           echo "Existing release rejected and current remained unchanged: $current_after"
 
+      - name: Exercise first-install and rollback self-loop guards
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          probe_release_id="${RELEASE_ID}-self-loop-probe"
+          current_link="/opt/server-foundation/current"
+          probe_target="/opt/server-foundation/releases/${probe_release_id}"
+          failing_health_url="http://127.0.0.1:1/health/ready"
+
+          reset_current() {
+            sudo systemctl stop server-foundation >/dev/null 2>&1 || true
+            sudo rm -f "$current_link" "${current_link}.next"
+            if sudo test -e "$current_link" || sudo test -L "$current_link"; then
+              echo "self-loop probe precondition failed: current still exists" >&2
+              exit 1
+            fi
+          }
+
+          assert_non_self_loop() {
+            label="$1"
+            if ! sudo test -L "$current_link"; then
+              echo "$label did not leave current as a symlink" >&2
+              exit 1
+            fi
+            raw_target="$(sudo readlink "$current_link" || true)"
+            if [ "$raw_target" = "$current_link" ]; then
+              echo "current self-loop detected: $current_link -> $raw_target" >&2
+              exit 1
+            fi
+            resolved_target="$(sudo readlink -f "$current_link" 2>/dev/null || true)"
+            if [ "$resolved_target" != "$probe_target" ]; then
+              echo "$label current target mismatch: expected $probe_target, got ${resolved_target:-<unresolved>}" >&2
+              exit 1
+            fi
+            echo "$label left a non-self-loop current: $current_link -> $raw_target"
+          }
+
+          sudo rm -rf "$probe_target"
+          reset_current
+          echo "First-install failure precondition: current is absent"
+
+          set +e
+          install_output="$(sudo bash -c 'umask 077; SERVER_FOUNDATION_HEALTH_URL="$1" "$2" "$3" "$4"' _ \
+            "$failing_health_url" ./deploy/scripts/install-release.sh "$archive" "$probe_release_id" 2>&1)"
+          install_status=$?
+          set -e
+          printf '%s\n' "$install_output"
+
+          if [ "$install_status" -eq 0 ]; then
+            echo "first-install failure probe unexpectedly succeeded" >&2
+            exit 1
+          fi
+          expected_install_failure="release ${probe_release_id} failed readiness check"
+          if ! grep -Fq "$expected_install_failure" <<<"$install_output"; then
+            echo "expected named first-install readiness failure: $expected_install_failure" >&2
+            exit 1
+          fi
+          assert_non_self_loop "first-install failure"
+          echo "FIRST_INSTALL_SELF_LOOP_GUARD=passed"
+
+          reset_current
+          echo "Rollback failure precondition: current is absent and target exists"
+
+          set +e
+          rollback_output="$(sudo env SERVER_FOUNDATION_HEALTH_URL="$failing_health_url" \
+            ./deploy/scripts/rollback-release.sh "$probe_release_id" 2>&1)"
+          rollback_status=$?
+          set -e
+          printf '%s\n' "$rollback_output"
+
+          if [ "$rollback_status" -eq 0 ]; then
+            echo "rollback failure probe unexpectedly succeeded" >&2
+            exit 1
+          fi
+          expected_rollback_failure="rollback target ${probe_release_id} failed readiness check"
+          if ! grep -Fq "$expected_rollback_failure" <<<"$rollback_output"; then
+            echo "expected named rollback readiness failure: $expected_rollback_failure" >&2
+            exit 1
+          fi
+          assert_non_self_loop "rollback failure"
+          echo "ROLLBACK_SELF_LOOP_GUARD=passed"
+
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
