@@ -42,15 +42,24 @@ mkdir -p "$release_root" "$(dirname "$current_link")"
 mkdir "$target"
 tar -xzf "$archive" -C "$target"
 
-# tar 保留打包當時的擁有者與權限，而那取決於**打包機器的 umask**，不是這裡能控制的。
-# 若打包時 umask 是 077，解開後會是 0600 且屬打包者 ⇒ 服務帳號讀不到自己的程式。
-# ⚠️ Node 對「讀不到」報的是 MODULE_NOT_FOUND，看起來像檔案不存在，
-#    實際上檔案就在那裡、只是沒權限——2026-08-15 實測被這個訊息帶偏過。
-# ⇒ 一律正規化：release 樹 root 擁有、其他人唯讀（機密在 /etc 的 env 檔，不在這裡）。
+corepack pnpm --dir "$target" install --prod --frozen-lockfile
+
+# ⚠️⚠️ 這一段一定要在 `pnpm install` **之後**，不能在前面。
+#
+# 兩個來源都會讓服務帳號讀不到自己的程式，而且都不是部署端能控制的：
+#   ① tar 保留的是**打包機器的 umask**。打包時 umask 077 ⇒ 解開後 0600。
+#   ② pnpm 從**全域 store 硬連結**檔案進來（ls 看到 link count 2）。
+#      store 裡的檔案若曾在 umask 077 下建立，之後每一次安裝都會複製那個模式，
+#      **就算現在的 umask 已經修好也一樣**。
+#   ⇒ ② 發生在 pnpm install 期間 ⇒ 放在前面的 chmod 蓋不到它。
+#
+# ⚠️ Node 對「讀不到」報的是 MODULE_NOT_FOUND / ERR_MODULE_NOT_FOUND，
+#    看起來像檔案沒被打包進去，實際上檔案就在那裡、只是沒權限。
+#    2026-08-15 實測被這個訊息帶偏兩次。
+#
+# 機密在 /etc/server-foundation 的 env 檔（0600），不在這棵樹裡。
 chown -R root:root "$target"
 chmod -R u=rwX,go=rX "$target"
-
-corepack pnpm --dir "$target" install --prod --frozen-lockfile
 MYSQL_URL="$mysql_url" corepack pnpm --dir "$target" --filter @server-foundation/mysql-adapter migrate
 
 # ⚠️ 一定要先確認 current 真的是一條既存的 symlink 才取它的目標。
