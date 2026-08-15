@@ -29,12 +29,14 @@
     "restore:offsite": "node scripts/offsite-restore.mjs",
     "release:package": "node scripts/package-release.mjs",
     "build": "corepack pnpm --filter @server-foundation/api... build && corepack pnpm --filter @server-foundation/mysql-adapter build && corepack pnpm --filter @server-foundation/redis-adapter build && corepack pnpm --filter @server-foundation/local-fs-storage build",
-    "verify": "corepack pnpm typecheck && corepack pnpm lint && corepack pnpm format:check && corepack pnpm test && corepack pnpm build && corepack pnpm contract:fixtures && corepack pnpm test:create-user && corepack pnpm test:wg-sync && corepack pnpm test:offsite-backup && corepack pnpm test:boot-survival && corepack pnpm boot:accept",
+    "verify": "corepack pnpm typecheck && corepack pnpm lint && corepack pnpm format:check && corepack pnpm test && corepack pnpm build && corepack pnpm contract:fixtures && corepack pnpm test:create-user && corepack pnpm test:wg-sync && corepack pnpm test:offsite-backup && corepack pnpm test:boot-survival && corepack pnpm boot:accept && corepack pnpm test:outage-alert",
     "test:create-user": "node --test scripts/create-user.test.mjs",
     "test:wg-sync": "node --test scripts/sync-wireguard-peers.test.mjs",
     "test:offsite-backup": "node --test scripts/offsite-backup.test.mjs",
     "test:boot-survival": "node --test scripts/cold-boot-acceptance.test.mjs",
-    "boot:accept": "node scripts/cold-boot-acceptance.mjs"
+    "boot:accept": "node scripts/cold-boot-acceptance.mjs",
+    "test:outage-alert": "node --test scripts/outage-heartbeat.test.mjs",
+    "outage:heartbeat": "node scripts/outage-heartbeat.mjs"
   },
   "devDependencies": {
     "oxlint": "^1.77.0",
