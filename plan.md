@@ -24,6 +24,25 @@
 - `cloudflare-d1-r2`：Cloudflare Workers + D1 + R2。尚未實作。
 - `google-sheets-drive`：Google Sheets + Google Drive。尚未實作，定位為低併發／內部工具 profile。
 
+### ⚠️⚠️ 這組 profile 是「同一套 API 換後端」，**不描述目前的產品切分**
+
+2026-08-15 主公裁示，天機系統的實際切分**依資料種類**，不是選一個 profile：
+
+| 資料 | 家 |
+| --- | --- |
+| **試題資料、試題檔案** | **這台**（`vps-mysql`，院內），備份上 R2 |
+| **試務**（學校填報／審核／收據） | **Cloudflare 的 `exam-control`**，不進這台 |
+
+⇒ **兩個後端同時存在、各管一半**，桌面 App 兩邊都要連。
+
+⚠️ 兩個常見誤讀，都會導出錯的設計：
+
+1. **不要以為「選了 `vps-mysql` 就沒有雲端後端」。** 試務永遠在雲端。
+   （我照這個誤讀設計過一次「把試務從雲端拉回院內」的同步機制，整套作廢。）
+2. **`cloudflare-d1-r2` ≠ `exam-control`。** 那個 profile 是「這套 API 的 CF 實作」，**尚未實作**；
+   `exam-control` 是另一個 repo、自己的契約（`/api/desktop/v1` ＋ Google 登入）、正在從 PHP 搬 259 個 handler。
+   ⚠️ `doc/桌面版內嵌-wireguard-規劃.md` 曾把兩者寫成同一個東西，**那句是錯的**。
+
 ## 2. 目前架構
 
 ```text

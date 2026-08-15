@@ -48,7 +48,7 @@
 
 | profile               | 現況                                               |
 | --------------------- | -------------------------------------------------- |
-| `cloudflare-d1-r2`    | **就是現在的 `exam-control`**（`control.exam.tw`） |
+| `cloudflare-d1-r2`    | ⚠️ **這格原本寫「就是現在的 `exam-control`」——那是錯的**（2026-08-15 更正）。`plan.md:24` 寫它**尚未實作**；`exam-control` 是另一個 repo、自己的契約（`/api/desktop/v1` ＋ Google 登入），不是這套 API 的 CF 實作 |
 | `vps-mysql`           | **就是這次要建的院內這台**                         |
 | `google-sheets-drive` | 未使用                                             |
 
