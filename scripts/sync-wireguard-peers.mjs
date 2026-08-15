@@ -161,8 +161,14 @@ export async function fetchApprovedPeers({
       `failed to fetch approved peers: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  if (!response.ok)
+  if (!response.ok) {
+    if (response.status === 401) {
+      fail(
+        "failed to fetch approved peers: HTTP 401; authorization rejected. Check that exam-control WG_SYNC_TOKEN and exam-server CF_TOKEN contain the same token",
+      );
+    }
     fail(`failed to fetch approved peers: HTTP ${response.status}`);
+  }
   let payload;
   try {
     payload = await response.json();
