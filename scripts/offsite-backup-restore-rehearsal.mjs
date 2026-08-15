@@ -192,8 +192,7 @@ const main = async () => {
     appEnvFile: process.env.OFFSITE_APP_ENV_FILE ?? DEFAULT_APP_ENV_FILE,
     uploadEnvFile:
       process.env.OFFSITE_UPLOAD_ENV_FILE ?? DEFAULT_UPLOAD_ENV_FILE,
-    r2EnvFile:
-      process.env.OFFSITE_R2_ENV_FILE ?? DEFAULT_R2_RESTORE_ENV_FILE,
+    r2EnvFile: process.env.OFFSITE_R2_ENV_FILE ?? DEFAULT_R2_RESTORE_ENV_FILE,
     mysqlBin: process.env.MYSQL_BIN ?? "mysql",
     mysqldumpBin: process.env.MYSQLDUMP_BIN ?? "mysqldump",
   });

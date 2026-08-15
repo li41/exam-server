@@ -31,12 +31,17 @@ function extractStringConstant(source, name) {
     "u",
   );
   const match = source.match(pattern);
-  if (!match) fail(`control contract does not define ${name} as a string constant`);
+  if (!match)
+    fail(`control contract does not define ${name} as a string constant`);
   return match[2];
 }
 
 function extractStatement(source, name) {
-  const start = source.search(new RegExp(`\\b${name}\\b`, "u"));
+  // ⚠️ 一定要錨在 `export const <name>` 這個**宣告**上，不能抓「第一次出現的名字」。
+  //    control 的契約檔在真正宣告之前，文件註解裡就先提到過 `WG_PUBLIC_KEY_PATTERN`
+  //    （一張說明表格）⇒ 抓第一次出現會抓到註解片段，然後**無條件報 drift**。
+  //    2026-08-15 這支第一次跑就是這樣假紅的；探針錯了比沒有探針更花時間。
+  const start = source.search(new RegExp(`export\\s+const\\s+${name}\\b`, "u"));
   if (start < 0) fail(`control contract does not define ${name}`);
   const semicolon = source.indexOf(";", start);
   const newline = source.indexOf("\n", start);
@@ -63,9 +68,20 @@ export function checkControlContractSources({ contractSource, routeSource }) {
   if (!/\bWG_APPROVED_PEERS_PATH\b/u.test(routeSource)) {
     fail("control route no longer references WG_APPROVED_PEERS_PATH");
   }
+  // ⚠️ 欄位名要對**契約 schema**查，不是對路由檔查。
+  //    control 的路由只組 `{ as_of, authoritative_empty, peers }`，
+  //    peer 的五個欄位來自 repository 並交給 `WgApprovedPeersResponseSchema` 驗，
+  //    路由原始碼裡根本不會出現 `public_key` 這些字。
+  //    2026-08-15 這支第一次跑就對著路由檔找 `public_key` 而假紅。
+  const peerSchema = extractStatement(contractSource, "WgApprovedPeerSchema");
+  const responseSchema = extractStatement(
+    contractSource,
+    "WgApprovedPeersResponseSchema",
+  );
+  const schemaSource = `${peerSchema}\n${responseSchema}`;
   for (const field of EXPECTED_RESPONSE_FIELDS) {
-    if (!new RegExp(`\\b${field}\\b`, "u").test(routeSource)) {
-      fail(`control route response shape is missing expected field: ${field}`);
+    if (!new RegExp(`\\b${field}\\b`, "u").test(schemaSource)) {
+      fail(`control response schema is missing expected field: ${field}`);
     }
   }
 
@@ -129,7 +145,9 @@ export async function runOracle(
     readFileImpl(routePath, "utf8"),
   ]);
   const result = checkControlContractSources({ contractSource, routeSource });
-  log(`PASS wg-control-contract: ${result.path} matches server consumer contract`);
+  log(
+    `PASS wg-control-contract: ${result.path} matches server consumer contract`,
+  );
   return { skipped: false, root, ...result };
 }
 

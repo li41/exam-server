@@ -71,7 +71,9 @@ export const runOffsiteBackup = async ({
     output(
       `已上傳 ${objectKey} sha256=${archive.sha256} parts=${uploaded.partCount}`,
     );
-    output("retention 由 R2 Object Lifecycle 執行；院內主機不具 R2 delete capability");
+    output(
+      "retention 由 R2 Object Lifecycle 執行；院內主機不具 R2 delete capability",
+    );
     return {
       backupDirectory: backup.backupDirectory,
       objectKey,

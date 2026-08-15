@@ -427,7 +427,9 @@ export const createWriteOnlyUploadClient = (
           typeof uploaded.etag !== "string" ||
           !uploaded.etag
         ) {
-          fail(`write-only upload part ${partNumber} returned invalid metadata`);
+          fail(
+            `write-only upload part ${partNumber} returned invalid metadata`,
+          );
         }
         parts.push({ partNumber, etag: uploaded.etag });
         offset += bytesRead;
