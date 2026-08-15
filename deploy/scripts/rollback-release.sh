@@ -18,14 +18,8 @@ if [ ! -d "$target" ]; then
   exit 1
 fi
 
-# ⚠️ 與 install-release.sh 同一個坑：current 不存在時 `readlink -f` 會回傳路徑本身，
-#    導致失敗回滾時把 current 指向自己（自環，服務再也起不來）。詳細說明見該檔。
-#    這裡 current 通常是存在的，但它若已經壞掉就會複製出同樣的自環。
-if [ -L "$current_link" ]; then
-  previous="$(readlink -f "$current_link" 2>/dev/null || true)"
-else
-  previous=""
-fi
+# MUTATION #14: restore the historical current resolution bug.
+previous="$(readlink -f "$current_link" 2>/dev/null || true)"
 next_link="${current_link}.next"
 rm -f "$next_link"
 ln -s "$target" "$next_link"
@@ -47,7 +41,8 @@ if [ "$healthy" = true ]; then
 fi
 
 echo "rollback target $release_id failed readiness check" >&2
-if [ -n "$previous" ] && [ "$previous" != "$current_link" ] && [ -d "$previous" ]; then
+# MUTATION #14: remove the second self-loop guard so the historical defect is observable.
+if [ -n "$previous" ] && [ -d "$previous" ]; then
   rm -f "$next_link"
   ln -s "$previous" "$next_link"
   mv -Tf "$next_link" "$current_link"
