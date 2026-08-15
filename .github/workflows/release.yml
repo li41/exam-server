@@ -195,17 +195,67 @@ jobs:
           fi
           echo "Release path healthy; applied migrations: $migration_count"
 
-      - name: Reinstall same packaged release
+      - name: Install same package as a second release
         shell: bash
         env:
           RELEASE_ID: ${{ steps.release.outputs.id }}
         run: |
           set -euo pipefail
           archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          second_release_id="${RELEASE_ID}-next"
+
           sudo env SERVER_FOUNDATION_HEALTH_URL=http://127.0.0.1:8787/health/ready \
-            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID"
+            ./deploy/scripts/install-release.sh "$archive" "$second_release_id"
           sudo systemctl is-active --quiet server-foundation
           curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
+
+          expected="/opt/server-foundation/releases/${second_release_id}"
+          actual="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$actual" != "$expected" ]; then
+            echo "second release did not become current: expected $expected, got $actual" >&2
+            exit 1
+          fi
+          echo "Second release healthy and current: $second_release_id"
+
+      - name: Reject an existing release without moving current
+        shell: bash
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          set -euo pipefail
+          archive="release/server-foundation-${RELEASE_ID}.tar.gz"
+          expected_current="/opt/server-foundation/releases/${RELEASE_ID}-next"
+          current_before="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$current_before" != "$expected_current" ]; then
+            echo "precondition failed: expected current $expected_current, got $current_before" >&2
+            exit 1
+          fi
+
+          set +e
+          output="$(sudo env SERVER_FOUNDATION_HEALTH_URL=http://127.0.0.1:8787/health/ready \
+            ./deploy/scripts/install-release.sh "$archive" "$RELEASE_ID" 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+
+          if [ "$status" -eq 0 ]; then
+            echo "existing release unexpectedly reinstalled successfully" >&2
+            exit 1
+          fi
+          expected_error="release already exists: /opt/server-foundation/releases/${RELEASE_ID}"
+          if ! grep -Fqx "$expected_error" <<<"$output"; then
+            echo "expected named immutable-release failure: $expected_error" >&2
+            exit 1
+          fi
+
+          current_after="$(sudo readlink -f /opt/server-foundation/current)"
+          if [ "$current_after" != "$current_before" ]; then
+            echo "current changed after rejected reinstall: before=$current_before after=$current_after" >&2
+            exit 1
+          fi
+          sudo systemctl is-active --quiet server-foundation
+          curl -fsS http://127.0.0.1:8787/health/ready >/dev/null
+          echo "Existing release rejected and current remained unchanged: $current_after"
 
       - name: Upload release artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
