@@ -5,6 +5,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  RESTORE_DEPLOYMENT_OVERRIDE_ENV,
+  loadDeploymentIdentityFromEnvFile,
+} from "./deployment-identity.mjs";
+import {
   DEFAULT_APP_ENV_FILE,
   DEFAULT_R2_RESTORE_ENV_FILE,
   createR2ReadClient,
@@ -60,6 +64,7 @@ export const restoreOffsiteBackup = async ({
   appEnvFile = DEFAULT_APP_ENV_FILE,
   r2EnvFile = DEFAULT_R2_RESTORE_ENV_FILE,
   confirmation,
+  identityOverrideConfirmation,
   client: clientOverride,
   restoreImpl,
 }) => {
@@ -70,6 +75,11 @@ export const restoreOffsiteBackup = async ({
   }
   const r2Config = await loadR2ReadConfig(r2EnvFile);
   const appConfig = await loadBackupAppConfig(appEnvFile);
+  // restoreImpl is a test/dependency-injection seam. Production restores always
+  // use the real restoreBackup and therefore require deployment identity.
+  const deploymentIdentity = restoreImpl
+    ? null
+    : await loadDeploymentIdentityFromEnvFile(appEnvFile);
   const client = clientOverride ?? createR2ReadClient(r2Config);
   const selectedKey = assertObjectKey(
     objectKey ?? (await latestObjectKey(client, r2Config.prefix)),
@@ -91,6 +101,9 @@ export const restoreOffsiteBackup = async ({
       backupDirectory,
       mysqlUrl: appConfig.mysqlUrl,
       storageRoot: appConfig.storageRoot,
+      ...(deploymentIdentity
+        ? { deploymentIdentity, identityOverrideConfirmation }
+        : {}),
       confirmation: "YES",
     });
     return { ...result, objectKey: selectedKey };
@@ -104,6 +117,7 @@ const main = async () => {
   const result = await restoreOffsiteBackup({
     ...options,
     confirmation: process.env.RESTORE_CONFIRM,
+    identityOverrideConfirmation: process.env[RESTORE_DEPLOYMENT_OVERRIDE_ENV],
   });
   console.log(JSON.stringify(result, null, 2));
 };

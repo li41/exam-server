@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { loadDeploymentIdentityFromEnvFile } from "./deployment-identity.mjs";
 import {
   DEFAULT_APP_ENV_FILE,
   DEFAULT_UPLOAD_ENV_FILE,
@@ -42,21 +43,22 @@ export const runOffsiteBackup = async ({
   createBackupImpl,
   output = console.log,
 }) => {
+  const deploymentIdentity = await loadDeploymentIdentityFromEnvFile(appEnvFile);
   const uploadConfig = await loadUploadConfig(uploadEnvFile);
   const client = clientOverride ?? createWriteOnlyUploadClient(uploadConfig);
 
   if (dryRun) {
     await client.probe();
     output(
-      "write-only dry-run: upload endpoint/auth ok; no local backup, R2 list, read, delete, or upload was performed",
+      "write-only dry-run: deployment identity and upload endpoint/auth ok; no local backup, R2 list, read, delete, or upload was performed",
     );
-    return { dryRun: true, remoteMutation: false };
+    return { dryRun: true, remoteMutation: false, deploymentIdentity };
   }
 
   const appConfig = await loadBackupAppConfig(appEnvFile);
   const backupFactory =
     createBackupImpl ?? (await import("./backup.mjs")).createBackup;
-  const backup = await backupFactory(appConfig);
+  const backup = await backupFactory({ ...appConfig, deploymentIdentity });
   const workRoot = await mkdtemp(join(tmpdir(), "server-foundation-offsite-"));
   try {
     const archive = await createBackupArchive({
@@ -79,6 +81,7 @@ export const runOffsiteBackup = async ({
       objectKey,
       sha256: archive.sha256,
       partCount: uploaded.partCount,
+      deploymentIdentity,
     };
   } finally {
     await rm(workRoot, { recursive: true, force: true });

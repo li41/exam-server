@@ -15,6 +15,11 @@ import {
   verifyStorageFiles,
   withMySqlOptionFile,
 } from "./backup-common.mjs";
+import {
+  RESTORE_DEPLOYMENT_OVERRIDE_ENV,
+  assertRestoreDeploymentIdentity,
+  deploymentIdentityFromValues,
+} from "./deployment-identity.mjs";
 
 const requireEnvironment = (name) => {
   const value = process.env[name];
@@ -47,6 +52,8 @@ export const restoreBackup = async ({
   backupDirectory,
   mysqlUrl,
   storageRoot,
+  deploymentIdentity,
+  identityOverrideConfirmation,
   confirmation,
   mysqlBin = "mysql",
 }) => {
@@ -63,6 +70,11 @@ export const restoreBackup = async ({
   }
   const manifest = await readJson(join(sourceRoot, "manifest.json"));
   validateManifest(manifest);
+  const identityCheck = assertRestoreDeploymentIdentity({
+    manifest,
+    currentIdentity: deploymentIdentity,
+    overrideConfirmation: identityOverrideConfirmation,
+  });
 
   const dumpPath = resolveBackupPath(sourceRoot, manifest.database.dump);
   if (!(await pathExists(dumpPath))) {
@@ -98,6 +110,9 @@ export const restoreBackup = async ({
       restoredFrom: sourceRoot,
       storageRoot: targetStorageRoot,
       previousStorageRoot,
+      backupDeployment: identityCheck.backupIdentity,
+      deploymentIdentityOverrideUsed: identityCheck.overrideUsed,
+      legacyDeploymentIdentityMissing: identityCheck.legacyIdentityMissing,
     };
   } catch (error) {
     if (stagingExists) {
@@ -112,6 +127,8 @@ const main = async () => {
     backupDirectory: requireEnvironment("BACKUP_DIR"),
     mysqlUrl: requireEnvironment("MYSQL_URL"),
     storageRoot: requireEnvironment("FILE_STORAGE_ROOT"),
+    deploymentIdentity: deploymentIdentityFromValues(process.env),
+    identityOverrideConfirmation: process.env[RESTORE_DEPLOYMENT_OVERRIDE_ENV],
     confirmation: process.env.RESTORE_CONFIRM,
     mysqlBin: process.env.MYSQL_BIN ?? "mysql",
   });

@@ -19,9 +19,15 @@ import {
   parseMySqlUrl,
   verifyStorageFiles,
 } from "./backup-common.mjs";
+import {
+  RESTORE_DEPLOYMENT_OVERRIDE_CONFIRMATION,
+  assertRestoreDeploymentIdentity,
+  deploymentIdentityFromValues,
+} from "./deployment-identity.mjs";
 import { restoreBackup } from "./restore.mjs";
 
 const temporaryRoots = [];
+const deploymentIdentity = { companyId: 42, projectId: "item-bank-main" };
 
 test.afterEach(async () => {
   await Promise.all(
@@ -50,6 +56,64 @@ test("rejects unsafe backup paths and overlapping roots", () => {
   );
 });
 
+test("deployment identity requires control company_id and a project id", () => {
+  assert.deepEqual(
+    deploymentIdentityFromValues({
+      DEPLOYMENT_COMPANY_ID: "42",
+      DEPLOYMENT_PROJECT_ID: "item-bank-main",
+    }),
+    deploymentIdentity,
+  );
+  assert.throws(
+    () =>
+      deploymentIdentityFromValues({
+        DEPLOYMENT_COMPANY_ID: "not-an-integer",
+        DEPLOYMENT_PROJECT_ID: "item-bank-main",
+      }),
+    /positive exam-control company_id integer/u,
+  );
+  assert.throws(
+    () =>
+      deploymentIdentityFromValues({
+        DEPLOYMENT_COMPANY_ID: "42",
+        DEPLOYMENT_PROJECT_ID: "CHANGE_ME",
+      }),
+    /DEPLOYMENT_PROJECT_ID must be configured/u,
+  );
+});
+
+test("restore identity guard rejects mismatch and legacy backups unless explicitly overridden", () => {
+  assert.throws(
+    () =>
+      assertRestoreDeploymentIdentity({
+        manifest: { deployment: { companyId: 7, projectId: "other" } },
+        currentIdentity: deploymentIdentity,
+      }),
+    (error) => {
+      assert.match(error.message, /backup=company_id=7, project_id="other"/u);
+      assert.match(
+        error.message,
+        /current=company_id=42, project_id="item-bank-main"/u,
+      );
+      return true;
+    },
+  );
+  assert.throws(
+    () =>
+      assertRestoreDeploymentIdentity({
+        manifest: { version: 1 },
+        currentIdentity: deploymentIdentity,
+      }),
+    /legacy backup.*backup=unknown/u,
+  );
+  const overridden = assertRestoreDeploymentIdentity({
+    manifest: { deployment: { companyId: 7, projectId: "other" } },
+    currentIdentity: deploymentIdentity,
+    overrideConfirmation: RESTORE_DEPLOYMENT_OVERRIDE_CONFIRMATION,
+  });
+  assert.equal(overridden.overrideUsed, true);
+});
+
 test("collects and verifies storage file checksums", async () => {
   const root = await mkdtemp(join(tmpdir(), "server-foundation-backup-test-"));
   temporaryRoots.push(root);
@@ -73,7 +137,7 @@ test("collects and verifies storage file checksums", async () => {
   await assert.rejects(verifyStorageFiles(root, files));
 });
 
-test("creates and restores a backup with fake MySQL clients", async () => {
+test("creates and restores only when deployment identity matches", async () => {
   const root = await mkdtemp(join(tmpdir(), "server-foundation-backup-e2e-"));
   temporaryRoots.push(root);
   const storageRoot = join(root, "storage");
@@ -115,12 +179,27 @@ await writeFile(process.env.RESTORE_MARKER, Buffer.concat(chunks));
     mysqlUrl: "mysql://backup:secret@localhost:3306/foundation",
     storageRoot,
     backupRoot,
+    deploymentIdentity,
     mysqldumpBin: dumpClient,
   });
   const manifest = JSON.parse(
     await readFile(join(backup.backupDirectory, "manifest.json"), "utf8"),
   );
   assert.equal(manifest.storage.files.length, 2);
+  assert.deepEqual(manifest.deployment, deploymentIdentity);
+
+  await assert.rejects(
+    restoreBackup({
+      backupDirectory: backup.backupDirectory,
+      mysqlUrl: "mysql://restore:secret@localhost:3306/foundation",
+      storageRoot: restoredRoot,
+      deploymentIdentity: { companyId: 99, projectId: "wrong-machine" },
+      confirmation: "YES",
+      mysqlBin: mysqlClient,
+    }),
+    /Backup deployment identity mismatch/u,
+  );
+  await assert.rejects(readFile(restoreMarker, "utf8"));
 
   const previousMarker = process.env.RESTORE_MARKER;
   process.env.RESTORE_MARKER = restoreMarker;
@@ -129,10 +208,12 @@ await writeFile(process.env.RESTORE_MARKER, Buffer.concat(chunks));
       backupDirectory: backup.backupDirectory,
       mysqlUrl: "mysql://restore:secret@localhost:3306/foundation",
       storageRoot: restoredRoot,
+      deploymentIdentity,
       confirmation: "YES",
       mysqlBin: mysqlClient,
     });
     assert.equal(restored.previousStorageRoot, null);
+    assert.equal(restored.deploymentIdentityOverrideUsed, false);
     assert.equal(
       await readFile(join(restoredRoot, "files", "report.txt"), "utf8"),
       "restored content",

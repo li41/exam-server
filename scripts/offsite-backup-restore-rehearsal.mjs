@@ -7,6 +7,10 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  loadDeploymentIdentityFromEnvFile,
+  mismatchedDeploymentIdentityForRehearsal,
+} from "./deployment-identity.mjs";
+import {
   DEFAULT_APP_ENV_FILE,
   DEFAULT_R2_RESTORE_ENV_FILE,
   DEFAULT_UPLOAD_ENV_FILE,
@@ -58,6 +62,37 @@ const runMysqlQuery = async ({ mysqlUrl, sql, mysqlBin = "mysql" }) => {
   );
 };
 
+const proveIdentityMismatchIsRejected = async ({
+  restore,
+  backupDirectory,
+  appConfig,
+  deploymentIdentity,
+  mysqlBin,
+}) => {
+  try {
+    await restore({
+      backupDirectory,
+      mysqlUrl: appConfig.mysqlUrl,
+      storageRoot: appConfig.storageRoot,
+      deploymentIdentity:
+        mismatchedDeploymentIdentityForRehearsal(deploymentIdentity),
+      confirmation: "YES",
+      mysqlBin,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Backup deployment identity mismatch")
+    ) {
+      return true;
+    }
+    throw error;
+  }
+  throw new Error(
+    "Off-site rehearsal expected a deployment identity mismatch to be rejected.",
+  );
+};
+
 export const rehearseOffsiteBackupRestore = async ({
   confirmation,
   appEnvFile = DEFAULT_APP_ENV_FILE,
@@ -75,6 +110,7 @@ export const rehearseOffsiteBackupRestore = async ({
   }
 
   const appConfig = await loadBackupAppConfig(appEnvFile);
+  const deploymentIdentity = await loadDeploymentIdentityFromEnvFile(appEnvFile);
   const uploadConfig = await loadUploadConfig(uploadEnvFile);
   const r2Config = await loadR2ReadConfig(r2EnvFile);
   if (uploadConfig.prefix !== r2Config.prefix) {
@@ -117,6 +153,7 @@ export const rehearseOffsiteBackupRestore = async ({
   const { createBackup } = await import("./backup.mjs");
   const backup = await createBackup({
     ...appConfig,
+    deploymentIdentity,
     mysqldumpBin,
   });
   const workRoot = await mkdtemp(
@@ -134,8 +171,23 @@ export const rehearseOffsiteBackupRestore = async ({
     });
     await uploadClient.putObject(objectKey, archive.archivePath);
 
-    // Remove the local copy before mutation. From here on, recovery can only use R2.
+    // Delete the local copy before recovery proof. Everything below must use R2.
     await rm(backup.backupDirectory, { recursive: true, force: true });
+    const downloadedArchive = join(workRoot, "downloaded.tar.gz");
+    await readClient.getObjectToFile(objectKey, downloadedArchive);
+    const downloadedBackup = await extractBackupArchive({
+      archivePath: downloadedArchive,
+      workRoot: join(workRoot, "extracted"),
+    });
+    const { restoreBackup } = await import("./restore.mjs");
+    const identityMismatchRejected = await proveIdentityMismatchIsRejected({
+      restore: restoreBackup,
+      backupDirectory: downloadedBackup,
+      appConfig,
+      deploymentIdentity,
+      mysqlBin,
+    });
+
     await runMysqlQuery({
       mysqlUrl: appConfig.mysqlUrl,
       mysqlBin,
@@ -145,17 +197,11 @@ export const rehearseOffsiteBackupRestore = async ({
       mode: 0o600,
     });
 
-    const downloadedArchive = join(workRoot, "downloaded.tar.gz");
-    await readClient.getObjectToFile(objectKey, downloadedArchive);
-    const downloadedBackup = await extractBackupArchive({
-      archivePath: downloadedArchive,
-      workRoot: join(workRoot, "extracted"),
-    });
-    const { restoreBackup } = await import("./restore.mjs");
     const restored = await restoreBackup({
       backupDirectory: downloadedBackup,
       mysqlUrl: appConfig.mysqlUrl,
       storageRoot: appConfig.storageRoot,
+      deploymentIdentity,
       confirmation: "YES",
       mysqlBin,
     });
@@ -173,6 +219,7 @@ export const rehearseOffsiteBackupRestore = async ({
     return {
       marker,
       objectKey,
+      identityMismatchRejected,
       restoredDatabase: true,
       restoredStorage: true,
       restoredFromOffsite: true,
