@@ -12,6 +12,10 @@ import {
   writeJsonAtomic,
   runCommand,
 } from "./backup-common.mjs";
+import {
+  deploymentIdentityFromValues,
+  normalizeDeploymentIdentity,
+} from "./deployment-identity.mjs";
 
 const requireEnvironment = (name) => {
   const value = process.env[name];
@@ -26,9 +30,11 @@ export const createBackup = async ({
   mysqlUrl,
   storageRoot,
   backupRoot,
+  deploymentIdentity,
   mysqldumpBin = "mysqldump",
   now = new Date(),
 }) => {
+  const identity = normalizeDeploymentIdentity(deploymentIdentity);
   const sourceStorageRoot = resolve(storageRoot);
   const destinationRoot = resolve(backupRoot);
   assertDisjointPaths(sourceStorageRoot, destinationRoot);
@@ -61,6 +67,7 @@ export const createBackup = async ({
     const manifest = {
       version: 1,
       createdAt: now.toISOString(),
+      deployment: identity,
       database: {
         dump: "mysql.sql",
         sha256: await sha256File(dumpPath),
@@ -80,6 +87,7 @@ export const createBackup = async ({
       backupDirectory,
       manifestPath,
       fileCount: storageFiles.length,
+      deployment: identity,
     };
   } catch (error) {
     await rm(backupDirectory, { recursive: true, force: true });
@@ -92,6 +100,7 @@ const main = async () => {
     mysqlUrl: requireEnvironment("MYSQL_URL"),
     storageRoot: requireEnvironment("FILE_STORAGE_ROOT"),
     backupRoot: requireEnvironment("BACKUP_ROOT"),
+    deploymentIdentity: deploymentIdentityFromValues(process.env),
     mysqldumpBin: process.env.MYSQLDUMP_BIN ?? "mysqldump",
   });
   console.log(JSON.stringify(result, null, 2));
