@@ -124,24 +124,6 @@ jobs:
           fi
           echo "Packager permission hazard prepared: $runtime_entrypoint mode=$mode"
 
-      - name: Mutation 2 - restore build-time tsc in migrate
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('packages/adapters/mysql/package.json')
-          text = path.read_text()
-          needle = '    "migrate": "node scripts/migrate.mjs",'
-          replacement = '    "migrate": "tsc -b && node scripts/migrate.mjs",'
-          count = text.count(needle)
-          if count != 1:
-              raise SystemExit(f'MUTATION_2_PRECONDITION expected exactly 1 migrate target, found {count}')
-          path.write_text(text.replace(needle, replacement, 1))
-          print('MUTATION_2_APPLIED exactly 1 migrate target')
-          PY
-
       - name: Package release
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.id }}
@@ -193,6 +175,32 @@ jobs:
           sudo install -m 0600 -o root -g root /tmp/server-foundation.env /etc/server-foundation/server-foundation.env
           sudo install -m 0644 deploy/systemd/server-foundation.service /etc/systemd/system/server-foundation.service
           sudo systemctl daemon-reload
+
+      - name: Mutation 5 - move permission normalization before pnpm install
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('deploy/scripts/install-release.sh')
+          text = path.read_text()
+          install = 'corepack pnpm --dir "$target" install --prod --frozen-lockfile'
+          chown = 'chown -R root:root "$target"'
+          chmod = 'chmod -R u=rwX,go=rX "$target"'
+          counts = {
+              'install': text.count(install),
+              'chown': text.count(chown),
+              'chmod': text.count(chmod),
+          }
+          if counts != {'install': 1, 'chown': 1, 'chmod': 1}:
+              raise SystemExit(f'MUTATION_5_PRECONDITION expected exactly 1 each, found {counts}')
+          text = text.replace(chown + '\n', '', 1)
+          text = text.replace(chmod + '\n', '', 1)
+          text = text.replace(install, chown + '\n' + chmod + '\n' + install, 1)
+          path.write_text(text)
+          print('MUTATION_5_APPLIED exactly 1 install/chown/chmod target')
+          PY
 
       - name: Install packaged release through production path
         shell: bash
