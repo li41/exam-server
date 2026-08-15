@@ -58,6 +58,9 @@ SF_TENANT_ID="${SF_TENANT_ID:-}"            # 空＝自動產一個 UUID
 SF_STOP_AFTER="${SF_STOP_AFTER:-all}"       # system | all
 
 ENV_FILE=/etc/server-foundation/server-foundation.env
+WG_SYNC_BIN=/usr/local/sbin/exam-server-wg-sync
+WG_SYNC_ENV_FILE=/etc/server-foundation/wireguard-peer-sync.env
+WG_SYNC_DEFAULT_CF_BASE=https://control.exam.tw
 SERVICE_USER=server-foundation
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -312,6 +315,43 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════
+if [ "$SF_SETUP_WIREGUARD" = "1" ]; then
+  step "步驟 7b：WireGuard peer 同步器"
+  # 手動同步工具是高權限管理程式；放 /usr/local/sbin，和 app release tree 分開，
+  # 上新版不會因 current symlink 切換而消失，也不需要常駐 systemd unit。
+  sudo install -m 0755 -o root -g root \
+    "$REPO_DIR/scripts/sync-wireguard-peers.mjs" "$WG_SYNC_BIN"
+  sudo test -x "$WG_SYNC_BIN" || die "WireGuard peer 同步器安裝失敗：${WG_SYNC_BIN}"
+  ok "同步器：${WG_SYNC_BIN}"
+
+  # ⚠️ CF_TOKEN 是能改院內 WireGuard peer 的高權限憑證。
+  # 一定用 sudo test -f：/etc/server-foundation 是 0750，一般使用者看不到裡面的檔案。
+  # 重跑只能修權限，絕不能重建檔案，否則會把既有 CF_TOKEN 蓋回 CHANGE_ME。
+  if ! sudo test -f "$WG_SYNC_ENV_FILE"; then
+    sudo install -m 0600 -o root -g root /dev/null "$WG_SYNC_ENV_FILE"
+    sudo sh -c "cat > '$WG_SYNC_ENV_FILE'" <<EOWGSYNC
+# exam-control 核發、只供 GET /api/wg/approved-peers 使用的 Bearer token。
+# 第一次請用 sudoedit 編輯；不要把 token 放在命令列參數，避免被 ps 看見。
+CF_BASE=${WG_SYNC_DEFAULT_CF_BASE}
+CF_TOKEN=CHANGE_ME
+EOWGSYNC
+    ok "已建立 ${WG_SYNC_ENV_FILE}（0600 root:root；先填 CF_TOKEN 才能同步）"
+  else
+    ok "${WG_SYNC_ENV_FILE} 已存在，保留既有 CF_TOKEN"
+  fi
+  sudo chmod 0600 "$WG_SYNC_ENV_FILE"
+  sudo chown root:root "$WG_SYNC_ENV_FILE"
+  WG_SYNC_ENV_MODE="$(sudo stat -c '%a %U %G' "$WG_SYNC_ENV_FILE" 2>/dev/null || true)"
+  [ "$WG_SYNC_ENV_MODE" = "600 root root" ] \
+    || die "${WG_SYNC_ENV_FILE} 權限不安全（實際：${WG_SYNC_ENV_MODE}；預期：600 root root）"
+  if sudo grep -qx 'CF_TOKEN=CHANGE_ME' "$WG_SYNC_ENV_FILE"; then
+    warn "${WG_SYNC_ENV_FILE} 還是 CF_TOKEN=CHANGE_ME；同步器會拒絕執行，先用 sudoedit 填入 token。"
+  fi
+else
+  step "步驟 7b：WireGuard peer 同步器 —— 跳過（SF_SETUP_WIREGUARD=0）"
+fi
+
+# ══════════════════════════════════════════════════════════════
 if [ "$SF_SETUP_FIREWALL" = "1" ]; then
   step "步驟 8：防火牆 —— 只開 UDP ${SF_WG_PORT}"
   # ⚠️ firewalld 在 AlmaLinux 10 預設未安裝（2026-08-14 實測）
@@ -505,9 +545,22 @@ echo "  之後每次上新版只要："
 echo "    sudo SERVER_FOUNDATION_HEALTH_URL=http://${SF_HOST}:${SF_PORT}/health/ready \\"
 echo "         deploy/scripts/install-release.sh <新的.tar.gz> <版本>"
 echo
-echo "  正式機還要自己做的（這台驗不到）："
+echo "  WireGuard peer 同步（/li41 核准新裝置之後）："
+echo "    ① 向 exam-control 管理者取得一枚只供 GET /api/wg/approved-peers 使用的 Bearer token。"
+echo "       本 repo 不產生 token；拿到後用下面這行開 root-only 憑證檔："
+echo "       sudoedit ${WG_SYNC_ENV_FILE}"
+echo "       把 CF_TOKEN=CHANGE_ME 換成實際 token。不要把 token 貼在命令列。"
+echo "    ② 先 dry-run 看會改什麼："
+echo "       sudo ${WG_SYNC_BIN} --dry-run"
+echo "       會新增＝新核准、將可連線；會移除＝目前存在但 control 已撤銷；不變＝已對齊。"
+echo "       ⚠️ 只要「會移除」不是 0，先回 /li41 確認那些裝置確實應撤銷、會被斷線。"
+echo "    ③ 確認後正式套用："
+echo "       sudo ${WG_SYNC_BIN}"
+echo "       撈不到 CF、HTTP/JSON/欄位壞掉，或空清單沒有 authoritative_empty=true 時："
+echo "       ERROR 後停止，fail closed，不改 wg0.conf。"
+echo
+echo "  正式機還要自己確認的（這台驗不到）："
 echo "    ① 把 HOST 改成 wg0 的位址（現在是 ${SF_HOST}）並重啟服務"
-echo "    ② 每台桌面電腦一段 [Peer]，AllowedIPs 必須 /32"
-echo "    ③ sudo firewall-cmd --list-ports 應只有 ${SF_WG_PORT}/udp"
+echo "    ② sudo firewall-cmd --list-ports 應只有 ${SF_WG_PORT}/udp"
 echo
 ok "全部完成"
