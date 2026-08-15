@@ -3,6 +3,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LIB_DIR=/usr/local/libexec/server-foundation-backup
+APP_ENV_FILE=/etc/server-foundation/server-foundation.env
 UPLOAD_ENV_FILE=/etc/server-foundation/offsite-backup.env
 RESTORE_EXAMPLE=/usr/local/share/server-foundation/offsite-restore.env.example
 BACKUP_BIN=/usr/local/sbin/server-foundation-offsite-backup
@@ -17,8 +18,19 @@ die() { printf '  \033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 sudo -v || die "需要 sudo 權限"
 [ -f "$REPO_DIR/scripts/backup.mjs" ] || die "找不到 repo 根目錄：$REPO_DIR"
-sudo test -f /etc/server-foundation/server-foundation.env \
-  || die "請先完成 bootstrap；缺少 /etc/server-foundation/server-foundation.env"
+sudo test -f "$APP_ENV_FILE" \
+  || die "請先完成 bootstrap；缺少 $APP_ENV_FILE"
+
+# A scheduled backup without identity would recreate the exact risk #33 fixes.
+# Fail closed before installing/enabling the timer. The values are not secrets.
+sudo grep -Eq '^DEPLOYMENT_COMPANY_ID=[1-9][0-9]*$' "$APP_ENV_FILE" \
+  || die "$APP_ENV_FILE 缺少有效 DEPLOYMENT_COMPANY_ID（必須等於 exam-control company_id）"
+sudo grep -Eq '^DEPLOYMENT_PROJECT_ID=.+$' "$APP_ENV_FILE" \
+  || die "$APP_ENV_FILE 缺少 DEPLOYMENT_PROJECT_ID"
+if sudo grep -Eq '^DEPLOYMENT_PROJECT_ID=CHANGE_ME$' "$APP_ENV_FILE"; then
+  die "$APP_ENV_FILE 的 DEPLOYMENT_PROJECT_ID 尚未設定"
+fi
+ok "deployment identity 已設定"
 
 # Security migration: the old #22 file stored R2 Object Read & Write credentials.
 # Never overwrite those values automatically. Stop the timer first so the old
@@ -35,6 +47,7 @@ fi
 sudo install -d -m 0755 -o root -g root "$LIB_DIR"
 for file in \
   backup-common.mjs \
+  deployment-identity.mjs \
   backup.mjs \
   restore.mjs \
   offsite-r2.mjs \
@@ -87,7 +100,7 @@ fi
 
 cat <<EOF2
 
-手動驗 upload endpoint/auth（不建立、不上傳、不 list/read/delete R2）：
+手動驗 deployment identity + upload endpoint/auth（不建立、不上傳、不 list/read/delete R2）：
   sudo $BACKUP_BIN --dry-run
 
 手動立即備份（retention 由 R2 Object Lifecycle 執行）：
@@ -99,6 +112,9 @@ cat <<EOF2
   sudo RESTORE_CONFIRM=YES $RESTORE_BIN --latest
 完成後：
   sudo rm -f /run/server-foundation/offsite-restore.env
+
+若真的是跨部署或舊版無身分備份，restore 會明確列出 backup/current 身分並拒絕；
+只有依錯誤訊息手動輸入 RESTORE_DEPLOYMENT_OVERRIDE_CONFIRM 的完整長確認字串才會放行。
 
 真機異地還原演練同樣需要暫時的 read-only restore credential：
   sudo OFFSITE_REHEARSAL_CONFIRM=YES_I_UNDERSTAND_THIS_IS_DESTRUCTIVE $REHEARSE_BIN
