@@ -104,6 +104,45 @@ describe("question bank API", () => {
     });
   });
 
+  it("PATCH 只送部分欄位時,沒送的欄位保持原值(不被預設值清掉)", async () => {
+    // ⚠️ 這條守的是 zod 的一個陷阱：`.partial()` **不會拿掉內層的 `.default()`**。
+    //    若可寫欄位的基底帶預設值，PATCH 只送 `{ stem, version }` 也會把
+    //    tags 清成 []、status 重設成 enabled、points 重設成 1 —— 而且**不報錯**。
+    //    2026-08-15 這個缺陷真的存在過；當時唯一露出來的症狀是 options 被清成 null
+    //    後撞到「選項至少兩個」的驗證而回 400。那是**運氣**：
+    //    tags / status / points 沒有驗證擋，會靜默被清掉。
+    const app = createTestApp();
+    const createdResponse = await app.request("/api/questions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        singleChoice({
+          tags: ["數學", "四則運算"],
+          status: "disabled",
+          points: 7.5,
+          explanation: "原本的解析",
+        }),
+      ),
+    });
+    const created = await createdResponse.json();
+
+    const patched = await app.request(`/api/questions/${created.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ stem: "只改題幹", version: created.version }),
+    });
+    expect(patched.status).toBe(200);
+
+    const after = await patched.json();
+    expect(after.stem).toBe("只改題幹");
+    expect(after.tags).toEqual(["數學", "四則運算"]);
+    expect(after.status).toBe("disabled");
+    expect(after.points).toBe(7.5);
+    expect(after.explanation).toBe("原本的解析");
+    expect(after.options).toEqual(created.options);
+    expect(after.answer).toEqual(created.answer);
+  });
+
   it("keeps optimistic versioning and rejects a stale update", async () => {
     const app = createTestApp();
     const createdResponse = await app.request("/api/questions", {

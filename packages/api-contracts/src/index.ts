@@ -107,27 +107,52 @@ export const QuestionSchema = z.object({
   deletedAt: z.string().min(1).nullable(),
 });
 
-const QuestionWriteFieldsSchema = z.object({
+/**
+ * 題目可寫欄位的**基底：一個 `.default()` 都不能放。**
+ *
+ * ⚠️⚠️ 為什麼分成基底與 Create 兩層：
+ * `.partial()` **不會拿掉內層的 `.default()`**。若基底帶預設值，
+ * PATCH 只送 `{ stem, version }` 時，zod 仍會把 `options` 填成 `null`、
+ * `tags` 填成 `[]`、`status` 填成 `enabled` …… ⇒ **使用者只想改題幹，
+ * 卻把選項、標籤、狀態、媒體全部靜默重設。**
+ *
+ * 2026-08-15 這個缺陷真的存在過：測試看到的是「改題幹回 400
+ * （選項少於兩個）」，但那只是**運氣好被驗證擋下**的那一種欄位；
+ * `tags` / `status` / `points` 沒有驗證擋，會直接被清掉而且不報錯。
+ */
+const QuestionWriteFieldsBaseSchema = z.object({
   code: z.string().trim().min(1).max(50),
   categoryId: z.string().trim().min(1).nullable().optional(),
   type: QuestionTypeSchema,
-  difficulty: z.number().int().min(1).max(5).default(3),
+  difficulty: z.number().int().min(1).max(5),
   stem: z.string().trim().min(1).max(200000),
-  options: z.json().nullable().default(null),
+  options: z.json().nullable(),
   answer: z.json(),
-  explanation: z.string().max(200000).nullable().default(null),
-  aiRubric: z.array(QuestionAiRubricEntrySchema).nullable().default(null),
-  points: z.number().positive().max(9999.9).default(1),
-  tags: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
-  status: QuestionStatusSchema.default("enabled"),
-  media: z.array(QuestionMediaSchema).max(200).default([]),
+  explanation: z.string().max(200000).nullable(),
+  aiRubric: z.array(QuestionAiRubricEntrySchema).nullable(),
+  points: z.number().positive().max(9999.9),
+  tags: z.array(z.string().trim().min(1).max(100)).max(100),
+  status: QuestionStatusSchema,
+  media: z.array(QuestionMediaSchema).max(200),
 });
 
-export const CreateQuestionSchema = QuestionWriteFieldsSchema;
-
-export const UpdateQuestionSchema = QuestionWriteFieldsSchema.partial().extend({
-  version: z.number().int().positive(),
+/** 建立時才套預設值。 */
+export const CreateQuestionSchema = QuestionWriteFieldsBaseSchema.extend({
+  difficulty: QuestionWriteFieldsBaseSchema.shape.difficulty.default(3),
+  options: QuestionWriteFieldsBaseSchema.shape.options.default(null),
+  explanation: QuestionWriteFieldsBaseSchema.shape.explanation.default(null),
+  aiRubric: QuestionWriteFieldsBaseSchema.shape.aiRubric.default(null),
+  points: QuestionWriteFieldsBaseSchema.shape.points.default(1),
+  tags: QuestionWriteFieldsBaseSchema.shape.tags.default([]),
+  status: QuestionWriteFieldsBaseSchema.shape.status.default("enabled"),
+  media: QuestionWriteFieldsBaseSchema.shape.media.default([]),
 });
+
+/** 更新：**沒有任何預設值**，沒送的欄位就是 `undefined`，由 use case 保留原值。 */
+export const UpdateQuestionSchema =
+  QuestionWriteFieldsBaseSchema.partial().extend({
+    version: z.number().int().positive(),
+  });
 
 export const QuestionListQuerySchema = z.object({
   cursor: z.string().min(1).optional(),

@@ -62,7 +62,17 @@ const localDevelopmentIdentity: AuthIdentity = {
   roles: ["developer"],
 };
 
-const validationError = (context: Context<QuestionEnv>, message: string) =>
+// ⚠️ 這兩個 helper 只吃 `context.get(...)` 與 `context.json(...)`，
+//    所以用**結構型別**而不是 `Context<QuestionEnv>`：
+//    `zValidator` 的 callback 交出來的是 Hono 預設的 `Context<Env>`，
+//    綁死具體 Env 會在那裡型別不相容（`Variables` 是 `object | undefined`）。
+type RequestIdContext = {
+  get(key: "requestId"): string;
+  json: Context["json"];
+};
+type IdentityContext = { get(key: "identity"): AuthIdentity | undefined };
+
+const validationError = (context: RequestIdContext, message: string) =>
   context.json(
     {
       error: { code: "validation_error" as const, message },
@@ -82,7 +92,9 @@ const bearerToken = (context: Context<QuestionEnv>): string => {
 const canonicalApiPath = (path: string): string =>
   path.replace(/^\/api\/v1(?=\/|$)/, "/api");
 
-const idempotencyKeyFor = (context: Context<QuestionEnv>): string | undefined => {
+const idempotencyKeyFor = (
+  context: Context<QuestionEnv>,
+): string | undefined => {
   const raw = context.req.header("idempotency-key");
   if (raw === undefined) return undefined;
   const key = raw.trim();
@@ -226,15 +238,17 @@ const createQuestionRouter = (dependencies: Dependencies) => {
         await store.release(scope, key, fingerprint);
       }
     } catch (error) {
-      await store.release(scope, key, fingerprint).catch((releaseError: unknown) => {
-        dependencies.logger?.warn("idempotency_release_failed", {
-          requestId: context.get("requestId"),
-          error:
-            releaseError instanceof Error
-              ? releaseError.message
-              : String(releaseError),
+      await store
+        .release(scope, key, fingerprint)
+        .catch((releaseError: unknown) => {
+          dependencies.logger?.warn("idempotency_release_failed", {
+            requestId: context.get("requestId"),
+            error:
+              releaseError instanceof Error
+                ? releaseError.message
+                : String(releaseError),
+          });
         });
-      });
       throw error;
     }
   };
@@ -248,7 +262,7 @@ const createQuestionRouter = (dependencies: Dependencies) => {
   api.use("/question-categories", enforceIdempotency);
   api.use("/question-categories/*", enforceIdempotency);
 
-  const scopeFor = (context: Context<QuestionEnv>) => {
+  const scopeFor = (context: IdentityContext) => {
     const identity = context.get("identity");
     if (!identity) throw new UnauthorizedError();
     return { tenantId: identity.tenantId, actorUserId: identity.userId };
@@ -329,15 +343,11 @@ const createQuestionRouter = (dependencies: Dependencies) => {
 
   api.get(
     "/question-categories",
-    zValidator(
-      "query",
-      QuestionCategoryListQuerySchema,
-      (result, context) => {
-        if (!result.success) {
-          return validationError(context, "Invalid category query parameters.");
-        }
-      },
-    ),
+    zValidator("query", QuestionCategoryListQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid category query parameters.");
+      }
+    }),
     async (context) =>
       context.json(
         await service.listCategories(

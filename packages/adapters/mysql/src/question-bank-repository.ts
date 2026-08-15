@@ -212,6 +212,9 @@ const mediaMapFor = async (
   return result;
 };
 
+/** mysql2 佔位參數接受的純量。 */
+type SqlParam = string | number | boolean | Date | null;
+
 export class MySqlQuestionBankRepository implements QuestionBankRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -350,7 +353,8 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
       throw error;
     }
     const question = await this.getQuestion(id, scope);
-    if (!question) throw new Error("Question insert succeeded but could not be read.");
+    if (!question)
+      throw new Error("Question insert succeeded but could not be read.");
     return question;
   }
 
@@ -360,8 +364,11 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     scope: QuestionBankScope,
   ): Promise<Question> {
     const updates: string[] = [];
-    const values: unknown[] = [];
-    const put = (column: string, value: unknown): void => {
+    // ⚠️ 不能用 `unknown[]` —— mysql2 的 `execute(sql, values)` overload 不接受它，
+    //    會退到最後一個 overload（吃 QueryOptions）然後報「string 不能當 QueryOptions」。
+    //    症狀出現在 execute 那一行，病灶在這個宣告。
+    const values: SqlParam[] = [];
+    const put = (column: string, value: SqlParam): void => {
       updates.push(`${column} = ?`);
       values.push(value);
     };
@@ -372,12 +379,18 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     if (input.difficulty !== undefined) put("difficulty", input.difficulty);
     if (input.stem !== undefined) put("stem", input.stem);
     if (input.options !== undefined) {
-      put("options", input.options === null ? null : JSON.stringify(input.options));
+      put(
+        "options",
+        input.options === null ? null : JSON.stringify(input.options),
+      );
     }
     if (input.answer !== undefined) put("answer", JSON.stringify(input.answer));
     if (input.explanation !== undefined) put("explanation", input.explanation);
     if (input.aiRubric !== undefined) {
-      put("ai_rubric", input.aiRubric === null ? null : JSON.stringify(input.aiRubric));
+      put(
+        "ai_rubric",
+        input.aiRubric === null ? null : JSON.stringify(input.aiRubric),
+      );
     }
     if (input.points !== undefined) put("points", input.points);
     if (input.tags !== undefined) put("tags", JSON.stringify(input.tags));
@@ -399,7 +412,12 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
           [...values, now, id, scope.tenantId, input.version],
         );
         if (result.affectedRows === 0) {
-          await this.throwQuestionUpdateFailure(connection, id, input.version, scope);
+          await this.throwQuestionUpdateFailure(
+            connection,
+            id,
+            input.version,
+            scope,
+          );
         }
         if (input.media !== undefined) {
           await this.replaceMedia(connection, id, input.media, scope, now);
@@ -491,7 +509,8 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
       );
     });
     const category = await this.getCategory(id, scope);
-    if (!category) throw new Error("Category insert succeeded but could not be read.");
+    if (!category)
+      throw new Error("Category insert succeeded but could not be read.");
     return category;
   }
 
@@ -503,7 +522,10 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     const now = new Date();
     await withTransaction(this.pool, async (connection) => {
       if (input.parentId === id) {
-        throw new DomainError("validation_error", "A category cannot parent itself.");
+        throw new DomainError(
+          "validation_error",
+          "A category cannot parent itself.",
+        );
       }
       await this.assertCategoryParent(connection, input.parentId, scope);
       if (input.parentId !== null) {
@@ -534,7 +556,12 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
         ],
       );
       if (result.affectedRows === 0) {
-        await this.throwCategoryUpdateFailure(connection, id, input.version, scope);
+        await this.throwCategoryUpdateFailure(
+          connection,
+          id,
+          input.version,
+          scope,
+        );
       }
     });
     const category = await this.getCategory(id, scope);
@@ -725,7 +752,8 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     );
     const rows = rawRows as ExistingRow[];
     const row = rows[0];
-    if (!row || row.deleted_at !== null) throw new NotFoundError("question", id);
+    if (!row || row.deleted_at !== null)
+      throw new NotFoundError("question", id);
     throw new ConflictError(
       `Question ${id} has changed; expected version ${version}.`,
     );

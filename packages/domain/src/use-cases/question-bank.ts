@@ -27,7 +27,12 @@ const optionRows = (value: unknown): JsonObject[] | null =>
     ? (value as JsonObject[])
     : null;
 
-const validationError = (message: string): never => {
+// ⚠️ 型別註記要寫在**變數**上，不能只寫在箭頭的回傳位置。
+//    TS 的「呼叫 never 函式之後即收窄」只認變數的顯式型別；
+//    寫成 `const f = (x): never => …` 時，`if (!a) f(…)` 之後 `a` 仍是可能為 null。
+//    2026-08-15 這裡因此紅了六處，而且 domain 編不過會讓下游全部
+//    報「找不到匯出」——症狀在別的套件，病灶在這一行。
+const validationError: (message: string) => never = (message: string) => {
   throw new DomainError("validation_error", message);
 };
 
@@ -46,7 +51,8 @@ const validateChoiceOptions = (options: unknown): JsonObject[] => {
     if (typeof text !== "string" || !text.trim()) {
       return validationError("Every choice option requires non-empty text.");
     }
-    if (ids.has(id)) return validationError("Choice option ids must be unique.");
+    if (ids.has(id))
+      return validationError("Choice option ids must be unique.");
     ids.add(id);
   }
   return rows;
@@ -60,11 +66,7 @@ export const validateKnownQuestionShape = (
 
   if (question.type === "true_false") {
     const value = answer.value;
-    if (
-      typeof value !== "boolean" &&
-      value !== "true" &&
-      value !== "false"
-    ) {
+    if (typeof value !== "boolean" && value !== "true" && value !== "false") {
       validationError(
         "true_false answer.value must be boolean true/false or the strings 'true'/'false'.",
       );
@@ -76,7 +78,9 @@ export const validateKnownQuestionShape = (
     const options = validateChoiceOptions(question.options);
     const ids = new Set(options.map((option) => String(option.id)));
     if (typeof answer.value !== "string" || !ids.has(answer.value)) {
-      validationError("single_choice answer.value must reference an option id.");
+      validationError(
+        "single_choice answer.value must reference an option id.",
+      );
     }
     return;
   }

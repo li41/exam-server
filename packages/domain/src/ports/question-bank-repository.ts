@@ -20,10 +20,7 @@ export interface QuestionBankRepository {
     query: QuestionListQuery,
     scope: QuestionBankScope,
   ): Promise<Page<Question>>;
-  getQuestion(
-    id: string,
-    scope: QuestionBankScope,
-  ): Promise<Question | null>;
+  getQuestion(id: string, scope: QuestionBankScope): Promise<Question | null>;
   createQuestion(
     input: CreateQuestionInput,
     scope: QuestionBankScope,

@@ -58,10 +58,15 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
         ])
       : null;
     const visible = this.questions.filter((question) => {
-      if (question.deletedAt || question.tenantId !== scope.tenantId) return false;
-      if (query.createdBy && question.createdBy !== query.createdBy) return false;
+      if (question.deletedAt || question.tenantId !== scope.tenantId)
+        return false;
+      if (query.createdBy && question.createdBy !== query.createdBy)
+        return false;
       if (query.type && question.type !== query.type) return false;
-      if (categoryIds && (!question.categoryId || !categoryIds.has(question.categoryId))) {
+      if (
+        categoryIds &&
+        (!question.categoryId || !categoryIds.has(question.categoryId))
+      ) {
         return false;
       }
       if (
@@ -144,7 +149,9 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
   ): Promise<Question> {
     const question = this.requiredQuestion(id, scope);
     if (question.version !== input.version) {
-      throw new ConflictError(`Question ${id} has changed; reload before updating.`);
+      throw new ConflictError(
+        `Question ${id} has changed; reload before updating.`,
+      );
     }
     if (input.code !== undefined && input.code !== question.code) {
       this.assertUniqueCode(input.code, scope, id);
@@ -157,14 +164,19 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
     if (input.type !== undefined) question.type = input.type;
     if (input.difficulty !== undefined) question.difficulty = input.difficulty;
     if (input.stem !== undefined) question.stem = input.stem;
-    if (input.options !== undefined) question.options = structuredClone(input.options);
-    if (input.answer !== undefined) question.answer = structuredClone(input.answer);
-    if (input.explanation !== undefined) question.explanation = input.explanation;
-    if (input.aiRubric !== undefined) question.aiRubric = structuredClone(input.aiRubric);
+    if (input.options !== undefined)
+      question.options = structuredClone(input.options);
+    if (input.answer !== undefined)
+      question.answer = structuredClone(input.answer);
+    if (input.explanation !== undefined)
+      question.explanation = input.explanation;
+    if (input.aiRubric !== undefined)
+      question.aiRubric = structuredClone(input.aiRubric);
     if (input.points !== undefined) question.points = input.points;
     if (input.tags !== undefined) question.tags = [...input.tags];
     if (input.status !== undefined) question.status = input.status;
-    if (input.media !== undefined) question.media = structuredClone(input.media);
+    if (input.media !== undefined)
+      question.media = structuredClone(input.media);
     question.version += 1;
     question.updatedAt = new Date().toISOString();
     return structuredClone(question);
@@ -177,7 +189,9 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
   ): Promise<void> {
     const question = this.requiredQuestion(id, scope);
     if (question.version !== version) {
-      throw new ConflictError(`Question ${id} has changed; reload before deleting.`);
+      throw new ConflictError(
+        `Question ${id} has changed; reload before deleting.`,
+      );
     }
     question.version += 1;
     question.updatedAt = new Date().toISOString();
@@ -193,7 +207,8 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
         (category) =>
           category.tenantId === scope.tenantId &&
           !category.deletedAt &&
-          (query.parentId === undefined || category.parentId === query.parentId),
+          (query.parentId === undefined ||
+            category.parentId === query.parentId),
       )
       .sort(
         (left, right) =>
@@ -250,7 +265,10 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
       );
     }
     if (input.parentId === id) {
-      throw new DomainError("validation_error", "A category cannot parent itself.");
+      throw new DomainError(
+        "validation_error",
+        "A category cannot parent itself.",
+      );
     }
     this.assertParent(input.parentId, scope);
     if (

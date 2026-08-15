@@ -41,10 +41,7 @@ export class QuestionAwareBlobStorage implements BlobStorage {
     return this.inner.cancelUpload(sessionId, scope);
   }
 
-  getDownload(
-    fileId: string,
-    scope: FileAccessScope,
-  ): Promise<DownloadSource> {
+  getDownload(fileId: string, scope: FileAccessScope): Promise<DownloadSource> {
     return this.inner.getDownload(fileId, scope);
   }
 

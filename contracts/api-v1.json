@@ -196,7 +196,9 @@
       "title": { "type": "string", "required": true },
       "version": { "type": "positive-integer", "required": true }
     },
-    "DeleteItemQuery": { "version": { "type": "positive-integer", "required": true } },
+    "DeleteItemQuery": {
+      "version": { "type": "positive-integer", "required": true }
+    },
     "CreateQuestion": {
       "code": { "type": "string", "required": true },
       "categoryId": { "type": "nullable-string", "required": false },
@@ -228,7 +230,9 @@
       "media": { "type": "question-media-array", "required": false },
       "version": { "type": "positive-integer", "required": true }
     },
-    "DeleteQuestionQuery": { "version": { "type": "positive-integer", "required": true } },
+    "DeleteQuestionQuery": {
+      "version": { "type": "positive-integer", "required": true }
+    },
     "CreateQuestionCategory": {
       "parentId": { "type": "nullable-string", "required": false },
       "name": { "type": "string", "required": true },
@@ -240,7 +244,9 @@
       "sortOrder": { "type": "integer", "required": true },
       "version": { "type": "positive-integer", "required": true }
     },
-    "DeleteQuestionCategoryQuery": { "version": { "type": "positive-integer", "required": true } },
+    "DeleteQuestionCategoryQuery": {
+      "version": { "type": "positive-integer", "required": true }
+    },
     "Login": {
       "email": { "type": "email-string", "required": true },
       "password": { "type": "string", "required": true }
