@@ -192,8 +192,42 @@ describe("question bank API", () => {
     });
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({
-      media: [{ fileId: "existing-file-id", role: "stem" }],
+      media: [{ fileId: "existing-file-id", role: "stem", available: true }],
     });
+  });
+
+  it("lists active questions that reference a file before deletion", async () => {
+    const app = createTestApp();
+    await app.request("/api/questions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        singleChoice({
+          code: "Q-MEDIA-REF",
+          media: [
+            {
+              fileId: "file-to-check",
+              role: "stem",
+              optionId: null,
+              position: 0,
+            },
+          ],
+        }),
+      ),
+    });
+    await app.request("/api/questions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(singleChoice({ code: "Q-WITHOUT-MEDIA" })),
+    });
+
+    const response = await app.request(
+      "/api/questions?fileId=file-to-check&limit=20",
+    );
+    expect(response.status).toBe(200);
+    const page = await response.json();
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({ code: "Q-MEDIA-REF" });
   });
 
   it("soft-deletes questions and permits reusing their company-scoped code", async () => {
@@ -282,7 +316,10 @@ describe("question bank API", () => {
         tenantId: "company-opaque",
         roles: ["member"],
       }),
-    ).rejects.toMatchObject({ code: "conflict" });
+    ).rejects.toMatchObject({
+      code: "conflict",
+      message: expect.stringContaining("/api/v1/questions?fileId=file-guard"),
+    });
     expect(deleted).toBe(false);
   });
 });

@@ -8,6 +8,7 @@ import type {
   QuestionCategoryListQuery,
   QuestionListQuery,
   QuestionMedia,
+  QuestionMediaResult,
   UpdateQuestionCategoryInput,
   UpdateQuestionInput,
 } from "@server-foundation/api-contracts";
@@ -61,6 +62,7 @@ type MediaRow = RowDataPacket & {
   role: QuestionMedia["role"];
   option_id: string | null;
   position: number;
+  file_available: number | string;
 };
 
 type CategoryRow = RowDataPacket & {
@@ -135,18 +137,19 @@ const isDuplicateEntry = (error: unknown): boolean =>
   "code" in error &&
   error.code === "ER_DUP_ENTRY";
 
-const unavailableMedia = (): never => {
+const unavailableMedia = (fileId: string): never => {
   throw new DomainError(
     "validation_error",
-    "Question media contains a file that is unavailable to this tenant.",
+    `Question media fileId "${fileId}" does not exist.`,
   );
 };
 
-const toMedia = (row: MediaRow): QuestionMedia => ({
+const toMedia = (row: MediaRow): QuestionMediaResult => ({
   fileId: row.file_id,
   role: row.role,
   optionId: row.option_id,
   position: row.position,
+  available: Number(row.file_available) === 1,
 });
 
 const toCategory = (row: CategoryRow): QuestionCategory => ({
@@ -163,7 +166,7 @@ const toCategory = (row: CategoryRow): QuestionCategory => ({
 
 const toQuestion = (
   row: QuestionRow,
-  media: QuestionMedia[] = [],
+  media: QuestionMediaResult[] = [],
 ): Question => ({
   id: row.id,
   tenantId: row.tenant_id,
@@ -192,15 +195,21 @@ const mediaMapFor = async (
   executor: Executor,
   ids: string[],
   tenantId: string,
-): Promise<Map<string, QuestionMedia[]>> => {
-  const result = new Map<string, QuestionMedia[]>();
+): Promise<Map<string, QuestionMediaResult[]>> => {
+  const result = new Map<string, QuestionMediaResult[]>();
   if (ids.length === 0) return result;
   const placeholders = ids.map(() => "?").join(", ");
   const [rawRows] = await executor.execute(
-    `SELECT question_id, file_id, role, option_id, position
-     FROM question_files
-     WHERE tenant_id = ? AND question_id IN (${placeholders})
-     ORDER BY question_id, role, position, id`,
+    `SELECT qf.question_id, qf.file_id, qf.role, qf.option_id, qf.position,
+            CASE
+              WHEN f.file_id IS NOT NULL AND f.status = 'ready' AND f.deleted_at IS NULL
+              THEN 1 ELSE 0
+            END AS file_available
+     FROM question_files qf
+     LEFT JOIN files f
+       ON f.file_id = qf.file_id AND f.tenant_id = qf.tenant_id
+     WHERE qf.tenant_id = ? AND qf.question_id IN (${placeholders})
+     ORDER BY qf.question_id, qf.role, qf.position, qf.id`,
     [tenantId, ...ids],
   );
   const rows = rawRows as MediaRow[];
@@ -251,6 +260,15 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     if (query.status) {
       predicates.push("q.status = ?");
       parameters.push(query.status);
+    }
+    if (query.fileId) {
+      predicates.push(`EXISTS (
+        SELECT 1 FROM question_files qf
+        WHERE qf.question_id = q.id
+          AND qf.tenant_id = q.tenant_id
+          AND qf.file_id = ?
+      )`);
+      parameters.push(query.fileId);
     }
     if (search) {
       const like = `%${escapeLike(search)}%`;
@@ -706,7 +724,9 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
       [scope.tenantId, ...ids],
     );
     const rows = rawRows as FileRow[];
-    if (rows.length !== ids.length) unavailableMedia();
+    const availableIds = new Set(rows.map((row) => row.file_id));
+    const unavailableId = ids.find((fileId) => !availableIds.has(fileId));
+    if (unavailableId) unavailableMedia(unavailableId);
   }
 
   private async replaceMedia(

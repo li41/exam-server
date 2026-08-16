@@ -77,6 +77,10 @@ export const QuestionMediaSchema = z.object({
   position: z.number().int().nonnegative().default(0),
 });
 
+export const QuestionMediaResultSchema = QuestionMediaSchema.extend({
+  available: z.boolean(),
+});
+
 export const QuestionAiRubricEntrySchema = z.object({
   text: z.string().trim().min(1).max(1000),
   score: z.number().nonnegative(),
@@ -101,7 +105,7 @@ export const QuestionSchema = z.object({
   status: QuestionStatusSchema,
   usageCount: z.number().int().nonnegative(),
   version: z.number().int().positive(),
-  media: z.array(QuestionMediaSchema),
+  media: z.array(QuestionMediaResultSchema),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
   deletedAt: z.string().min(1).nullable(),
@@ -163,6 +167,7 @@ export const QuestionListQuerySchema = z.object({
   categoryId: z.string().trim().min(1).optional(),
   difficulty: z.coerce.number().int().min(1).max(5).optional(),
   status: QuestionStatusSchema.optional(),
+  fileId: z.string().trim().min(1).optional(),
 });
 
 export const DeleteQuestionQuerySchema = z.object({
@@ -298,6 +303,7 @@ export type Question = z.infer<typeof QuestionSchema>;
 export type QuestionType = z.infer<typeof QuestionTypeSchema>;
 export type QuestionStatus = z.infer<typeof QuestionStatusSchema>;
 export type QuestionMedia = z.infer<typeof QuestionMediaSchema>;
+export type QuestionMediaResult = z.infer<typeof QuestionMediaResultSchema>;
 export type QuestionListQuery = z.infer<typeof QuestionListQuerySchema>;
 export type CreateQuestionInput = z.infer<typeof CreateQuestionSchema>;
 export type UpdateQuestionInput = z.infer<typeof UpdateQuestionSchema>;

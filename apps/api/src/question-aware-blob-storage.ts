@@ -53,7 +53,9 @@ export class QuestionAwareBlobStorage implements BlobStorage {
       })
     ) {
       throw new ConflictError(
-        "File is still referenced by an active question. Remove the question media reference first.",
+        `File ${fileId} is still referenced by an active question. ` +
+          `Query /api/v1/questions?fileId=${encodeURIComponent(fileId)} to see affected questions, ` +
+          "then remove those media references before deleting the file.",
       );
     }
     await this.inner.delete(fileId, scope);

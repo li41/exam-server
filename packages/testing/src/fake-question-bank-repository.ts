@@ -6,6 +6,8 @@ import type {
   QuestionCategory,
   QuestionCategoryListQuery,
   QuestionListQuery,
+  QuestionMedia,
+  QuestionMediaResult,
   UpdateQuestionCategoryInput,
   UpdateQuestionInput,
 } from "@server-foundation/api-contracts";
@@ -32,6 +34,12 @@ const decodeCursor = (cursor: string | undefined): number => {
   }
   throw new InvalidCursorError();
 };
+
+const readableMedia = (media: QuestionMedia[]): QuestionMediaResult[] =>
+  media.map((entry) => ({
+    ...structuredClone(entry),
+    available: true,
+  }));
 
 export class InMemoryQuestionBankRepository implements QuestionBankRepository {
   private readonly questions: Question[] = [];
@@ -76,6 +84,12 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
         return false;
       }
       if (query.status && question.status !== query.status) return false;
+      if (
+        query.fileId &&
+        !question.media.some((media) => media.fileId === query.fileId)
+      ) {
+        return false;
+      }
       if (!search) return true;
       return (
         question.stem.toLocaleLowerCase().includes(search) ||
@@ -133,7 +147,7 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
       status: input.status,
       usageCount: 0,
       version: 1,
-      media: structuredClone(input.media),
+      media: readableMedia(input.media),
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -175,8 +189,7 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
     if (input.points !== undefined) question.points = input.points;
     if (input.tags !== undefined) question.tags = [...input.tags];
     if (input.status !== undefined) question.status = input.status;
-    if (input.media !== undefined)
-      question.media = structuredClone(input.media);
+    if (input.media !== undefined) question.media = readableMedia(input.media);
     question.version += 1;
     question.updatedAt = new Date().toISOString();
     return structuredClone(question);

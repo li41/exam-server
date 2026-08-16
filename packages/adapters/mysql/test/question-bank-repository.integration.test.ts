@@ -37,6 +37,42 @@ const questionInput = (code: string, categoryId: string | null = null) => ({
   media: [],
 });
 
+const insertReadyFile = async (fileId: string, tenantId = scope.tenantId) => {
+  await pool.execute("DELETE FROM files WHERE file_id = ?", [fileId]);
+  await pool.execute(
+    `INSERT INTO files
+      (file_id, owner_id, tenant_id, original_name, display_name, mime_type,
+       size_bytes, checksum, status, created_at, deleted_at)
+     VALUES (?, ?, ?, 'stem.png', 'Stem', 'image/png', 1, ?, 'ready', ?, NULL)`,
+    [
+      fileId,
+      scope.actorUserId,
+      tenantId,
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      new Date(),
+    ],
+  );
+};
+
+const rejectedMediaMessage = async (
+  code: string,
+  fileId: string,
+): Promise<string> => {
+  try {
+    await repository.createQuestion(
+      {
+        ...questionInput(code),
+        media: [{ fileId, role: "stem" as const, optionId: null, position: 0 }],
+      },
+      scope,
+    );
+  } catch (error) {
+    expect(error).toMatchObject({ code: "validation_error" });
+    return error instanceof Error ? error.message : String(error);
+  }
+  throw new Error("Expected invalid question media to be rejected.");
+};
+
 describe("MySqlQuestionBankRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
@@ -93,20 +129,7 @@ describe("MySqlQuestionBankRepository", () => {
 
   it("links only existing ready files from the same opaque tenant", async () => {
     const fileId = "00000000-0000-4000-8000-000000000099";
-    await pool.execute("DELETE FROM files WHERE file_id = ?", [fileId]);
-    await pool.execute(
-      `INSERT INTO files
-        (file_id, owner_id, tenant_id, original_name, display_name, mime_type,
-         size_bytes, checksum, status, created_at, deleted_at)
-       VALUES (?, ?, ?, 'stem.png', 'Stem', 'image/png', 1, ?, 'ready', ?, NULL)`,
-      [
-        fileId,
-        scope.actorUserId,
-        scope.tenantId,
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        new Date(),
-      ],
-    );
+    await insertReadyFile(fileId);
 
     const created = await repository.createQuestion(
       {
@@ -116,8 +139,76 @@ describe("MySqlQuestionBankRepository", () => {
       scope,
     );
     expect(created.media).toEqual([
-      { fileId, role: "stem", optionId: null, position: 0 },
+      {
+        fileId,
+        role: "stem",
+        optionId: null,
+        position: 0,
+        available: true,
+      },
     ]);
     expect(await repository.isFileReferenced(fileId, scope)).toBe(true);
+
+    const references = await repository.listQuestions(
+      { limit: 20, fileId },
+      scope,
+    );
+    expect(references.items.map((question) => question.id)).toContain(
+      created.id,
+    );
+  });
+
+  it("rejects missing and cross-tenant file ids without leaking their existence", async () => {
+    const fileId = "00000000-0000-4000-8000-000000000098";
+    await pool.execute("DELETE FROM files WHERE file_id = ?", [fileId]);
+
+    const missingMessage = await rejectedMediaMessage(
+      "QB-MISSING-MEDIA",
+      fileId,
+    );
+    expect(missingMessage).toBe(
+      `Question media fileId "${fileId}" does not exist.`,
+    );
+
+    await insertReadyFile(fileId, "different-company-opaque");
+    const crossTenantMessage = await rejectedMediaMessage(
+      "QB-CROSS-TENANT-MEDIA",
+      fileId,
+    );
+    expect(crossTenantMessage).toBe(missingMessage);
+  });
+
+  it("distinguishes no media from an orphaned media reference on reads", async () => {
+    const fileId = "00000000-0000-4000-8000-000000000097";
+    await insertReadyFile(fileId);
+    const withMedia = await repository.createQuestion(
+      {
+        ...questionInput("QB-ORPHAN-MEDIA"),
+        media: [{ fileId, role: "stem", optionId: null, position: 0 }],
+      },
+      scope,
+    );
+    const withoutMedia = await repository.createQuestion(
+      questionInput("QB-NO-MEDIA"),
+      scope,
+    );
+
+    await pool.execute(
+      "UPDATE files SET status = 'deleted', deleted_at = ? WHERE file_id = ?",
+      [new Date(), fileId],
+    );
+
+    const orphaned = await repository.getQuestion(withMedia.id, scope);
+    const empty = await repository.getQuestion(withoutMedia.id, scope);
+    expect(orphaned?.media).toEqual([
+      {
+        fileId,
+        role: "stem",
+        optionId: null,
+        position: 0,
+        available: false,
+      },
+    ]);
+    expect(empty?.media).toEqual([]);
   });
 });
