@@ -1,0 +1,70 @@
+name: Temporary validate issue 49
+
+on:
+  push:
+    branches:
+      - codex/49-integration-test-rerunnable
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: foundation_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MYSQL_TEST_URL: mysql://root:root@127.0.0.1:3306/foundation_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/49-integration-test-rerunnable
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Enable pnpm and install
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+          corepack pnpm install --frozen-lockfile
+      - name: Format changed tests
+        run: |
+          corepack pnpm exec prettier --write \
+            packages/adapters/mysql/test/question-structure-repository.integration.test.ts \
+            packages/adapters/mysql/test/test-booklet-repository.integration.test.ts
+      - name: Commit formatting if needed
+        run: |
+          if ! git diff --quiet -- \
+            packages/adapters/mysql/test/question-structure-repository.integration.test.ts \
+            packages/adapters/mysql/test/test-booklet-repository.integration.test.ts; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add \
+              packages/adapters/mysql/test/question-structure-repository.integration.test.ts \
+              packages/adapters/mysql/test/test-booklet-repository.integration.test.ts
+            git diff --cached --check
+            git commit -m "format integration cleanup tests"
+            git push origin HEAD:codex/49-integration-test-rerunnable
+          fi
+      - name: Run full repository verify
+        run: corepack pnpm verify
+      - name: Run MySQL integration first pass
+        run: corepack pnpm test:integration:mysql
+      - name: Run MySQL integration second pass
+        run: corepack pnpm test:integration:mysql
+      - name: Run MySQL integration third pass
+        run: corepack pnpm test:integration:mysql
