@@ -8,5 +8,6 @@ export * from "./pool.js";
 export * from "./question-bank-repository.js";
 export * from "./question-import-repository.js";
 export * from "./question-structure-repository.js";
+export * from "./test-booklet-repository.js";
 export * from "./transaction.js";
 export * from "./user-repository.js";
