@@ -73,6 +73,19 @@ export function validateReadiness(payload) {
   }
 }
 
+/** firewalld 停用期間改走 `KNOWN-DISABLED` 的三項。 */
+export const FIREWALLD_CHECKS = new Set([
+  "firewalld-enabled-active",
+  "firewalld-boundary-rules",
+  "loopback-trusted",
+]);
+
+export const FIREWALLD_DISABLED_REASON =
+  "firewalld 已依 2026-08-16 裁示停用（它讓桌面版 listener 測試回 timeout 而非 ECONNREFUSED）";
+
+export const RESTART_CONDITION =
+  "scripts/cold-boot-acceptance.mjs 的 `firewalld 三項是條件式的` 註解";
+
 export function formatSkipReport(reason) {
   return acceptanceChecks.map((name) => `SKIP ${name}: ${reason}`);
 }
@@ -178,6 +191,40 @@ export async function runAcceptance({
   const wireGuardInterface = env.SERVER_FOUNDATION_WG_INTERFACE ?? "wg0";
   const wireGuardPort = env.SERVER_FOUNDATION_WG_PORT ?? "51820";
 
+  /**
+   * ⚠️⚠️ **firewalld 三項是「條件式」的，不是無條件跳過。**
+   *
+   * 2026-08-16 主公裁示停用這台的 firewalld，理由是它會卡住桌面版的開發：
+   * 兩台 WSL 走 mirrored（共用網路），firewalld 一啟動就讓「剛釋放的 loopback 埠」
+   * 回 timeout 而不是 ECONNREFUSED，`exam-admin-desktop` 的 `listener_policy.rs`
+   * 六發必紅、cargo test 從 0.4 秒拖到 135 秒。
+   * ⚠️ 在 firewalld 裡開洞**無效**（試過 loopback direct ACCEPT 與 raw NOTRACK 都沒用）
+   *    ⇒ 真正在擋的很可能是 Windows 側的 Hyper-V 防火牆，Linux 這邊只是觸發者。
+   *
+   * ## 🔁 重啟條件（做到任一項就把 firewalld 開回來）
+   *
+   * 1. Windows 側確認並放行：
+   *    `Get-NetFirewallHyperVVMSetting -PolicyStore ActiveStore`
+   *    若 `DefaultInboundAction` 是 `Block` ⇒ 改成 `Allow`。
+   * 2. 或這台不再與桌面版共用網路（例如改回 NAT 模式）。
+   *
+   * 然後：`sudo systemctl enable --now firewalld`
+   *
+   * ## ⚠️ 為什麼是「偵測」而不是「寫死跳過」
+   *
+   * 寫死跳過的話，**防火牆開回來之後這三項會繼續是空的** —— 那才是最危險的：
+   * 看起來有檢查、實際上什麼都不驗。
+   * ⇒ 這裡**每次執行都去問 firewalld 現在是不是 active**：
+   *    · active   ⇒ 三項照常驗（PASS／FAIL）
+   *    · inactive ⇒ 印 `KNOWN-DISABLED`，不計為失敗，但**每次都把重啟條件印出來**
+   */
+  let firewalldActive = true;
+  try {
+    await command("systemctl", ["is-active", "--quiet", "firewalld"]);
+  } catch {
+    firewalldActive = false;
+  }
+
   const checks = [
     [
       "server-autostart",
@@ -238,7 +285,13 @@ export async function runAcceptance({
   ];
 
   let failures = 0;
+  let knownDisabled = 0;
   for (const [name, check] of checks) {
+    if (!firewalldActive && FIREWALLD_CHECKS.has(name)) {
+      knownDisabled += 1;
+      console.log(`KNOWN-DISABLED ${name}: ${FIREWALLD_DISABLED_REASON}`);
+      continue;
+    }
     try {
       await check();
       console.log(`PASS ${name}`);
@@ -250,7 +303,14 @@ export async function runAcceptance({
     }
   }
 
-  return { skipped: false, failures };
+  if (knownDisabled > 0) {
+    // ⚠️ 每次都印，不讓它變成沒人看得見的背景狀態。
+    console.log(
+      `KNOWN-DISABLED 共 ${knownDisabled} 項 —— 重啟條件見 ${RESTART_CONDITION}`,
+    );
+  }
+
+  return { skipped: false, failures, knownDisabled };
 }
 
 const main = async () => {
