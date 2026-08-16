@@ -23,6 +23,7 @@ const otherScope = {
   tenantId: "37000000-0000-4000-8000-000000000099",
   actorUserId: "37000000-0000-4000-8000-000000000098",
 };
+const foreignFileId = "37000000-0000-4000-8000-000000000050";
 
 const questionInput = (code: string) => ({
   code,
@@ -52,12 +53,34 @@ const clusterInput = (code: string, questionIds: string[] = []) => ({
   questionIds,
 });
 
+const cleanupQuestionStructureFixtures = async (): Promise<void> => {
+  await pool.execute("DELETE FROM question_groups WHERE tenant_id IN (?, ?)", [
+    scope.tenantId,
+    otherScope.tenantId,
+  ]);
+  await pool.execute("DELETE FROM question_clusters WHERE tenant_id IN (?, ?)", [
+    scope.tenantId,
+    otherScope.tenantId,
+  ]);
+  await pool.execute("DELETE FROM question_files WHERE tenant_id IN (?, ?)", [
+    scope.tenantId,
+    otherScope.tenantId,
+  ]);
+  await pool.execute("DELETE FROM questions WHERE tenant_id IN (?, ?)", [
+    scope.tenantId,
+    otherScope.tenantId,
+  ]);
+  await pool.execute("DELETE FROM files WHERE file_id = ?", [foreignFileId]);
+};
+
 describe("MySqlQuestionStructureRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
+    await cleanupQuestionStructureFixtures();
   });
 
   afterAll(async () => {
+    await cleanupQuestionStructureFixtures();
     await pool.end();
   });
 
@@ -94,7 +117,6 @@ describe("MySqlQuestionStructureRepository", () => {
       ),
     ).rejects.toMatchObject({ code: "validation_error" });
 
-    const foreignFileId = "37000000-0000-4000-8000-000000000050";
     await pool.execute("DELETE FROM files WHERE file_id = ?", [foreignFileId]);
     await pool.execute(
       `INSERT INTO files
