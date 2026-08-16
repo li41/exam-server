@@ -1,9 +1,0 @@
-$ corepack pnpm typecheck && corepack pnpm lint && corepack pnpm format:check && corepack pnpm test && corepack pnpm build && corepack pnpm contract:fixtures && corepack pnpm test:create-user && corepack pnpm test:wg-sync && corepack pnpm test:offsite-backup && corepack pnpm test:boot-survival && corepack pnpm boot:accept && corepack pnpm test:outage-alert && corepack pnpm test:wg-contract-oracle && corepack pnpm wg:contract:check
-$ tsc -b && corepack pnpm --filter @server-foundation/api typecheck:test
-packages/testing/src/fake-examinee-repository.ts(356,5): error TS2322: Type '{ id: string; tenantId: string; parentId: string | null; name: string; proctorPassword: string | null; sortOrder: number; version: number; createdAt: string; updatedAt: string; deletedAt: string | null; } | undefined' is not assignable to type '{ id: string; tenantId: string; parentId: string | null; name: string; proctorPassword: string | null; sortOrder: number; version: number; createdAt: string; updatedAt: string; deletedAt: string | null; }'.
-  Type 'undefined' is not assignable to type '{ id: string; tenantId: string; parentId: string | null; name: string; proctorPassword: string | null; sortOrder: number; version: number; createdAt: string; updatedAt: string; deletedAt: string | null; }'.
-packages/adapters/mysql/src/examinee-repository.ts(535,9): error TS18048: 'parent' is possibly 'undefined'.
-apps/api/src/server.ts(20,8): error TS2307: Cannot find module '@server-foundation/mysql-adapter' or its corresponding type declarations.
-apps/api/src/server.ts(36,8): error TS2307: Cannot find module '@server-foundation/testing' or its corresponding type declarations.
-[ELIFECYCLE] Command failed with exit code 1.
-[ELIFECYCLE] Command failed with exit code 1.
