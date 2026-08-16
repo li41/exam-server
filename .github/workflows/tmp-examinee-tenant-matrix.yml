@@ -1,0 +1,46 @@
+name: Temporary examinee tenant mutation matrix
+
+on:
+  push:
+    branches:
+      - codex/48-examinees
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: foundation_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MYSQL_TEST_URL: mysql://root:root@127.0.0.1:3306/foundation_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/48-examinees
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Enable pnpm and install
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+          corepack pnpm install --frozen-lockfile
+      - name: Build workspace baseline
+        run: corepack pnpm build
+      - name: Run tenant mutation matrix
+        run: python3 .github/scripts/tmp-examinee-tenant-matrix.py
