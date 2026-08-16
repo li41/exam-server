@@ -192,9 +192,7 @@ describe("question bank API", () => {
     });
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({
-      media: [
-        { fileId: "existing-file-id", role: "stem", available: true },
-      ],
+      media: [{ fileId: "existing-file-id", role: "stem", available: true }],
     });
   });
 
@@ -320,9 +318,7 @@ describe("question bank API", () => {
       }),
     ).rejects.toMatchObject({
       code: "conflict",
-      message: expect.stringContaining(
-        "/api/v1/questions?fileId=file-guard",
-      ),
+      message: expect.stringContaining("/api/v1/questions?fileId=file-guard"),
     });
     expect(deleted).toBe(false);
   });

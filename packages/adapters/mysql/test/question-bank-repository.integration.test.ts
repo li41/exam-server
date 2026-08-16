@@ -153,14 +153,19 @@ describe("MySqlQuestionBankRepository", () => {
       { limit: 20, fileId },
       scope,
     );
-    expect(references.items.map((question) => question.id)).toContain(created.id);
+    expect(references.items.map((question) => question.id)).toContain(
+      created.id,
+    );
   });
 
   it("rejects missing and cross-tenant file ids without leaking their existence", async () => {
     const fileId = "00000000-0000-4000-8000-000000000098";
     await pool.execute("DELETE FROM files WHERE file_id = ?", [fileId]);
 
-    const missingMessage = await rejectedMediaMessage("QB-MISSING-MEDIA", fileId);
+    const missingMessage = await rejectedMediaMessage(
+      "QB-MISSING-MEDIA",
+      fileId,
+    );
     expect(missingMessage).toBe(
       `Question media fileId "${fileId}" does not exist.`,
     );
