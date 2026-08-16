@@ -119,6 +119,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/question-import/template",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/question-import",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/question-clusters",
       "authenticated": true,
       "idempotent": false
