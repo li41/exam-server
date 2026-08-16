@@ -24,7 +24,7 @@
   "dependencies": {
     "@server-foundation/api-contracts": "workspace:*",
     "@server-foundation/domain": "workspace:*",
-    "mysql2": "^3.23.2"
+    "mysql2": "^3.23.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
