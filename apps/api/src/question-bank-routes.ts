@@ -304,8 +304,6 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     "/questions/*",
     "/question-categories",
     "/question-categories/*",
-    "/question-import",
-    "/question-import/*",
     "/question-clusters",
     "/question-clusters/*",
     "/question-groups",
@@ -321,18 +319,28 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     return { tenantId: identity.tenantId, actorUserId: identity.userId };
   };
 
-  api.get("/question-import/template", () => questionImportTemplateResponse());
+  api.get("/question-import/template", authenticate, () =>
+    questionImportTemplateResponse(),
+  );
 
-  api.post("/question-import", async (context) => {
-    const result = await importQuestionWorkbookFromRequest(
-      context.req.raw,
-      requireImportService(),
-      scopeFor(context),
-    );
-    return result.ok
-      ? context.json({ imported: result.imported, errors: result.errors }, 201)
-      : context.json({ imported: 0, errors: result.errors }, 400);
-  });
+  api.post(
+    "/question-import",
+    authenticate,
+    enforceIdempotency,
+    async (context) => {
+      const result = await importQuestionWorkbookFromRequest(
+        context.req.raw,
+        requireImportService(),
+        scopeFor(context),
+      );
+      return result.ok
+        ? context.json(
+            { imported: result.imported, errors: result.errors },
+            201,
+          )
+        : context.json({ imported: 0, errors: result.errors }, 400);
+    },
+  );
 
   api.get(
     "/questions",
