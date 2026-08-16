@@ -88,6 +88,15 @@ describe("MySqlQuestionBankRepository", () => {
   });
 
   afterAll(async () => {
+    await pool.execute("DELETE FROM question_files WHERE tenant_id = ?", [
+      scope.tenantId,
+    ]);
+    await pool.execute("DELETE FROM questions WHERE tenant_id = ?", [
+      scope.tenantId,
+    ]);
+    await pool.execute("DELETE FROM question_categories WHERE tenant_id = ?", [
+      scope.tenantId,
+    ]);
     await pool.end();
   });
 
