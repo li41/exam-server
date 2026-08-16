@@ -16,8 +16,7 @@ export const ExamineeGroupSchema = z.object({
 });
 
 const ProctorPasswordSchema = z.preprocess(
-  (value) =>
-    typeof value === "string" && value.trim() === "" ? null : value,
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
   z.string().trim().min(4).max(50).nullable(),
 );
 
