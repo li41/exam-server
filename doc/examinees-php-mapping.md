@@ -124,8 +124,12 @@ one transaction that:
 4. soft-deletes the target and children.
 
 This preserves the PHP user-visible result (affected examinees become
-ungrouped) while retaining server audit/history semantics. The physical FK also
-uses `ON DELETE SET NULL` as a final hard-delete safety net.
+ungrouped) while retaining server audit/history semantics. The physical schema
+uses tenant-composite foreign keys for both parent groups and examinee group
+references, so even a repository tenant-filter regression cannot create a
+cross-tenant relation. Because the normal delete is soft-delete plus explicit
+unassignment, the composite examinee-group FK uses `ON DELETE RESTRICT` for
+unexpected physical hard deletes instead of PHP's `ON DELETE SET NULL`.
 
 ## Cross-tenant reference privacy
 
@@ -144,7 +148,7 @@ tenants resolve independently.
 姓名/代號/密碼 columns, optional group/note/status, identifier-as-upsert key,
 internal duplicate checks, existing-code checks, and transactional writes.
 
-The importer is intentionally split to a follow-up work order so this issue can
+The importer is intentionally split to follow-up issue #50 so this issue can
 land the authoritative repository, credential protection, tenant constraints,
 and CRUD surface first. The follow-up must use this repository/credential
 boundary rather than bypass it.
@@ -179,4 +183,4 @@ ephemeral MySQL test database.
 - No current server-side exam authority exists, so the PHP proctor-password
   conflict behavior cannot be validated end-to-end yet.
 - The PHP importer was inspected but is intentionally not reimplemented in this
-  issue; a follow-up work order owns that scope.
+  issue; follow-up #50 owns that scope.
