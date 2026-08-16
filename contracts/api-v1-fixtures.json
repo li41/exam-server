@@ -81,6 +81,85 @@
     "updatedAt": "2026-08-10T00:00:00.000Z",
     "deletedAt": null
   },
+  "CreateQuestionClusterSchema": {
+    "code": "CL-001",
+    "name": "Fixture cluster",
+    "stem": "Shared fixture stem",
+    "stemFileId": null,
+    "description": null,
+    "status": "enabled",
+    "questionIds": ["question-1"]
+  },
+  "UpdateQuestionClusterSchema": {
+    "name": "Updated fixture cluster",
+    "version": 1
+  },
+  "QuestionClusterSchema": {
+    "id": "cluster-1",
+    "tenantId": "company-opaque",
+    "createdBy": "user-1",
+    "code": "CL-001",
+    "name": "Fixture cluster",
+    "stem": "Shared fixture stem",
+    "stemFileId": null,
+    "description": null,
+    "status": "enabled",
+    "usageCount": 0,
+    "version": 1,
+    "items": [
+      { "questionId": "question-1", "position": 0, "available": true }
+    ],
+    "createdAt": "2026-08-10T00:00:00.000Z",
+    "updatedAt": "2026-08-10T00:00:00.000Z",
+    "deletedAt": null
+  },
+  "CreateQuestionGroupSchema": {
+    "code": "GR-001",
+    "name": "Fixture group",
+    "description": null,
+    "subjectId": null,
+    "flowMode": "normal",
+    "status": "enabled",
+    "items": [
+      { "itemType": "cluster", "clusterId": "cluster-1" },
+      { "itemType": "question", "questionId": "question-2" }
+    ]
+  },
+  "UpdateQuestionGroupSchema": {
+    "flowMode": "shuffle",
+    "version": 1
+  },
+  "QuestionGroupSchema": {
+    "id": "group-1",
+    "tenantId": "company-opaque",
+    "createdBy": "user-1",
+    "code": "GR-001",
+    "name": "Fixture group",
+    "description": null,
+    "subjectId": null,
+    "flowMode": "normal",
+    "status": "enabled",
+    "usageCount": 0,
+    "version": 1,
+    "items": [
+      {
+        "itemType": "cluster",
+        "clusterId": "cluster-1",
+        "position": 0,
+        "available": true
+      },
+      {
+        "itemType": "question",
+        "questionId": "question-2",
+        "position": 1,
+        "available": true
+      }
+    ],
+    "createdAt": "2026-08-10T00:00:00.000Z",
+    "updatedAt": "2026-08-10T00:00:00.000Z",
+    "deletedAt": null
+  },
+  "DeleteQuestionStructureQuerySchema": { "version": "1" },
   "FileMetadataSchema": {
     "fileId": "file-1",
     "ownerId": "user-1",
