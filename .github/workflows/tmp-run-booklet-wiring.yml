@@ -1,0 +1,47 @@
+name: Temporary run booklet wiring
+
+on:
+  push:
+    branches:
+      - codex/45-test-booklets
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/45-test-booklets
+      - run: python3 scripts/tmp-wire-test-booklets.py
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm exec prettier --write \
+            packages/api-contracts/src/index.ts \
+            packages/adapters/mysql/src/migrate.ts \
+            apps/api/src/question-bank-routes.ts \
+            apps/api/src/server.ts \
+            contracts/api-v1.json \
+            contracts/api-v1-fixtures.json
+      - name: Commit exact wiring files
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            packages/api-contracts/src/index.ts \
+            packages/adapters/mysql/src/migrate.ts \
+            apps/api/src/question-bank-routes.ts \
+            apps/api/src/server.ts \
+            contracts/api-v1.json \
+            contracts/api-v1-fixtures.json
+          git diff --cached --check
+          git commit -m "wire test booklet API"
+          git push origin HEAD:codex/45-test-booklets
