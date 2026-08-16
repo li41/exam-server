@@ -42,6 +42,7 @@ import type { Context } from "hono";
 import type { Logger } from "./logger.js";
 import {
   importQuestionWorkbookFromRequest,
+  questionImportFingerprintPayload,
   questionImportTemplateResponse,
 } from "./question-import-handler.js";
 
@@ -132,13 +133,21 @@ const requestFingerprint = async (
   context: Context<QuestionEnv>,
 ): Promise<string> => {
   const url = new URL(context.req.url);
+  const canonicalPath = canonicalApiPath(url.pathname);
   const hash = createHash("sha256");
   hash.update(context.req.method);
   hash.update("\n");
-  hash.update(`${canonicalApiPath(url.pathname)}${url.search}`);
+  hash.update(`${canonicalPath}${url.search}`);
   hash.update("\n");
   if (context.req.raw.body) {
-    hash.update(Buffer.from(await context.req.raw.clone().arrayBuffer()));
+    const importPayload =
+      context.req.method === "POST" &&
+      canonicalPath === `${LEGACY_API_PREFIX}/question-import`
+        ? await questionImportFingerprintPayload(context.req.raw.clone())
+        : null;
+    hash.update(
+      importPayload ?? Buffer.from(await context.req.raw.clone().arrayBuffer()),
+    );
   }
   return hash.digest("hex");
 };
