@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS examinee_groups (
       CASE WHEN deleted_at IS NULL THEN name ELSE NULL END
     ) STORED,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_examinee_group_id_tenant (id, tenant_id),
+  UNIQUE KEY uq_examinee_group_tenant_id (tenant_id, id),
   UNIQUE KEY uq_examinee_group_active_sibling_name (
     tenant_id, active_parent_scope, active_name
   ),
@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS examinee_groups (
     tenant_id, parent_id, sort_order, id
   ),
   CONSTRAINT fk_examinee_group_parent_tenant
-    FOREIGN KEY (parent_id, tenant_id)
-    REFERENCES examinee_groups (id, tenant_id)
+    FOREIGN KEY (tenant_id, parent_id)
+    REFERENCES examinee_groups (tenant_id, id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS examinees (
   KEY idx_examinees_tenant_group (tenant_id, group_id),
   KEY idx_examinees_tenant_status (tenant_id, status, updated_at, id),
   KEY idx_examinees_tenant_created_by (tenant_id, created_by),
-  CONSTRAINT fk_examinee_group
-    FOREIGN KEY (group_id) REFERENCES examinee_groups (id) ON DELETE SET NULL
+  CONSTRAINT fk_examinee_group_tenant
+    FOREIGN KEY (tenant_id, group_id)
+    REFERENCES examinee_groups (tenant_id, id)
+    ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
