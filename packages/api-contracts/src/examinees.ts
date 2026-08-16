@@ -96,6 +96,19 @@ export const DeleteExamineeQuerySchema = z.object({
   version: z.coerce.number().int().positive(),
 });
 
+export const ExamineeImportIssueSchema = z.object({
+  sheet: z.string().min(1).nullable(),
+  row: z.number().int().positive().nullable(),
+  identifier: z.string().min(1).max(100).nullable(),
+  message: z.string().min(1),
+});
+
+export const ExamineeImportResponseSchema = z.object({
+  imported: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  errors: z.array(ExamineeImportIssueSchema),
+});
+
 export type ExamineeStatus = z.infer<typeof ExamineeStatusSchema>;
 export type ExamineeGroup = z.infer<typeof ExamineeGroupSchema>;
 export type CreateExamineeGroupInput = z.infer<
@@ -111,3 +124,7 @@ export type Examinee = z.infer<typeof ExamineeSchema>;
 export type CreateExamineeInput = z.infer<typeof CreateExamineeSchema>;
 export type UpdateExamineeInput = z.infer<typeof UpdateExamineeSchema>;
 export type ExamineeListQuery = z.infer<typeof ExamineeListQuerySchema>;
+export type ExamineeImportIssue = z.infer<typeof ExamineeImportIssueSchema>;
+export type ExamineeImportResponse = z.infer<
+  typeof ExamineeImportResponseSchema
+>;

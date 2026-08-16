@@ -17,6 +17,8 @@ import {
   NotFoundError,
 } from "@server-foundation/domain";
 import type {
+  ExamineeImportRecord,
+  ExamineeImportWriteResult,
   ExamineeRepository,
   QuestionBankScope,
 } from "@server-foundation/domain";
@@ -69,6 +71,11 @@ type ExistingRow = RowDataPacket & {
 };
 type ParentRow = RowDataPacket & { id: string; parent_id: string | null };
 type IdRow = RowDataPacket & { id: string };
+type ImportExistingRow = RowDataPacket & {
+  id: string;
+  identifier: string;
+  code_digest: string;
+};
 
 const groupColumns = `
   g.id, g.tenant_id, g.parent_id, g.name, g.proctor_password_ciphertext,
@@ -467,6 +474,171 @@ export class MySqlExamineeRepository implements ExamineeRepository {
     const examinee = await this.getExaminee(id, scope);
     if (!examinee) throw new NotFoundError("examinee", id);
     return examinee;
+  }
+
+  async importExaminees(
+    records: ExamineeImportRecord[],
+    scope: QuestionBankScope,
+  ): Promise<ExamineeImportWriteResult> {
+    if (records.length === 0) {
+      return { imported: 0, updated: 0, errors: [] };
+    }
+
+    try {
+      return await withTransaction(this.pool, async (connection) => {
+        const errors: ExamineeImportWriteResult["errors"] = [];
+        const seenIdentifiers = new Set<string>();
+        const seenDigests = new Set<string>();
+        for (const record of records) {
+          const digest = this.credentials.digest(record.input.code);
+          if (seenIdentifiers.has(record.input.identifier)) {
+            errors.push({
+              sheet: record.sheet,
+              row: record.row,
+              identifier: record.input.identifier,
+              message: `代號「${record.input.identifier}」在匯入檔案中重複出現。`,
+            });
+          }
+          if (seenDigests.has(digest)) {
+            errors.push({
+              sheet: record.sheet,
+              row: record.row,
+              identifier: record.input.identifier,
+              message: "密碼在匯入檔案中重複出現。",
+            });
+          }
+          seenIdentifiers.add(record.input.identifier);
+          seenDigests.add(digest);
+        }
+        if (errors.length > 0) {
+          return { imported: 0, updated: 0, errors };
+        }
+
+        const [existingRows] = await connection.execute<ImportExistingRow[]>(
+          `SELECT id, identifier, code_digest
+           FROM examinees
+           WHERE tenant_id = ? AND deleted_at IS NULL
+           FOR UPDATE`,
+          [scope.tenantId],
+        );
+        const byIdentifier = new Map(
+          existingRows.map((row) => [row.identifier, row]),
+        );
+        const byDigest = new Map(
+          existingRows.map((row) => [row.code_digest, row]),
+        );
+
+        const groupIds = [
+          ...new Set(
+            records
+              .map((record) => record.input.groupId)
+              .filter((id): id is string => id !== null),
+          ),
+        ];
+        const validGroupIds = new Set<string>();
+        if (groupIds.length > 0) {
+          const placeholders = groupIds.map(() => "?").join(", ");
+          const [groupRows] = await connection.execute<IdRow[]>(
+            `SELECT id FROM examinee_groups
+             WHERE tenant_id = ? AND deleted_at IS NULL
+               AND id IN (${placeholders})
+             FOR UPDATE`,
+            [scope.tenantId, ...groupIds],
+          );
+          for (const row of groupRows) validGroupIds.add(row.id);
+        }
+
+        for (const record of records) {
+          if (
+            record.input.groupId !== null &&
+            !validGroupIds.has(record.input.groupId)
+          ) {
+            errors.push({
+              sheet: record.sheet,
+              row: record.row,
+              identifier: record.input.identifier,
+              message: `Examinee groupId "${record.input.groupId}" does not exist.`,
+            });
+            continue;
+          }
+          const current = byIdentifier.get(record.input.identifier);
+          const owner = byDigest.get(
+            this.credentials.digest(record.input.code),
+          );
+          if (owner && owner.id !== current?.id) {
+            errors.push({
+              sheet: record.sheet,
+              row: record.row,
+              identifier: record.input.identifier,
+              message: "受測者密碼已存在於此租戶。",
+            });
+          }
+        }
+        if (errors.length > 0) {
+          return { imported: 0, updated: 0, errors };
+        }
+
+        const now = new Date();
+        let imported = 0;
+        let updated = 0;
+        for (const record of records) {
+          const current = byIdentifier.get(record.input.identifier);
+          const ciphertext = this.credentials.protect(record.input.code);
+          const digest = this.credentials.digest(record.input.code);
+          if (current) {
+            await connection.execute<ResultSetHeader>(
+              `UPDATE examinees
+               SET group_id = ?, code_ciphertext = ?, code_digest = ?,
+                   name = ?, note = ?, status = ?,
+                   version = version + 1, updated_at = ?
+               WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
+              [
+                record.input.groupId,
+                ciphertext,
+                digest,
+                record.input.name,
+                record.input.note,
+                record.input.status,
+                now,
+                current.id,
+                scope.tenantId,
+              ],
+            );
+            updated += 1;
+          } else {
+            await connection.execute<ResultSetHeader>(
+              `INSERT INTO examinees (
+                id, tenant_id, group_id, created_by, code_ciphertext, code_digest,
+                identifier, name, note, status, version, created_at, updated_at, deleted_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
+              [
+                randomUUID(),
+                scope.tenantId,
+                record.input.groupId,
+                scope.actorUserId,
+                ciphertext,
+                digest,
+                record.input.identifier,
+                record.input.name,
+                record.input.note,
+                record.input.status,
+                now,
+                now,
+              ],
+            );
+            imported += 1;
+          }
+        }
+        return { imported, updated, errors: [] };
+      });
+    } catch (error) {
+      if (isDuplicateEntry(error)) {
+        throw new ConflictError(
+          "Examinee identifier or password already exists in this tenant.",
+        );
+      }
+      throw error;
+    }
   }
 
   async softDeleteExaminee(

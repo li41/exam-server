@@ -10,7 +10,11 @@ import type {
   UpdateExamineeInput,
 } from "@server-foundation/api-contracts";
 import { NotFoundError } from "../errors.js";
-import type { ExamineeRepository } from "../ports/examinee-repository.js";
+import type {
+  ExamineeImportRecord,
+  ExamineeImportWriteResult,
+  ExamineeRepository,
+} from "../ports/examinee-repository.js";
 import type { QuestionBankScope } from "../ports/question-bank-repository.js";
 
 export class ExamineeService {
@@ -93,6 +97,13 @@ export class ExamineeService {
   ): Promise<Examinee> {
     await this.getExaminee(id, scope);
     return this.repository.updateExaminee(id, input, scope);
+  }
+
+  importExaminees(
+    records: ExamineeImportRecord[],
+    scope: QuestionBankScope,
+  ): Promise<ExamineeImportWriteResult> {
+    return this.repository.importExaminees(records, scope);
   }
 
   async softDeleteExaminee(

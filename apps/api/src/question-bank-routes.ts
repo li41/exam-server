@@ -57,6 +57,10 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Logger } from "./logger.js";
 import {
+  examineeImportFingerprintPayload,
+  importExamineeWorkbookFromRequest,
+} from "./examinee-import-handler.js";
+import {
   importQuestionWorkbookFromRequest,
   questionImportFingerprintPayload,
   questionImportTemplateResponse,
@@ -162,7 +166,10 @@ const requestFingerprint = async (
       context.req.method === "POST" &&
       canonicalPath === `${LEGACY_API_PREFIX}/question-import`
         ? await questionImportFingerprintPayload(context.req.raw.clone())
-        : null;
+        : context.req.method === "POST" &&
+            canonicalPath === `${LEGACY_API_PREFIX}/examinee-import`
+          ? await examineeImportFingerprintPayload(context.req.raw.clone())
+          : null;
     hash.update(
       importPayload ?? Buffer.from(await context.req.raw.clone().arrayBuffer()),
     );
@@ -789,6 +796,29 @@ const createQuestionRouter = (dependencies: Dependencies) => {
       ),
       201,
     ),
+  );
+
+  api.post(
+    "/examinee-import",
+    authenticate,
+    enforceIdempotency,
+    async (context) => {
+      const result = await importExamineeWorkbookFromRequest(
+        context.req.raw,
+        requireExamineeService(),
+        scopeFor(context),
+      );
+      return result.ok
+        ? context.json(
+            {
+              imported: result.imported,
+              updated: result.updated,
+              errors: result.errors,
+            },
+            201,
+          )
+        : context.json({ imported: 0, updated: 0, errors: result.errors }, 400);
+    },
   );
 
   api.get(

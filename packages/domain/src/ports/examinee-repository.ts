@@ -5,11 +5,24 @@ import type {
   ExamineeGroup,
   ExamineeGroupListQuery,
   ExamineeListQuery,
+  ExamineeImportIssue,
   Page,
   UpdateExamineeGroupInput,
   UpdateExamineeInput,
 } from "@server-foundation/api-contracts";
 import type { QuestionBankScope } from "./question-bank-repository.js";
+
+export type ExamineeImportRecord = {
+  sheet: string;
+  row: number;
+  input: CreateExamineeInput;
+};
+
+export type ExamineeImportWriteResult = {
+  imported: number;
+  updated: number;
+  errors: ExamineeImportIssue[];
+};
 
 export interface ExamineeRepository {
   listGroups(
@@ -50,6 +63,10 @@ export interface ExamineeRepository {
     input: UpdateExamineeInput,
     scope: QuestionBankScope,
   ): Promise<Examinee>;
+  importExaminees(
+    records: ExamineeImportRecord[],
+    scope: QuestionBankScope,
+  ): Promise<ExamineeImportWriteResult>;
   softDeleteExaminee(
     id: string,
     version: number,

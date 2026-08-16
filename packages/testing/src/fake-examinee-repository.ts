@@ -16,6 +16,8 @@ import {
   NotFoundError,
 } from "@server-foundation/domain";
 import type {
+  ExamineeImportRecord,
+  ExamineeImportWriteResult,
   ExamineeRepository,
   QuestionBankScope,
 } from "@server-foundation/domain";
@@ -310,6 +312,116 @@ export class InMemoryExamineeRepository implements ExamineeRepository {
     examinee.version += 1;
     examinee.updatedAt = new Date().toISOString();
     return structuredClone(examinee);
+  }
+
+  async importExaminees(
+    records: ExamineeImportRecord[],
+    scope: QuestionBankScope,
+  ): Promise<ExamineeImportWriteResult> {
+    const errors: ExamineeImportWriteResult["errors"] = [];
+    const seenIdentifiers = new Set<string>();
+    const seenCodes = new Set<string>();
+    for (const record of records) {
+      if (seenIdentifiers.has(record.input.identifier)) {
+        errors.push({
+          sheet: record.sheet,
+          row: record.row,
+          identifier: record.input.identifier,
+          message: `代號「${record.input.identifier}」在匯入檔案中重複出現。`,
+        });
+      }
+      if (seenCodes.has(record.input.code)) {
+        errors.push({
+          sheet: record.sheet,
+          row: record.row,
+          identifier: record.input.identifier,
+          message: "密碼在匯入檔案中重複出現。",
+        });
+      }
+      seenIdentifiers.add(record.input.identifier);
+      seenCodes.add(record.input.code);
+
+      if (record.input.groupId !== null) {
+        const group = this.groups.find(
+          (candidate) =>
+            candidate.id === record.input.groupId &&
+            candidate.tenantId === scope.tenantId &&
+            !candidate.deletedAt,
+        );
+        if (!group) {
+          errors.push({
+            sheet: record.sheet,
+            row: record.row,
+            identifier: record.input.identifier,
+            message: `Examinee groupId "${record.input.groupId}" does not exist.`,
+          });
+        }
+      }
+
+      const current = this.examinees.find(
+        (candidate) =>
+          candidate.tenantId === scope.tenantId &&
+          !candidate.deletedAt &&
+          candidate.identifier === record.input.identifier,
+      );
+      const owner = this.examinees.find(
+        (candidate) =>
+          candidate.tenantId === scope.tenantId &&
+          !candidate.deletedAt &&
+          candidate.code === record.input.code,
+      );
+      if (owner && owner.id !== current?.id) {
+        errors.push({
+          sheet: record.sheet,
+          row: record.row,
+          identifier: record.input.identifier,
+          message: "受測者密碼已存在於此租戶。",
+        });
+      }
+    }
+    if (errors.length > 0) {
+      return { imported: 0, updated: 0, errors };
+    }
+
+    const now = new Date().toISOString();
+    let imported = 0;
+    let updated = 0;
+    for (const record of records) {
+      const existing = this.examinees.find(
+        (candidate) =>
+          candidate.tenantId === scope.tenantId &&
+          !candidate.deletedAt &&
+          candidate.identifier === record.input.identifier,
+      );
+      if (existing) {
+        existing.groupId = record.input.groupId;
+        existing.code = record.input.code;
+        existing.name = record.input.name;
+        existing.note = record.input.note;
+        existing.status = record.input.status;
+        existing.version += 1;
+        existing.updatedAt = now;
+        updated += 1;
+      } else {
+        this.examinees.push({
+          id: `examinee-${this.nextExamineeId++}`,
+          tenantId: scope.tenantId,
+          groupId: record.input.groupId,
+          createdBy: scope.actorUserId,
+          code: record.input.code,
+          identifier: record.input.identifier,
+          name: record.input.name,
+          note: record.input.note,
+          status: record.input.status,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+        });
+        imported += 1;
+      }
+    }
+    return { imported, updated, errors: [] };
   }
 
   async softDeleteExaminee(
