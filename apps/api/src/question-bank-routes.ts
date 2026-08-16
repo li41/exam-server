@@ -4,13 +4,20 @@ import {
   API_VERSION,
   API_VERSION_PREFIX,
   CreateQuestionCategorySchema,
+  CreateQuestionClusterSchema,
+  CreateQuestionGroupSchema,
   CreateQuestionSchema,
   DeleteQuestionCategoryQuerySchema,
   DeleteQuestionQuerySchema,
+  DeleteQuestionStructureQuerySchema,
   LEGACY_API_PREFIX,
   QuestionCategoryListQuerySchema,
+  QuestionClusterListQuerySchema,
+  QuestionGroupListQuerySchema,
   QuestionListQuerySchema,
   UpdateQuestionCategorySchema,
+  UpdateQuestionClusterSchema,
+  UpdateQuestionGroupSchema,
   UpdateQuestionSchema,
 } from "@server-foundation/api-contracts";
 import type { AuthIdentity } from "@server-foundation/api-contracts";
@@ -19,12 +26,14 @@ import {
   ConflictError,
   DomainError,
   QuestionBankService,
+  QuestionStructureService,
   UnauthorizedError,
 } from "@server-foundation/domain";
 import type {
   AuthenticationService,
   IdempotencyStore,
   QuestionBankRepository,
+  QuestionStructureRepository,
 } from "@server-foundation/domain";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -44,6 +53,7 @@ type MountTarget = {
 
 type Dependencies = {
   repository: QuestionBankRepository;
+  structureRepository?: QuestionStructureRepository;
   authenticationService?: AuthenticationService;
   idempotencyStore?: IdempotencyStore;
   idempotencyTtlSeconds?: number;
@@ -129,6 +139,16 @@ const requestFingerprint = async (
 const createQuestionRouter = (dependencies: Dependencies) => {
   const api = new Hono<QuestionEnv>();
   const service = new QuestionBankService(dependencies.repository);
+  const structureService = dependencies.structureRepository
+    ? new QuestionStructureService(dependencies.structureRepository)
+    : undefined;
+
+  const requireStructureService = (): QuestionStructureService => {
+    if (!structureService) {
+      throw new CapabilityMissingError("question structures");
+    }
+    return structureService;
+  };
 
   const authenticate = async (
     context: Context<QuestionEnv>,
@@ -253,14 +273,19 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     }
   };
 
-  api.use("/questions", authenticate);
-  api.use("/questions/*", authenticate);
-  api.use("/question-categories", authenticate);
-  api.use("/question-categories/*", authenticate);
-  api.use("/questions", enforceIdempotency);
-  api.use("/questions/*", enforceIdempotency);
-  api.use("/question-categories", enforceIdempotency);
-  api.use("/question-categories/*", enforceIdempotency);
+  for (const path of [
+    "/questions",
+    "/questions/*",
+    "/question-categories",
+    "/question-categories/*",
+    "/question-clusters",
+    "/question-clusters/*",
+    "/question-groups",
+    "/question-groups/*",
+  ]) {
+    api.use(path, authenticate);
+    api.use(path, enforceIdempotency);
+  }
 
   const scopeFor = (context: IdentityContext) => {
     const identity = context.get("identity");
@@ -410,6 +435,158 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     ),
     async (context) => {
       await service.softDeleteCategory(
+        context.req.param("id"),
+        context.req.valid("query").version,
+        scopeFor(context),
+      );
+      return context.body(null, 204);
+    },
+  );
+
+  api.get(
+    "/question-clusters",
+    zValidator("query", QuestionClusterListQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid question cluster query parameters.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireStructureService().listClusters(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.get("/question-clusters/:id", async (context) =>
+    context.json(
+      await requireStructureService().getCluster(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+    ),
+  );
+
+  api.post(
+    "/question-clusters",
+    zValidator("json", CreateQuestionClusterSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid question cluster payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireStructureService().createCluster(
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+        201,
+      ),
+  );
+
+  api.patch(
+    "/question-clusters/:id",
+    zValidator("json", UpdateQuestionClusterSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid question cluster payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireStructureService().updateCluster(
+          context.req.param("id"),
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.delete(
+    "/question-clusters/:id",
+    zValidator("query", DeleteQuestionStructureQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "A valid version is required.");
+      }
+    }),
+    async (context) => {
+      await requireStructureService().softDeleteCluster(
+        context.req.param("id"),
+        context.req.valid("query").version,
+        scopeFor(context),
+      );
+      return context.body(null, 204);
+    },
+  );
+
+  api.get(
+    "/question-groups",
+    zValidator("query", QuestionGroupListQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid question group query parameters.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireStructureService().listGroups(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.get("/question-groups/:id", async (context) =>
+    context.json(
+      await requireStructureService().getGroup(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+    ),
+  );
+
+  api.post(
+    "/question-groups",
+    zValidator("json", CreateQuestionGroupSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid question group payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireStructureService().createGroup(
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+        201,
+      ),
+  );
+
+  api.patch(
+    "/question-groups/:id",
+    zValidator("json", UpdateQuestionGroupSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid question group payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireStructureService().updateGroup(
+          context.req.param("id"),
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.delete(
+    "/question-groups/:id",
+    zValidator("query", DeleteQuestionStructureQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "A valid version is required.");
+      }
+    }),
+    async (context) => {
+      await requireStructureService().softDeleteGroup(
         context.req.param("id"),
         context.req.valid("query").version,
         scopeFor(context),
