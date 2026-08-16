@@ -36,12 +36,33 @@ const groupInput = (code: string) => ({
   items: [],
 });
 
+const cleanupTestBookletFixtures = async (): Promise<void> => {
+  await pool.execute("DELETE FROM test_booklets WHERE tenant_id IN (?, ?)", [
+    scope.tenantId,
+    otherScope.tenantId,
+  ]);
+  await pool.execute("DELETE FROM question_groups WHERE tenant_id IN (?, ?)", [
+    scope.tenantId,
+    otherScope.tenantId,
+  ]);
+  await pool.execute(
+    "DELETE FROM question_categories WHERE tenant_id IN (?, ?) AND parent_id IS NOT NULL",
+    [scope.tenantId, otherScope.tenantId],
+  );
+  await pool.execute(
+    "DELETE FROM question_categories WHERE tenant_id IN (?, ?) AND parent_id IS NULL",
+    [scope.tenantId, otherScope.tenantId],
+  );
+};
+
 describe("MySqlTestBookletRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
+    await cleanupTestBookletFixtures();
   });
 
   afterAll(async () => {
+    await cleanupTestBookletFixtures();
     await pool.end();
   });
 
