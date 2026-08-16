@@ -458,7 +458,8 @@ export class InMemoryQuestionStructureRepository
       if (item.itemType !== "cluster") continue;
       const cluster = this.findCluster(item.clusterId, scope);
       if (!cluster) {
-        validationError(
+        throw new DomainError(
+          "validation_error",
           `Question group clusterId "${item.clusterId}" does not exist.`,
         );
       }
