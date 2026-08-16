@@ -47,28 +47,29 @@ const createExaminee = (
     scope,
   );
 
+const cleanupFixtures = async (): Promise<void> => {
+  await pool.execute("DELETE FROM examinees WHERE tenant_id IN (?, ?)", [
+    scope.tenantId,
+    otherScope.tenantId,
+  ]);
+  await pool.execute(
+    "DELETE FROM examinee_groups WHERE tenant_id IN (?, ?) AND parent_id IS NOT NULL",
+    [scope.tenantId, otherScope.tenantId],
+  );
+  await pool.execute(
+    "DELETE FROM examinee_groups WHERE tenant_id IN (?, ?) AND parent_id IS NULL",
+    [scope.tenantId, otherScope.tenantId],
+  );
+};
+
 describe("MySqlExamineeRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
-    await pool.execute("DELETE FROM examinees WHERE tenant_id IN (?, ?)", [
-      scope.tenantId,
-      otherScope.tenantId,
-    ]);
-    await pool.execute(
-      "DELETE FROM examinee_groups WHERE tenant_id IN (?, ?)",
-      [scope.tenantId, otherScope.tenantId],
-    );
+    await cleanupFixtures();
   });
 
   afterAll(async () => {
-    await pool.execute("DELETE FROM examinees WHERE tenant_id IN (?, ?)", [
-      scope.tenantId,
-      otherScope.tenantId,
-    ]);
-    await pool.execute(
-      "DELETE FROM examinee_groups WHERE tenant_id IN (?, ?)",
-      [scope.tenantId, otherScope.tenantId],
-    );
+    await cleanupFixtures();
     await pool.end();
   });
 
