@@ -1,11 +1,13 @@
 import { constants } from "node:fs";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { createClient } from "redis";
 import { Argon2PasswordHasher, AuthService } from "@server-foundation/auth";
 import {
+  AesGcmExamineeCredentialProtector,
   createMySqlPool,
   MySqlAuditLog,
+  MySqlExamineeRepository,
   MySqlFileMetadataStore,
   MySqlIdempotencyStore,
   MySqlItemRepository,
@@ -14,6 +16,7 @@ import {
   MySqlQuestionStructureRepository,
   MySqlTestBookletRepository,
   MySqlUserRepository,
+  parseExamineeCredentialMasterKey,
 } from "@server-foundation/mysql-adapter";
 import {
   RedisRateLimiter,
@@ -24,6 +27,7 @@ import {
   startFileCleanupJob,
 } from "@server-foundation/local-fs-storage";
 import {
+  createInMemoryExamineeRepository,
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
   createInMemoryQuestionImportRepository,
@@ -69,6 +73,24 @@ const main = async () => {
         questionBankRepository,
         questionStructureRepository,
       );
+  const examineeRepository = pool
+    ? new MySqlExamineeRepository(
+        pool,
+        new AesGcmExamineeCredentialProtector(
+          parseExamineeCredentialMasterKey(
+            await readFile(
+              config.examineeCredentialKeyFile ??
+                (() => {
+                  throw new Error(
+                    "EXAMINEE_CREDENTIAL_KEY_FILE is required when MYSQL_URL is configured.",
+                  );
+                })(),
+              "utf8",
+            ),
+          ),
+        ),
+      )
+    : createInMemoryExamineeRepository();
   const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
@@ -158,6 +180,7 @@ const main = async () => {
     importRepository: questionImportRepository,
     structureRepository: questionStructureRepository,
     bookletRepository: testBookletRepository,
+    examineeRepository,
     authenticationService,
     idempotencyStore,
     idempotencyTtlSeconds: config.idempotencyTtlSeconds,
@@ -182,6 +205,7 @@ const main = async () => {
     questionImport: "enabled",
     questionStructures: "enabled",
     testBooklets: "enabled",
+    examinees: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
