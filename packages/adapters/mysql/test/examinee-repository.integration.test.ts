@@ -442,15 +442,19 @@ describe("MySqlExamineeRepository", () => {
     await repository.softDeleteGroup(root.id, root.version, scope);
     await expect(repository.getGroup(root.id, scope)).resolves.toBeNull();
     await expect(repository.getGroup(child.id, scope)).resolves.toBeNull();
-    await expect(repository.getGroup(foreignChildId, otherScope)).resolves.toMatchObject(
-      { id: foreignChildId, tenantId: otherScope.tenantId, deletedAt: null },
-    );
-    await expect(repository.getExaminee(childExaminee.id, scope)).resolves.toMatchObject(
-      { groupId: null, version: 2 },
-    );
-    await expect(repository.getExaminee(localExamineeId, scope)).resolves.toMatchObject(
-      { groupId: foreignChildId, version: 1 },
-    );
+    await expect(
+      repository.getGroup(foreignChildId, otherScope),
+    ).resolves.toMatchObject({
+      id: foreignChildId,
+      tenantId: otherScope.tenantId,
+      deletedAt: null,
+    });
+    await expect(
+      repository.getExaminee(childExaminee.id, scope),
+    ).resolves.toMatchObject({ groupId: null, version: 2 });
+    await expect(
+      repository.getExaminee(localExamineeId, scope),
+    ).resolves.toMatchObject({ groupId: foreignChildId, version: 1 });
     await expect(
       repository.getExaminee(foreignExamineeId, otherScope),
     ).resolves.toMatchObject({ groupId: root.id, version: 1 });
@@ -548,7 +552,9 @@ describe("MySqlExamineeRepository", () => {
         scope,
       ),
     ).rejects.toBeInstanceOf(NotFoundError);
-    await expect(repository.getGroup(foreign.id, otherScope)).resolves.toMatchObject({
+    await expect(
+      repository.getGroup(foreign.id, otherScope),
+    ).resolves.toMatchObject({
       name: "Foreign protected group",
       version: foreign.version,
       deletedAt: null,
@@ -557,7 +563,9 @@ describe("MySqlExamineeRepository", () => {
     await expect(
       repository.softDeleteGroup(foreign.id, foreign.version, scope),
     ).rejects.toBeInstanceOf(NotFoundError);
-    await expect(repository.getGroup(foreign.id, otherScope)).resolves.toMatchObject({
+    await expect(
+      repository.getGroup(foreign.id, otherScope),
+    ).resolves.toMatchObject({
       name: "Foreign protected group",
       version: foreign.version,
       deletedAt: null,
