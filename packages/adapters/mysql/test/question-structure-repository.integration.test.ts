@@ -58,10 +58,10 @@ const cleanupQuestionStructureFixtures = async (): Promise<void> => {
     scope.tenantId,
     otherScope.tenantId,
   ]);
-  await pool.execute("DELETE FROM question_clusters WHERE tenant_id IN (?, ?)", [
-    scope.tenantId,
-    otherScope.tenantId,
-  ]);
+  await pool.execute(
+    "DELETE FROM question_clusters WHERE tenant_id IN (?, ?)",
+    [scope.tenantId, otherScope.tenantId],
+  );
   await pool.execute("DELETE FROM question_files WHERE tenant_id IN (?, ?)", [
     scope.tenantId,
     otherScope.tenantId,
