@@ -8,11 +8,15 @@ export type ServerConfig = {
   mysqlUrl?: string;
   redisUrl?: string;
   fileStorageRoot?: string;
+  deploymentTenantUuid?: string;
   fileCleanupIntervalMs: number;
   idempotencyTtlSeconds: number;
   trustProxyHeaders: boolean;
   shutdownTimeoutMs: number;
 };
+
+const tenantUuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 const parseInteger = (
   name: string,
@@ -77,6 +81,17 @@ const parseOptionalUrl = (
   return value;
 };
 
+const parseOptionalTenantUuid = (raw: string | undefined): string | undefined => {
+  const value = raw?.trim().toLowerCase();
+  if (!value) return undefined;
+  if (!tenantUuidPattern.test(value)) {
+    throw new Error(
+      "DEPLOYMENT_TENANT_UUID must be an exam-control tenant_uuid UUIDv4.",
+    );
+  }
+  return value;
+};
+
 const parseNodeEnv = (raw: string | undefined): ServerConfig["nodeEnv"] => {
   const value = raw?.trim() || "development";
   if (value === "development" || value === "test" || value === "production") {
@@ -95,6 +110,9 @@ export const loadConfig = (
     "rediss:",
   ]);
   const fileStorageRoot = env.FILE_STORAGE_ROOT?.trim() || undefined;
+  const deploymentTenantUuid = parseOptionalTenantUuid(
+    env.DEPLOYMENT_TENANT_UUID,
+  );
   const fileCleanupIntervalSeconds = parseInteger(
     "FILE_CLEANUP_INTERVAL_SECONDS",
     env.FILE_CLEANUP_INTERVAL_SECONDS,
@@ -106,9 +124,12 @@ export const loadConfig = (
   );
   const production = nodeEnv === "production";
 
-  if (production && (!mysqlUrl || !redisUrl || !fileStorageRoot)) {
+  if (
+    production &&
+    (!mysqlUrl || !redisUrl || !fileStorageRoot || !deploymentTenantUuid)
+  ) {
     throw new Error(
-      "MYSQL_URL, REDIS_URL, and FILE_STORAGE_ROOT are required when NODE_ENV=production.",
+      "MYSQL_URL, REDIS_URL, FILE_STORAGE_ROOT, and DEPLOYMENT_TENANT_UUID are required when NODE_ENV=production.",
     );
   }
   if (redisUrl && !mysqlUrl) {
@@ -127,6 +148,7 @@ export const loadConfig = (
     mysqlUrl,
     redisUrl,
     fileStorageRoot,
+    deploymentTenantUuid,
     fileCleanupIntervalMs: fileCleanupIntervalSeconds * 1000,
     idempotencyTtlSeconds: parseInteger(
       "IDEMPOTENCY_TTL_SECONDS",
