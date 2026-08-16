@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: github.event.head_commit.message == 'add temporary issue 50 contract cleanup workflow'
+    if: github.event.head_commit.message == 'retry temporary issue 50 contract cleanup workflow'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -28,68 +28,64 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          def replace_once(path, old, new):
+          def insert_before_unique_line(path, needle, lines):
               p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: marker count {count}, expected 1")
-              p.write_text(text.replace(old, new, 1))
+              current = p.read_text().splitlines(keepends=True)
+              matches = [i for i, line in enumerate(current) if line.strip() == needle]
+              if len(matches) != 1:
+                  raise SystemExit(f"{path}: {needle!r} matched {len(matches)}, expected 1")
+              index = matches[0]
+              current[index:index] = [line + "\n" for line in lines]
+              p.write_text("".join(current))
 
-          replace_once(
+          api = Path("contracts/api-v1.json")
+          lines = api.read_text().splitlines(keepends=True)
+          matches = [i for i, line in enumerate(lines) if line.strip() == '"path": "/api/v1/examinees",']
+          if len(matches) != 1:
+              raise SystemExit(f"examinees endpoint path matched {len(matches)}, expected 1")
+          path_index = matches[0]
+          object_start = path_index - 2
+          if lines[object_start].strip() != "{":
+              raise SystemExit("could not locate examinees endpoint object start")
+          endpoint_lines = [
+              "    {\n",
+              '      "method": "POST",\n',
+              '      "path": "/api/v1/examinee-import",\n',
+              '      "authenticated": true,\n',
+              '      "idempotent": true\n',
+              "    },\n",
+          ]
+          lines[object_start:object_start] = endpoint_lines
+          api.write_text("".join(lines))
+
+          insert_before_unique_line(
               "contracts/api-v1.json",
-              '''    {
-              "method": "GET",
-              "path": "/api/v1/examinees",
-              "authenticated": true,
-              "idempotent": false
-            },
-          ''',
-              '''    {
-              "method": "POST",
-              "path": "/api/v1/examinee-import",
-              "authenticated": true,
-              "idempotent": true
-            },
-            {
-              "method": "GET",
-              "path": "/api/v1/examinees",
-              "authenticated": true,
-              "idempotent": false
-            },
-          ''',
+              '"FileMetadata": {',
+              [
+                  '    "ExamineeImport": {',
+                  '      "imported": { "type": "nonnegative-integer", "required": true },',
+                  '      "updated": { "type": "nonnegative-integer", "required": true },',
+                  '      "errors": { "type": "examinee-import-issue-array", "required": true }',
+                  '    },',
+              ],
           )
 
-          replace_once(
-              "contracts/api-v1.json",
-              '''    "FileMetadata": {
-          ''',
-              '''    "ExamineeImport": {
-              "imported": { "type": "nonnegative-integer", "required": true },
-              "updated": { "type": "nonnegative-integer", "required": true },
-              "errors": { "type": "examinee-import-issue-array", "required": true }
-            },
-            "FileMetadata": {
-          ''',
-          )
-
-          replace_once(
+          insert_before_unique_line(
               "contracts/api-v1-fixtures.json",
-              '''  "FileMetadataSchema": {
-          ''',
-              '''  "ExamineeImportIssueSchema": {
-              "sheet": "受測者",
-              "row": 2,
-              "identifier": "student-001",
-              "message": "Fixture import error"
-            },
-            "ExamineeImportResponseSchema": {
-              "imported": 1,
-              "updated": 0,
-              "errors": []
-            },
-            "FileMetadataSchema": {
-          ''',
+              '"FileMetadataSchema": {',
+              [
+                  '  "ExamineeImportIssueSchema": {',
+                  '    "sheet": "受測者",',
+                  '    "row": 2,',
+                  '    "identifier": "student-001",',
+                  '    "message": "Fixture import error"',
+                  '  },',
+                  '  "ExamineeImportResponseSchema": {',
+                  '    "imported": 1,',
+                  '    "updated": 0,',
+                  '    "errors": []',
+                  '  },',
+              ],
           )
           PY
           node -e 'JSON.parse(require("fs").readFileSync("contracts/api-v1.json","utf8")); JSON.parse(require("fs").readFileSync("contracts/api-v1-fixtures.json","utf8"))'
