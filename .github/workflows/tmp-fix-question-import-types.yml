@@ -1,0 +1,36 @@
+name: Temporary fix question import types
+
+on:
+  push:
+    branches:
+      - codex/44-question-import
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/44-question-import
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/api/src/question-import.ts')
+          s = p.read_text()
+          old = '    const sheet = XLSX.utils.aoa_to_sheet([headers, row]);'
+          new = '    const sheet = XLSX.utils.aoa_to_sheet([[...headers], row]);'
+          if s.count(old) != 1:
+              raise SystemExit('expected exactly one aoa_to_sheet match')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/api/src/question-import.ts
+          git diff --cached --check
+          git commit -m "fix question import spreadsheet typing"
+          git push origin HEAD:codex/44-question-import
