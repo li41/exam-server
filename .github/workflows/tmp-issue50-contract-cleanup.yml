@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: github.event.head_commit.message == 'retry temporary issue 50 contract cleanup workflow'
+    if: github.event.head_commit.message == 'retry issue 50 contract cleanup within endpoints'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -40,14 +40,18 @@ jobs:
 
           api = Path("contracts/api-v1.json")
           lines = api.read_text().splitlines(keepends=True)
-          matches = [i for i, line in enumerate(lines) if line.strip() == '"path": "/api/v1/examinees",']
+          closed_enums = next(i for i, line in enumerate(lines) if line.strip() == '"closedEnums": {')
+          matches = [
+              i for i, line in enumerate(lines[:closed_enums])
+              if line.strip() == '"path": "/api/v1/examinees",'
+          ]
           if len(matches) != 1:
-              raise SystemExit(f"examinees endpoint path matched {len(matches)}, expected 1")
+              raise SystemExit(f"endpoint-section examinees path matched {len(matches)}, expected 1")
           path_index = matches[0]
           object_start = path_index - 2
           if lines[object_start].strip() != "{":
               raise SystemExit("could not locate examinees endpoint object start")
-          endpoint_lines = [
+          lines[object_start:object_start] = [
               "    {\n",
               '      "method": "POST",\n',
               '      "path": "/api/v1/examinee-import",\n',
@@ -55,7 +59,6 @@ jobs:
               '      "idempotent": true\n',
               "    },\n",
           ]
-          lines[object_start:object_start] = endpoint_lines
           api.write_text("".join(lines))
 
           insert_before_unique_line(
