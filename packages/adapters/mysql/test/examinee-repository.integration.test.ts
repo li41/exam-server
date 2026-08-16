@@ -62,6 +62,78 @@ const cleanupFixtures = async (): Promise<void> => {
   );
 };
 
+const insertCorruptCrossTenantLinks = async (localParentId: string) => {
+  const foreignChildId = "48000000-0000-4000-8000-0000000000c1";
+  const localExamineeId = "48000000-0000-4000-8000-0000000000c2";
+  const foreignExamineeId = "48000000-0000-4000-8000-0000000000c3";
+  const now = new Date();
+  const connection = await pool.getConnection();
+  try {
+    await connection.query("SET FOREIGN_KEY_CHECKS = 0");
+    await connection.execute("DELETE FROM examinees WHERE id IN (?, ?)", [
+      localExamineeId,
+      foreignExamineeId,
+    ]);
+    await connection.execute("DELETE FROM examinee_groups WHERE id = ?", [
+      foreignChildId,
+    ]);
+    await connection.execute(
+      `INSERT INTO examinee_groups (
+        id, tenant_id, parent_id, name, proctor_password_ciphertext,
+        sort_order, version, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, NULL, 99, 1, ?, ?, NULL)`,
+      [
+        foreignChildId,
+        otherScope.tenantId,
+        localParentId,
+        "Corrupt foreign child",
+        now,
+        now,
+      ],
+    );
+    await connection.execute(
+      `INSERT INTO examinees (
+        id, tenant_id, group_id, created_by, code_ciphertext, code_digest,
+        identifier, name, note, status, version, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'enabled', 1, ?, ?, NULL)`,
+      [
+        localExamineeId,
+        scope.tenantId,
+        foreignChildId,
+        scope.actorUserId,
+        credentials.protect("CORRUPT-LOCAL-CODE"),
+        credentials.digest("CORRUPT-LOCAL-CODE"),
+        "CORRUPT-LOCAL-ID",
+        "corrupt local examinee",
+        now,
+        now,
+      ],
+    );
+    await connection.execute(
+      `INSERT INTO examinees (
+        id, tenant_id, group_id, created_by, code_ciphertext, code_digest,
+        identifier, name, note, status, version, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'enabled', 1, ?, ?, NULL)`,
+      [
+        foreignExamineeId,
+        otherScope.tenantId,
+        localParentId,
+        otherScope.actorUserId,
+        credentials.protect("CORRUPT-FOREIGN-CODE"),
+        credentials.digest("CORRUPT-FOREIGN-CODE"),
+        "CORRUPT-FOREIGN-ID",
+        "corrupt foreign examinee",
+        now,
+        now,
+      ],
+    );
+  } finally {
+    await connection.query("SET FOREIGN_KEY_CHECKS = 1");
+    connection.release();
+  }
+  return { foreignChildId, localExamineeId, foreignExamineeId };
+};
+
 describe("MySqlExamineeRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
@@ -285,6 +357,105 @@ describe("MySqlExamineeRepository", () => {
     ).toBe((foreignError as Error).message);
   });
 
+  it("lists groups and examinees only from the authenticated tenant", async () => {
+    const localGroup = await repository.createGroup(
+      {
+        parentId: null,
+        name: "List local group",
+        proctorPassword: null,
+        sortOrder: 30,
+      },
+      scope,
+    );
+    const foreignGroup = await repository.createGroup(
+      {
+        parentId: null,
+        name: "List foreign group",
+        proctorPassword: null,
+        sortOrder: 30,
+      },
+      otherScope,
+    );
+    const localExaminee = await createExaminee(
+      "LIST-LOCAL-ID",
+      "LIST-LOCAL-CODE",
+      localGroup.id,
+    );
+    const foreignExaminee = await repository.createExaminee(
+      {
+        groupId: foreignGroup.id,
+        code: "LIST-FOREIGN-CODE",
+        identifier: "LIST-FOREIGN-ID",
+        name: "foreign list examinee",
+        note: null,
+        status: "enabled",
+      },
+      otherScope,
+    );
+
+    const groups = await repository.listGroups({}, scope);
+    const groupIds = groups.map((group) => group.id);
+    expect(groupIds).toContain(localGroup.id);
+    expect(groupIds).not.toContain(foreignGroup.id);
+
+    const examinees = await repository.listExaminees({ limit: 100 }, scope);
+    const examineeIds = examinees.items.map((examinee) => examinee.id);
+    expect(examineeIds).toContain(localExaminee.id);
+    expect(examineeIds).not.toContain(foreignExaminee.id);
+  });
+
+  it("keeps group traversal and deletion tenant-scoped under corrupt cross-tenant links", async () => {
+    const root = await repository.createGroup(
+      {
+        parentId: null,
+        name: "Corrupt-link root",
+        proctorPassword: null,
+        sortOrder: 40,
+      },
+      scope,
+    );
+    const child = await repository.createGroup(
+      {
+        parentId: root.id,
+        name: "Corrupt-link local child",
+        proctorPassword: null,
+        sortOrder: 40,
+      },
+      scope,
+    );
+    const childExaminee = await createExaminee(
+      "CORRUPT-CHILD-ID",
+      "CORRUPT-CHILD-CODE",
+      child.id,
+    );
+    const { foreignChildId, localExamineeId, foreignExamineeId } =
+      await insertCorruptCrossTenantLinks(root.id);
+
+    const filtered = await repository.listExaminees(
+      { limit: 100, groupId: root.id },
+      scope,
+    );
+    const filteredIds = filtered.items.map((examinee) => examinee.id);
+    expect(filteredIds).toContain(childExaminee.id);
+    expect(filteredIds).not.toContain(localExamineeId);
+
+    await repository.softDeleteGroup(root.id, root.version, scope);
+    await expect(repository.getGroup(root.id, scope)).resolves.toBeNull();
+    await expect(repository.getGroup(child.id, scope)).resolves.toBeNull();
+    await expect(repository.getGroup(foreignChildId, otherScope)).resolves.toMatchObject(
+      { id: foreignChildId, tenantId: otherScope.tenantId, deletedAt: null },
+    );
+    await expect(repository.getExaminee(childExaminee.id, scope)).resolves.toMatchObject(
+      { groupId: null, version: 2 },
+    );
+    await expect(repository.getExaminee(localExamineeId, scope)).resolves.toMatchObject(
+      { groupId: foreignChildId, version: 1 },
+    );
+    await expect(
+      repository.getExaminee(foreignExamineeId, otherScope),
+    ).resolves.toMatchObject({ groupId: root.id, version: 1 });
+  });
+
   it("group deletion cascades child removal and unassigns affected examinees only in the tenant", async () => {
     const root = await repository.createGroup(
       {
@@ -329,6 +500,67 @@ describe("MySqlExamineeRepository", () => {
     ).resolves.toMatchObject({
       groupId: null,
       version: 2,
+    });
+  });
+
+  it("never reads, updates, or deletes a foreign tenant group by id", async () => {
+    const local = await repository.createGroup(
+      {
+        parentId: null,
+        name: "Local mutable group",
+        proctorPassword: null,
+        sortOrder: 50,
+      },
+      scope,
+    );
+    const updated = await repository.updateGroup(
+      local.id,
+      { name: "Local updated group", version: local.version },
+      scope,
+    );
+    expect(updated).toMatchObject({
+      name: "Local updated group",
+      version: local.version + 1,
+    });
+
+    await expect(
+      repository.updateGroup(
+        updated.id,
+        { name: "stale local update", version: local.version },
+        scope,
+      ),
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    const foreign = await repository.createGroup(
+      {
+        parentId: null,
+        name: "Foreign protected group",
+        proctorPassword: null,
+        sortOrder: 50,
+      },
+      otherScope,
+    );
+    await expect(repository.getGroup(foreign.id, scope)).resolves.toBeNull();
+    await expect(
+      repository.updateGroup(
+        foreign.id,
+        { name: "stolen group", version: foreign.version },
+        scope,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(repository.getGroup(foreign.id, otherScope)).resolves.toMatchObject({
+      name: "Foreign protected group",
+      version: foreign.version,
+      deletedAt: null,
+    });
+
+    await expect(
+      repository.softDeleteGroup(foreign.id, foreign.version, scope),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(repository.getGroup(foreign.id, otherScope)).resolves.toMatchObject({
+      name: "Foreign protected group",
+      version: foreign.version,
+      deletedAt: null,
     });
   });
 
