@@ -188,6 +188,54 @@
     "updatedAt": "2026-08-16T00:00:00.000Z",
     "deletedAt": null
   },
+  "CreateExamineeGroupSchema": {
+    "parentId": null,
+    "name": "Fixture examinee group",
+    "proctorPassword": "proctor-1234",
+    "sortOrder": 0
+  },
+  "UpdateExamineeGroupSchema": {
+    "name": "Updated examinee group",
+    "version": 1
+  },
+  "DeleteExamineeGroupQuerySchema": { "version": "1" },
+  "ExamineeGroupSchema": {
+    "id": "examinee-group-1",
+    "tenantId": "company-opaque",
+    "parentId": null,
+    "name": "Fixture examinee group",
+    "proctorPassword": "proctor-1234",
+    "sortOrder": 0,
+    "version": 1,
+    "createdAt": "2026-08-16T00:00:00.000Z",
+    "updatedAt": "2026-08-16T00:00:00.000Z",
+    "deletedAt": null
+  },
+  "CreateExamineeSchema": {
+    "groupId": "examinee-group-1",
+    "code": "readable-code",
+    "identifier": "student-001",
+    "name": "Fixture examinee",
+    "note": null,
+    "status": "enabled"
+  },
+  "UpdateExamineeSchema": { "name": "Updated examinee", "version": 1 },
+  "DeleteExamineeQuerySchema": { "version": "1" },
+  "ExamineeSchema": {
+    "id": "examinee-1",
+    "tenantId": "company-opaque",
+    "groupId": "examinee-group-1",
+    "createdBy": "user-1",
+    "code": "readable-code",
+    "identifier": "student-001",
+    "name": "Fixture examinee",
+    "note": null,
+    "status": "enabled",
+    "version": 1,
+    "createdAt": "2026-08-16T00:00:00.000Z",
+    "updatedAt": "2026-08-16T00:00:00.000Z",
+    "deletedAt": null
+  },
   "FileMetadataSchema": {
     "fileId": "file-1",
     "ownerId": "user-1",

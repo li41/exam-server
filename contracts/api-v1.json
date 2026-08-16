@@ -226,6 +226,72 @@
       "idempotent": true
     },
     {
+      "method": "GET",
+      "path": "/api/v1/examinee-groups",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/examinee-groups/:id",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/examinee-groups",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/examinee-groups/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/examinee-groups/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/examinees",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/examinees/by-identifier/:identifier",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/examinees/:id",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/examinees",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/examinees/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/examinees/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
       "method": "POST",
       "path": "/api/v1/files/upload-sessions",
       "authenticated": true,
@@ -300,6 +366,7 @@
     "QuestionGroupFlowMode": ["normal", "shuffle", "skip"],
     "QuestionGroupItemType": ["question", "cluster"],
     "TestBookletStatus": ["enabled", "disabled"],
+    "ExamineeStatus": ["enabled", "disabled"],
     "FileStatus": ["pending", "ready", "deleted"]
   },
   "requestSchemas": {
@@ -422,6 +489,41 @@
     "DeleteTestBookletQuery": {
       "version": { "type": "positive-integer", "required": true }
     },
+    "CreateExamineeGroup": {
+      "parentId": { "type": "nullable-string", "required": false },
+      "name": { "type": "string", "required": true },
+      "proctorPassword": { "type": "nullable-string", "required": false },
+      "sortOrder": { "type": "nonnegative-integer", "required": false }
+    },
+    "UpdateExamineeGroup": {
+      "name": { "type": "string", "required": false },
+      "proctorPassword": { "type": "nullable-string", "required": false },
+      "sortOrder": { "type": "nonnegative-integer", "required": false },
+      "version": { "type": "positive-integer", "required": true }
+    },
+    "DeleteExamineeGroupQuery": {
+      "version": { "type": "positive-integer", "required": true }
+    },
+    "CreateExaminee": {
+      "groupId": { "type": "nullable-string", "required": false },
+      "code": { "type": "string", "required": true },
+      "identifier": { "type": "string", "required": true },
+      "name": { "type": "string", "required": true },
+      "note": { "type": "nullable-string", "required": false },
+      "status": { "type": "ExamineeStatus", "required": false }
+    },
+    "UpdateExaminee": {
+      "groupId": { "type": "nullable-string", "required": false },
+      "code": { "type": "string", "required": false },
+      "identifier": { "type": "string", "required": false },
+      "name": { "type": "string", "required": false },
+      "note": { "type": "nullable-string", "required": false },
+      "status": { "type": "ExamineeStatus", "required": false },
+      "version": { "type": "positive-integer", "required": true }
+    },
+    "DeleteExamineeQuery": {
+      "version": { "type": "positive-integer", "required": true }
+    },
     "Login": {
       "email": { "type": "email-string", "required": true },
       "password": { "type": "string", "required": true }
@@ -526,6 +628,33 @@
       "status": { "type": "TestBookletStatus", "required": true },
       "version": { "type": "positive-integer", "required": true },
       "items": { "type": "test-booklet-item-array", "required": true },
+      "createdAt": { "type": "iso-string", "required": true },
+      "updatedAt": { "type": "iso-string", "required": true },
+      "deletedAt": { "type": "nullable-iso-string", "required": true }
+    },
+    "ExamineeGroup": {
+      "id": { "type": "string", "required": true },
+      "tenantId": { "type": "string", "required": true },
+      "parentId": { "type": "nullable-string", "required": true },
+      "name": { "type": "string", "required": true },
+      "proctorPassword": { "type": "nullable-string", "required": true },
+      "sortOrder": { "type": "nonnegative-integer", "required": true },
+      "version": { "type": "positive-integer", "required": true },
+      "createdAt": { "type": "iso-string", "required": true },
+      "updatedAt": { "type": "iso-string", "required": true },
+      "deletedAt": { "type": "nullable-iso-string", "required": true }
+    },
+    "Examinee": {
+      "id": { "type": "string", "required": true },
+      "tenantId": { "type": "string", "required": true },
+      "groupId": { "type": "nullable-string", "required": true },
+      "createdBy": { "type": "string", "required": true },
+      "code": { "type": "string", "required": true },
+      "identifier": { "type": "string", "required": true },
+      "name": { "type": "string", "required": true },
+      "note": { "type": "nullable-string", "required": true },
+      "status": { "type": "ExamineeStatus", "required": true },
+      "version": { "type": "positive-integer", "required": true },
       "createdAt": { "type": "iso-string", "required": true },
       "updatedAt": { "type": "iso-string", "required": true },
       "deletedAt": { "type": "nullable-iso-string", "required": true }
