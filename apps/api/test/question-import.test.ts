@@ -43,7 +43,10 @@ const workbookBytes = (
   return Buffer.isBuffer(output) ? output : Buffer.from(output as Uint8Array);
 };
 
-const trueFalseRow = (code: string, answer = { value: true }) => [
+const trueFalseRow = (
+  code: string,
+  answer: { value: unknown } = { value: true },
+) => [
   code,
   "水的化學式是 H2O。",
   "",
@@ -76,7 +79,7 @@ const upload = (bytes: Buffer, filename: string): FormData => {
   const form = new FormData();
   form.set(
     "file",
-    new File([bytes], filename, {
+    new File([Uint8Array.from(bytes)], filename, {
       type: "application/octet-stream",
     }),
   );
@@ -207,7 +210,11 @@ describe("question import API", () => {
 
   it("accepts ods and uses the same server-side validation", async () => {
     const { app } = createImportApp();
-    const bytes = workbookBytes("true_false", [trueFalseRow("IMPORT-ODS-1")], "ods");
+    const bytes = workbookBytes(
+      "true_false",
+      [trueFalseRow("IMPORT-ODS-1")],
+      "ods",
+    );
     const response = await app.request("/api/question-import", {
       method: "POST",
       body: upload(bytes, "questions.ods"),
