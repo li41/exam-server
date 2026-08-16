@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS examinee_groups (
   CONSTRAINT fk_examinee_group_parent_tenant
     FOREIGN KEY (tenant_id, parent_id)
     REFERENCES examinee_groups (tenant_id, id)
-    ON DELETE CASCADE
+    ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS examinees (
