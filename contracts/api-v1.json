@@ -190,6 +190,42 @@
       "idempotent": true
     },
     {
+      "method": "GET",
+      "path": "/api/v1/test-booklets",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/test-booklets/:id",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/test-booklets",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/test-booklets/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/test-booklets/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/test-booklets/:id/duplicate",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
       "method": "POST",
       "path": "/api/v1/files/upload-sessions",
       "authenticated": true,
@@ -263,236 +299,891 @@
     "QuestionCollectionStatus": ["enabled", "disabled"],
     "QuestionGroupFlowMode": ["normal", "shuffle", "skip"],
     "QuestionGroupItemType": ["question", "cluster"],
-    "FileStatus": ["pending", "ready", "deleted"]
+    "FileStatus": ["pending", "ready", "deleted"],
+    "TestBookletStatus": ["enabled", "disabled"]
   },
   "requestSchemas": {
-    "CreateItem": { "title": { "type": "string", "required": true } },
+    "CreateItem": {
+      "title": {
+        "type": "string",
+        "required": true
+      }
+    },
     "UpdateItem": {
-      "title": { "type": "string", "required": true },
-      "version": { "type": "positive-integer", "required": true }
+      "title": {
+        "type": "string",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "DeleteItemQuery": {
-      "version": { "type": "positive-integer", "required": true }
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "CreateQuestion": {
-      "code": { "type": "string", "required": true },
-      "categoryId": { "type": "nullable-string", "required": false },
-      "type": { "type": "QuestionType", "required": true },
-      "difficulty": { "type": "integer-1-5", "required": false },
-      "stem": { "type": "string", "required": true },
-      "options": { "type": "nullable-json", "required": false },
-      "answer": { "type": "json", "required": true },
-      "explanation": { "type": "nullable-string", "required": false },
-      "aiRubric": { "type": "nullable-rubric-array", "required": false },
-      "points": { "type": "positive-number", "required": false },
-      "tags": { "type": "string-array", "required": false },
-      "status": { "type": "QuestionStatus", "required": false },
-      "media": { "type": "question-media-array", "required": false }
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "categoryId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "type": {
+        "type": "QuestionType",
+        "required": true
+      },
+      "difficulty": {
+        "type": "integer-1-5",
+        "required": false
+      },
+      "stem": {
+        "type": "string",
+        "required": true
+      },
+      "options": {
+        "type": "nullable-json",
+        "required": false
+      },
+      "answer": {
+        "type": "json",
+        "required": true
+      },
+      "explanation": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "aiRubric": {
+        "type": "nullable-rubric-array",
+        "required": false
+      },
+      "points": {
+        "type": "positive-number",
+        "required": false
+      },
+      "tags": {
+        "type": "string-array",
+        "required": false
+      },
+      "status": {
+        "type": "QuestionStatus",
+        "required": false
+      },
+      "media": {
+        "type": "question-media-array",
+        "required": false
+      }
     },
     "UpdateQuestion": {
-      "code": { "type": "string", "required": false },
-      "categoryId": { "type": "nullable-string", "required": false },
-      "type": { "type": "QuestionType", "required": false },
-      "difficulty": { "type": "integer-1-5", "required": false },
-      "stem": { "type": "string", "required": false },
-      "options": { "type": "nullable-json", "required": false },
-      "answer": { "type": "json", "required": false },
-      "explanation": { "type": "nullable-string", "required": false },
-      "aiRubric": { "type": "nullable-rubric-array", "required": false },
-      "points": { "type": "positive-number", "required": false },
-      "tags": { "type": "string-array", "required": false },
-      "status": { "type": "QuestionStatus", "required": false },
-      "media": { "type": "question-media-array", "required": false },
-      "version": { "type": "positive-integer", "required": true }
+      "code": {
+        "type": "string",
+        "required": false
+      },
+      "categoryId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "type": {
+        "type": "QuestionType",
+        "required": false
+      },
+      "difficulty": {
+        "type": "integer-1-5",
+        "required": false
+      },
+      "stem": {
+        "type": "string",
+        "required": false
+      },
+      "options": {
+        "type": "nullable-json",
+        "required": false
+      },
+      "answer": {
+        "type": "json",
+        "required": false
+      },
+      "explanation": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "aiRubric": {
+        "type": "nullable-rubric-array",
+        "required": false
+      },
+      "points": {
+        "type": "positive-number",
+        "required": false
+      },
+      "tags": {
+        "type": "string-array",
+        "required": false
+      },
+      "status": {
+        "type": "QuestionStatus",
+        "required": false
+      },
+      "media": {
+        "type": "question-media-array",
+        "required": false
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "DeleteQuestionQuery": {
-      "version": { "type": "positive-integer", "required": true }
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "CreateQuestionCategory": {
-      "parentId": { "type": "nullable-string", "required": false },
-      "name": { "type": "string", "required": true },
-      "sortOrder": { "type": "integer", "required": false }
+      "parentId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "sortOrder": {
+        "type": "integer",
+        "required": false
+      }
     },
     "UpdateQuestionCategory": {
-      "parentId": { "type": "nullable-string", "required": true },
-      "name": { "type": "string", "required": true },
-      "sortOrder": { "type": "integer", "required": true },
-      "version": { "type": "positive-integer", "required": true }
+      "parentId": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "sortOrder": {
+        "type": "integer",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "DeleteQuestionCategoryQuery": {
-      "version": { "type": "positive-integer", "required": true }
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "CreateQuestionCluster": {
-      "code": { "type": "string", "required": true },
-      "name": { "type": "string", "required": true },
-      "stem": { "type": "string", "required": true },
-      "stemFileId": { "type": "nullable-string", "required": false },
-      "description": { "type": "nullable-string", "required": false },
-      "status": { "type": "QuestionCollectionStatus", "required": false },
-      "questionIds": { "type": "string-array", "required": false }
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "stem": {
+        "type": "string",
+        "required": true
+      },
+      "stemFileId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "status": {
+        "type": "QuestionCollectionStatus",
+        "required": false
+      },
+      "questionIds": {
+        "type": "string-array",
+        "required": false
+      }
     },
     "UpdateQuestionCluster": {
-      "code": { "type": "string", "required": false },
-      "name": { "type": "string", "required": false },
-      "stem": { "type": "string", "required": false },
-      "stemFileId": { "type": "nullable-string", "required": false },
-      "description": { "type": "nullable-string", "required": false },
-      "status": { "type": "QuestionCollectionStatus", "required": false },
-      "questionIds": { "type": "string-array", "required": false },
-      "version": { "type": "positive-integer", "required": true }
+      "code": {
+        "type": "string",
+        "required": false
+      },
+      "name": {
+        "type": "string",
+        "required": false
+      },
+      "stem": {
+        "type": "string",
+        "required": false
+      },
+      "stemFileId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "status": {
+        "type": "QuestionCollectionStatus",
+        "required": false
+      },
+      "questionIds": {
+        "type": "string-array",
+        "required": false
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "CreateQuestionGroup": {
-      "code": { "type": "string", "required": true },
-      "name": { "type": "string", "required": true },
-      "description": { "type": "nullable-string", "required": false },
-      "subjectId": { "type": "nullable-string", "required": false },
-      "flowMode": { "type": "QuestionGroupFlowMode", "required": false },
-      "status": { "type": "QuestionCollectionStatus", "required": false },
-      "items": { "type": "question-group-item-array", "required": false }
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "subjectId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "flowMode": {
+        "type": "QuestionGroupFlowMode",
+        "required": false
+      },
+      "status": {
+        "type": "QuestionCollectionStatus",
+        "required": false
+      },
+      "items": {
+        "type": "question-group-item-array",
+        "required": false
+      }
     },
     "UpdateQuestionGroup": {
-      "code": { "type": "string", "required": false },
-      "name": { "type": "string", "required": false },
-      "description": { "type": "nullable-string", "required": false },
-      "subjectId": { "type": "nullable-string", "required": false },
-      "flowMode": { "type": "QuestionGroupFlowMode", "required": false },
-      "status": { "type": "QuestionCollectionStatus", "required": false },
-      "items": { "type": "question-group-item-array", "required": false },
-      "version": { "type": "positive-integer", "required": true }
+      "code": {
+        "type": "string",
+        "required": false
+      },
+      "name": {
+        "type": "string",
+        "required": false
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "subjectId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "flowMode": {
+        "type": "QuestionGroupFlowMode",
+        "required": false
+      },
+      "status": {
+        "type": "QuestionCollectionStatus",
+        "required": false
+      },
+      "items": {
+        "type": "question-group-item-array",
+        "required": false
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "DeleteQuestionStructureQuery": {
-      "version": { "type": "positive-integer", "required": true }
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     },
     "Login": {
-      "email": { "type": "email-string", "required": true },
-      "password": { "type": "string", "required": true }
+      "email": {
+        "type": "email-string",
+        "required": true
+      },
+      "password": {
+        "type": "string",
+        "required": true
+      }
     },
-    "Refresh": { "refreshToken": { "type": "string", "required": true } },
+    "Refresh": {
+      "refreshToken": {
+        "type": "string",
+        "required": true
+      }
+    },
     "InitiateUpload": {
-      "originalName": { "type": "string", "required": true },
-      "displayName": { "type": "string", "required": true },
-      "mimeType": { "type": "string", "required": true },
-      "sizeBytes": { "type": "positive-integer", "required": true },
-      "checksum": { "type": "sha256-hex", "required": true }
+      "originalName": {
+        "type": "string",
+        "required": true
+      },
+      "displayName": {
+        "type": "string",
+        "required": true
+      },
+      "mimeType": {
+        "type": "string",
+        "required": true
+      },
+      "sizeBytes": {
+        "type": "positive-integer",
+        "required": true
+      },
+      "checksum": {
+        "type": "sha256-hex",
+        "required": true
+      }
+    },
+    "CreateTestBooklet": {
+      "subjectId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "categoryId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "status": {
+        "type": "TestBookletStatus",
+        "required": false
+      },
+      "groupIds": {
+        "type": "string-array",
+        "required": false
+      }
+    },
+    "UpdateTestBooklet": {
+      "subjectId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "categoryId": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "code": {
+        "type": "string",
+        "required": false
+      },
+      "name": {
+        "type": "string",
+        "required": false
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": false
+      },
+      "status": {
+        "type": "TestBookletStatus",
+        "required": false
+      },
+      "groupIds": {
+        "type": "string-array",
+        "required": false
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
+    },
+    "DeleteTestBookletQuery": {
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      }
     }
   },
   "responseSchemas": {
     "Item": {
-      "id": { "type": "string", "required": true },
-      "tenantId": { "type": "string", "required": true },
-      "title": { "type": "string", "required": true },
-      "status": { "type": "ItemStatus", "required": true },
-      "version": { "type": "positive-integer", "required": true },
-      "createdAt": { "type": "iso-string", "required": true },
-      "updatedAt": { "type": "iso-string", "required": true },
-      "deletedAt": { "type": "nullable-iso-string", "required": true }
+      "id": {
+        "type": "string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "title": {
+        "type": "string",
+        "required": true
+      },
+      "status": {
+        "type": "ItemStatus",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      },
+      "createdAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "updatedAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "deletedAt": {
+        "type": "nullable-iso-string",
+        "required": true
+      }
     },
     "Question": {
-      "id": { "type": "string", "required": true },
-      "tenantId": { "type": "string", "required": true },
-      "code": { "type": "string", "required": true },
-      "categoryId": { "type": "nullable-string", "required": true },
-      "createdBy": { "type": "string", "required": true },
-      "type": { "type": "QuestionType", "required": true },
-      "difficulty": { "type": "integer-1-5", "required": true },
-      "stem": { "type": "string", "required": true },
-      "options": { "type": "nullable-json", "required": true },
-      "answer": { "type": "json", "required": true },
-      "explanation": { "type": "nullable-string", "required": true },
-      "aiRubric": { "type": "nullable-rubric-array", "required": true },
-      "points": { "type": "positive-number", "required": true },
-      "tags": { "type": "string-array", "required": true },
-      "status": { "type": "QuestionStatus", "required": true },
-      "usageCount": { "type": "nonnegative-integer", "required": true },
-      "version": { "type": "positive-integer", "required": true },
-      "media": { "type": "question-media-array", "required": true },
-      "createdAt": { "type": "iso-string", "required": true },
-      "updatedAt": { "type": "iso-string", "required": true },
-      "deletedAt": { "type": "nullable-iso-string", "required": true }
+      "id": {
+        "type": "string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "categoryId": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "createdBy": {
+        "type": "string",
+        "required": true
+      },
+      "type": {
+        "type": "QuestionType",
+        "required": true
+      },
+      "difficulty": {
+        "type": "integer-1-5",
+        "required": true
+      },
+      "stem": {
+        "type": "string",
+        "required": true
+      },
+      "options": {
+        "type": "nullable-json",
+        "required": true
+      },
+      "answer": {
+        "type": "json",
+        "required": true
+      },
+      "explanation": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "aiRubric": {
+        "type": "nullable-rubric-array",
+        "required": true
+      },
+      "points": {
+        "type": "positive-number",
+        "required": true
+      },
+      "tags": {
+        "type": "string-array",
+        "required": true
+      },
+      "status": {
+        "type": "QuestionStatus",
+        "required": true
+      },
+      "usageCount": {
+        "type": "nonnegative-integer",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      },
+      "media": {
+        "type": "question-media-array",
+        "required": true
+      },
+      "createdAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "updatedAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "deletedAt": {
+        "type": "nullable-iso-string",
+        "required": true
+      }
     },
     "QuestionCategory": {
-      "id": { "type": "string", "required": true },
-      "tenantId": { "type": "string", "required": true },
-      "parentId": { "type": "nullable-string", "required": true },
-      "name": { "type": "string", "required": true },
-      "sortOrder": { "type": "integer", "required": true },
-      "version": { "type": "positive-integer", "required": true },
-      "createdAt": { "type": "iso-string", "required": true },
-      "updatedAt": { "type": "iso-string", "required": true },
-      "deletedAt": { "type": "nullable-iso-string", "required": true }
+      "id": {
+        "type": "string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "parentId": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "sortOrder": {
+        "type": "integer",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      },
+      "createdAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "updatedAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "deletedAt": {
+        "type": "nullable-iso-string",
+        "required": true
+      }
     },
     "QuestionCluster": {
-      "id": { "type": "string", "required": true },
-      "tenantId": { "type": "string", "required": true },
-      "createdBy": { "type": "string", "required": true },
-      "code": { "type": "string", "required": true },
-      "name": { "type": "string", "required": true },
-      "stem": { "type": "string", "required": true },
-      "stemFileId": { "type": "nullable-string", "required": true },
-      "description": { "type": "nullable-string", "required": true },
-      "status": { "type": "QuestionCollectionStatus", "required": true },
-      "usageCount": { "type": "nonnegative-integer", "required": true },
-      "version": { "type": "positive-integer", "required": true },
-      "items": { "type": "question-cluster-item-array", "required": true },
-      "createdAt": { "type": "iso-string", "required": true },
-      "updatedAt": { "type": "iso-string", "required": true },
-      "deletedAt": { "type": "nullable-iso-string", "required": true }
+      "id": {
+        "type": "string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "createdBy": {
+        "type": "string",
+        "required": true
+      },
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "stem": {
+        "type": "string",
+        "required": true
+      },
+      "stemFileId": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "status": {
+        "type": "QuestionCollectionStatus",
+        "required": true
+      },
+      "usageCount": {
+        "type": "nonnegative-integer",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      },
+      "items": {
+        "type": "question-cluster-item-array",
+        "required": true
+      },
+      "createdAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "updatedAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "deletedAt": {
+        "type": "nullable-iso-string",
+        "required": true
+      }
     },
     "QuestionGroup": {
-      "id": { "type": "string", "required": true },
-      "tenantId": { "type": "string", "required": true },
-      "createdBy": { "type": "string", "required": true },
-      "code": { "type": "string", "required": true },
-      "name": { "type": "string", "required": true },
-      "description": { "type": "nullable-string", "required": true },
-      "subjectId": { "type": "nullable-string", "required": true },
-      "flowMode": { "type": "QuestionGroupFlowMode", "required": true },
-      "status": { "type": "QuestionCollectionStatus", "required": true },
-      "usageCount": { "type": "nonnegative-integer", "required": true },
-      "version": { "type": "positive-integer", "required": true },
-      "items": { "type": "question-group-item-array", "required": true },
-      "createdAt": { "type": "iso-string", "required": true },
-      "updatedAt": { "type": "iso-string", "required": true },
-      "deletedAt": { "type": "nullable-iso-string", "required": true }
+      "id": {
+        "type": "string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "createdBy": {
+        "type": "string",
+        "required": true
+      },
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "subjectId": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "flowMode": {
+        "type": "QuestionGroupFlowMode",
+        "required": true
+      },
+      "status": {
+        "type": "QuestionCollectionStatus",
+        "required": true
+      },
+      "usageCount": {
+        "type": "nonnegative-integer",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      },
+      "items": {
+        "type": "question-group-item-array",
+        "required": true
+      },
+      "createdAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "updatedAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "deletedAt": {
+        "type": "nullable-iso-string",
+        "required": true
+      }
     },
     "FileMetadata": {
-      "fileId": { "type": "string", "required": true },
-      "ownerId": { "type": "string", "required": true },
-      "tenantId": { "type": "string", "required": true },
-      "originalName": { "type": "string", "required": true },
-      "displayName": { "type": "string", "required": true },
-      "mimeType": { "type": "string", "required": true },
-      "sizeBytes": { "type": "nonnegative-integer", "required": true },
-      "checksum": { "type": "string", "required": true },
-      "status": { "type": "FileStatus", "required": true },
-      "createdAt": { "type": "iso-string", "required": true },
-      "deletedAt": { "type": "nullable-iso-string", "required": true }
+      "fileId": {
+        "type": "string",
+        "required": true
+      },
+      "ownerId": {
+        "type": "string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "originalName": {
+        "type": "string",
+        "required": true
+      },
+      "displayName": {
+        "type": "string",
+        "required": true
+      },
+      "mimeType": {
+        "type": "string",
+        "required": true
+      },
+      "sizeBytes": {
+        "type": "nonnegative-integer",
+        "required": true
+      },
+      "checksum": {
+        "type": "string",
+        "required": true
+      },
+      "status": {
+        "type": "FileStatus",
+        "required": true
+      },
+      "createdAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "deletedAt": {
+        "type": "nullable-iso-string",
+        "required": true
+      }
     },
     "AuthIdentity": {
-      "userId": { "type": "string", "required": true },
-      "email": { "type": "email-string", "required": true },
-      "tenantId": { "type": "string", "required": true },
-      "roles": { "type": "string-array", "required": true }
+      "userId": {
+        "type": "string",
+        "required": true
+      },
+      "email": {
+        "type": "email-string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "roles": {
+        "type": "string-array",
+        "required": true
+      }
     },
     "AuthTokenResponse": {
-      "accessToken": { "type": "string", "required": true },
-      "refreshToken": { "type": "string", "required": true },
-      "accessTokenExpiresAt": { "type": "iso-string", "required": true },
-      "refreshTokenExpiresAt": { "type": "iso-string", "required": true }
+      "accessToken": {
+        "type": "string",
+        "required": true
+      },
+      "refreshToken": {
+        "type": "string",
+        "required": true
+      },
+      "accessTokenExpiresAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "refreshTokenExpiresAt": {
+        "type": "iso-string",
+        "required": true
+      }
     },
     "UploadSession": {
-      "sessionId": { "type": "string", "required": true },
-      "fileId": { "type": "string", "required": true },
-      "expiresAt": { "type": "iso-string", "required": true },
-      "resumable": { "type": "boolean", "required": true }
+      "sessionId": {
+        "type": "string",
+        "required": true
+      },
+      "fileId": {
+        "type": "string",
+        "required": true
+      },
+      "expiresAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "resumable": {
+        "type": "boolean",
+        "required": true
+      }
     },
     "UploadProgress": {
-      "bytesReceived": { "type": "nonnegative-integer", "required": true },
-      "complete": { "type": "boolean", "required": true }
+      "bytesReceived": {
+        "type": "nonnegative-integer",
+        "required": true
+      },
+      "complete": {
+        "type": "boolean",
+        "required": true
+      }
     },
     "ApiErrorResponse": {
-      "error": { "type": "error-object", "required": true },
-      "requestId": { "type": "string", "required": true }
+      "error": {
+        "type": "error-object",
+        "required": true
+      },
+      "requestId": {
+        "type": "string",
+        "required": true
+      }
+    },
+    "TestBooklet": {
+      "id": {
+        "type": "string",
+        "required": true
+      },
+      "tenantId": {
+        "type": "string",
+        "required": true
+      },
+      "createdBy": {
+        "type": "string",
+        "required": true
+      },
+      "subjectId": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "categoryId": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "code": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "nullable-string",
+        "required": true
+      },
+      "status": {
+        "type": "TestBookletStatus",
+        "required": true
+      },
+      "version": {
+        "type": "positive-integer",
+        "required": true
+      },
+      "items": {
+        "type": "test-booklet-item-array",
+        "required": true
+      },
+      "createdAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "updatedAt": {
+        "type": "iso-string",
+        "required": true
+      },
+      "deletedAt": {
+        "type": "nullable-iso-string",
+        "required": true
+      }
     }
   }
 }

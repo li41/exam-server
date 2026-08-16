@@ -1,7 +1,14 @@
 {
-  "CreateItemSchema": { "title": "Legacy fixture" },
-  "UpdateItemSchema": { "title": "Updated fixture", "version": 1 },
-  "DeleteItemQuerySchema": { "version": "1" },
+  "CreateItemSchema": {
+    "title": "Legacy fixture"
+  },
+  "UpdateItemSchema": {
+    "title": "Updated fixture",
+    "version": 1
+  },
+  "DeleteItemQuerySchema": {
+    "version": "1"
+  },
   "ItemSchema": {
     "id": "item-1",
     "tenantId": "tenant-1",
@@ -19,10 +26,18 @@
     "difficulty": 3,
     "stem": "Fixture question",
     "options": [
-      { "id": "a", "text": "A" },
-      { "id": "b", "text": "B" }
+      {
+        "id": "a",
+        "text": "A"
+      },
+      {
+        "id": "b",
+        "text": "B"
+      }
     ],
-    "answer": { "value": "a" },
+    "answer": {
+      "value": "a"
+    },
     "explanation": null,
     "aiRubric": null,
     "points": 1,
@@ -30,8 +45,13 @@
     "status": "enabled",
     "media": []
   },
-  "UpdateQuestionSchema": { "stem": "Updated fixture question", "version": 1 },
-  "DeleteQuestionQuerySchema": { "version": "1" },
+  "UpdateQuestionSchema": {
+    "stem": "Updated fixture question",
+    "version": 1
+  },
+  "DeleteQuestionQuerySchema": {
+    "version": "1"
+  },
   "QuestionSchema": {
     "id": "question-1",
     "tenantId": "company-opaque",
@@ -42,10 +62,18 @@
     "difficulty": 3,
     "stem": "Fixture question",
     "options": [
-      { "id": "a", "text": "A" },
-      { "id": "b", "text": "B" }
+      {
+        "id": "a",
+        "text": "A"
+      },
+      {
+        "id": "b",
+        "text": "B"
+      }
     ],
-    "answer": { "value": "a" },
+    "answer": {
+      "value": "a"
+    },
     "explanation": null,
     "aiRubric": null,
     "points": 1,
@@ -69,7 +97,9 @@
     "sortOrder": 1,
     "version": 1
   },
-  "DeleteQuestionCategoryQuerySchema": { "version": "1" },
+  "DeleteQuestionCategoryQuerySchema": {
+    "version": "1"
+  },
   "QuestionCategorySchema": {
     "id": "category-1",
     "tenantId": "company-opaque",
@@ -106,7 +136,13 @@
     "status": "enabled",
     "usageCount": 0,
     "version": 1,
-    "items": [{ "questionId": "question-1", "position": 0, "available": true }],
+    "items": [
+      {
+        "questionId": "question-1",
+        "position": 0,
+        "available": true
+      }
+    ],
     "createdAt": "2026-08-10T00:00:00.000Z",
     "updatedAt": "2026-08-10T00:00:00.000Z",
     "deletedAt": null
@@ -119,8 +155,14 @@
     "flowMode": "normal",
     "status": "enabled",
     "items": [
-      { "itemType": "cluster", "clusterId": "cluster-1" },
-      { "itemType": "question", "questionId": "question-2" }
+      {
+        "itemType": "cluster",
+        "clusterId": "cluster-1"
+      },
+      {
+        "itemType": "question",
+        "questionId": "question-2"
+      }
     ]
   },
   "UpdateQuestionGroupSchema": {
@@ -157,7 +199,9 @@
     "updatedAt": "2026-08-10T00:00:00.000Z",
     "deletedAt": null
   },
-  "DeleteQuestionStructureQuerySchema": { "version": "1" },
+  "DeleteQuestionStructureQuerySchema": {
+    "version": "1"
+  },
   "FileMetadataSchema": {
     "fileId": "file-1",
     "ownerId": "user-1",
@@ -181,7 +225,9 @@
     "email": "fixture@example.com",
     "password": "correct horse battery staple"
   },
-  "RefreshRequestSchema": { "refreshToken": "refresh-token" },
+  "RefreshRequestSchema": {
+    "refreshToken": "refresh-token"
+  },
   "AuthTokenResponseSchema": {
     "accessToken": "access-token",
     "refreshToken": "refresh-token",
@@ -201,9 +247,53 @@
     "sizeBytes": 7,
     "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
-  "UploadProgressSchema": { "bytesReceived": 7, "complete": true },
+  "UploadProgressSchema": {
+    "bytesReceived": 7,
+    "complete": true
+  },
   "ApiErrorResponseSchema": {
-    "error": { "code": "conflict", "message": "Fixture conflict." },
+    "error": {
+      "code": "conflict",
+      "message": "Fixture conflict."
+    },
     "requestId": "123e4567-e89b-42d3-a456-426614174000"
+  },
+  "CreateTestBookletSchema": {
+    "subjectId": null,
+    "categoryId": null,
+    "code": "BOOK-001",
+    "name": "Fixture booklet",
+    "description": null,
+    "status": "enabled",
+    "groupIds": ["group-1"]
+  },
+  "UpdateTestBookletSchema": {
+    "name": "Updated fixture booklet",
+    "version": 1
+  },
+  "DeleteTestBookletQuerySchema": {
+    "version": "1"
+  },
+  "TestBookletSchema": {
+    "id": "booklet-1",
+    "tenantId": "company-opaque",
+    "createdBy": "user-1",
+    "subjectId": null,
+    "categoryId": null,
+    "code": "BOOK-001",
+    "name": "Fixture booklet",
+    "description": null,
+    "status": "enabled",
+    "version": 1,
+    "items": [
+      {
+        "groupId": "group-1",
+        "position": 0,
+        "available": true
+      }
+    ],
+    "createdAt": "2026-08-16T00:00:00.000Z",
+    "updatedAt": "2026-08-16T00:00:00.000Z",
+    "deletedAt": null
   }
 }

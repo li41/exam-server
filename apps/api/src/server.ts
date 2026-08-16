@@ -12,6 +12,7 @@ import {
   MySqlQuestionBankRepository,
   MySqlQuestionImportRepository,
   MySqlQuestionStructureRepository,
+  MySqlTestBookletRepository,
   MySqlUserRepository,
 } from "@server-foundation/mysql-adapter";
 import {
@@ -27,6 +28,7 @@ import {
   createInMemoryQuestionBankRepository,
   createInMemoryQuestionImportRepository,
   createInMemoryQuestionStructureRepository,
+  createInMemoryTestBookletRepository,
 } from "@server-foundation/testing";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -61,6 +63,12 @@ const main = async () => {
   const questionStructureRepository = pool
     ? new MySqlQuestionStructureRepository(pool)
     : createInMemoryQuestionStructureRepository(questionBankRepository);
+  const testBookletRepository = pool
+    ? new MySqlTestBookletRepository(pool)
+    : createInMemoryTestBookletRepository(
+        questionBankRepository,
+        questionStructureRepository,
+      );
   const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
@@ -149,6 +157,7 @@ const main = async () => {
     repository: questionBankRepository,
     importRepository: questionImportRepository,
     structureRepository: questionStructureRepository,
+    bookletRepository: testBookletRepository,
     authenticationService,
     idempotencyStore,
     idempotencyTtlSeconds: config.idempotencyTtlSeconds,
@@ -172,6 +181,7 @@ const main = async () => {
     questionBank: "enabled",
     questionImport: "enabled",
     questionStructures: "enabled",
+    testBooklets: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,

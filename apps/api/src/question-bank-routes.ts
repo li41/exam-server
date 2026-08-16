@@ -7,18 +7,22 @@ import {
   CreateQuestionClusterSchema,
   CreateQuestionGroupSchema,
   CreateQuestionSchema,
+  CreateTestBookletSchema,
   DeleteQuestionCategoryQuerySchema,
   DeleteQuestionQuerySchema,
   DeleteQuestionStructureQuerySchema,
+  DeleteTestBookletQuerySchema,
   LEGACY_API_PREFIX,
   QuestionCategoryListQuerySchema,
   QuestionClusterListQuerySchema,
   QuestionGroupListQuerySchema,
   QuestionListQuerySchema,
+  TestBookletListQuerySchema,
   UpdateQuestionCategorySchema,
   UpdateQuestionClusterSchema,
   UpdateQuestionGroupSchema,
   UpdateQuestionSchema,
+  UpdateTestBookletSchema,
 } from "@server-foundation/api-contracts";
 import type { AuthIdentity } from "@server-foundation/api-contracts";
 import {
@@ -28,6 +32,7 @@ import {
   QuestionBankService,
   QuestionImportService,
   QuestionStructureService,
+  TestBookletService,
   UnauthorizedError,
 } from "@server-foundation/domain";
 import type {
@@ -36,6 +41,7 @@ import type {
   QuestionBankRepository,
   QuestionImportRepository,
   QuestionStructureRepository,
+  TestBookletRepository,
 } from "@server-foundation/domain";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -62,6 +68,7 @@ type Dependencies = {
   repository: QuestionBankRepository;
   importRepository?: QuestionImportRepository;
   structureRepository?: QuestionStructureRepository;
+  bookletRepository?: TestBookletRepository;
   authenticationService?: AuthenticationService;
   idempotencyStore?: IdempotencyStore;
   idempotencyTtlSeconds?: number;
@@ -161,6 +168,9 @@ const createQuestionRouter = (dependencies: Dependencies) => {
   const structureService = dependencies.structureRepository
     ? new QuestionStructureService(dependencies.structureRepository)
     : undefined;
+  const bookletService = dependencies.bookletRepository
+    ? new TestBookletService(dependencies.bookletRepository)
+    : undefined;
 
   const requireImportService = (): QuestionImportService => {
     if (!importService) {
@@ -174,6 +184,13 @@ const createQuestionRouter = (dependencies: Dependencies) => {
       throw new CapabilityMissingError("question structures");
     }
     return structureService;
+  };
+
+  const requireBookletService = (): TestBookletService => {
+    if (!bookletService) {
+      throw new CapabilityMissingError("test booklets");
+    }
+    return bookletService;
   };
 
   const authenticate = async (
@@ -308,6 +325,8 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     "/question-clusters/*",
     "/question-groups",
     "/question-groups/*",
+    "/test-booklets",
+    "/test-booklets/*",
   ]) {
     api.use(path, authenticate);
     api.use(path, enforceIdempotency);
@@ -656,6 +675,95 @@ const createQuestionRouter = (dependencies: Dependencies) => {
       );
       return context.body(null, 204);
     },
+  );
+
+  api.get(
+    "/test-booklets",
+    zValidator("query", TestBookletListQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(
+          context,
+          "Invalid test booklet query parameters.",
+        );
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireBookletService().listBooklets(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.get("/test-booklets/:id", async (context) =>
+    context.json(
+      await requireBookletService().getBooklet(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+    ),
+  );
+
+  api.post(
+    "/test-booklets",
+    zValidator("json", CreateTestBookletSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid test booklet payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireBookletService().createBooklet(
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+        201,
+      ),
+  );
+
+  api.patch(
+    "/test-booklets/:id",
+    zValidator("json", UpdateTestBookletSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid test booklet payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireBookletService().updateBooklet(
+          context.req.param("id"),
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.delete(
+    "/test-booklets/:id",
+    zValidator("query", DeleteTestBookletQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "A valid version is required.");
+      }
+    }),
+    async (context) => {
+      await requireBookletService().softDeleteBooklet(
+        context.req.param("id"),
+        context.req.valid("query").version,
+        scopeFor(context),
+      );
+      return context.body(null, 204);
+    },
+  );
+
+  api.post("/test-booklets/:id/duplicate", async (context) =>
+    context.json(
+      await requireBookletService().duplicateBooklet(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+      201,
+    ),
   );
 
   return api;
