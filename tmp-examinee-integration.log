@@ -1,0 +1,191 @@
+$ corepack pnpm test:integration:mysql && corepack pnpm test:integration:redis && corepack pnpm test:integration:api
+$ corepack pnpm --filter @server-foundation/mysql-adapter test:integration
+$ vitest run test/*.integration.test.ts
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/home/runner/work/exam-server/exam-server/packages/adapters/mysql[39m
+
+ [31m❯[39m test/question-structure-repository.integration.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[32m 266[2mms[22m[39m
+     [2m[90m↓[39m[22m keeps cluster child relations visible after a question is soft-deleted
+     [2m[90m↓[39m[22m treats cross-tenant questions and stem files as unavailable
+     [2m[90m↓[39m[22m supports mixed group items but rejects a standalone question duplicated through a cluster
+ [31m❯[39m test/question-bank-repository.integration.test.ts [2m([22m[2m4 tests[22m[2m | [22m[33m4 skipped[39m[2m)[22m[33m 301[2mms[22m[39m
+     [2m[90m↓[39m[22m supports category filters, cursor pagination, versions and code reuse
+     [2m[90m↓[39m[22m links only existing ready files from the same opaque tenant
+     [2m[90m↓[39m[22m rejects missing and cross-tenant file ids without leaking their existence
+     [2m[90m↓[39m[22m distinguishes no media from an orphaned media reference on reads
+ [31m❯[39m test/examinee-repository.integration.test.ts [2m([22m[2m6 tests[22m[2m | [22m[33m6 skipped[39m[2m)[22m[33m 323[2mms[22m[39m
+     [2m[90m↓[39m[22m enforces tenant-scoped identifier and password uniqueness
+     [2m[90m↓[39m[22m stores credentials encrypted while returning readable values
+     [2m[90m↓[39m[22m enforces exactly two group levels and hides foreign parent existence
+     [2m[90m↓[39m[22m makes foreign and nonexistent group references indistinguishable
+     [2m[90m↓[39m[22m group deletion cascades child removal and unassigns affected examinees only in the tenant
+     [2m[90m↓[39m[22m never reads, updates, or deletes a foreign tenant examinee by id
+ [31m❯[39m test/test-booklet-repository.integration.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[32m 61[2mms[22m[39m
+     [2m[90m↓[39m[22m stores ordered same-tenant groups and preserves unavailable relations after soft delete
+     [2m[90m↓[39m[22m makes cross-tenant and nonexistent group references indistinguishable
+     [2m[90m↓[39m[22m rejects cross-tenant question categories while allowing opaque PHP subject metadata
+ [31m❯[39m test/question-import-repository.integration.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[32m 49[2mms[22m[39m
+     [2m[90m↓[39m[22m writes a valid batch in one transaction
+     [2m[90m↓[39m[22m rolls the whole batch back when a later insert conflicts
+     [2m[90m↓[39m[22m keeps #41 missing and cross-tenant media failures indistinguishable
+ [31m❯[39m test/item-repository.integration.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[32m 54[2mms[22m[39m
+     [2m[90m↓[39m[22m applies migrations idempotently and paginates with an opaque cursor
+     [2m[90m↓[39m[22m escapes search wildcards and rejects stale updates
+     [2m[90m↓[39m[22m soft-deletes an item and rejects later access
+ [31m❯[39m test/idempotency-store.integration.test.ts [2m([22m[2m2 tests[22m[2m | [22m[33m2 skipped[39m[2m)[22m[32m 49[2mms[22m[39m
+     [2m[90m↓[39m[22m persists successful responses for replay and rejects hash conflicts
+     [2m[90m↓[39m[22m fails closed instead of reopening an ambiguous pending mutation
+ [31m❯[39m test/file-metadata-store.integration.test.ts [2m([22m[2m1 test[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 57[2mms[22m[39m
+     [2m[90m↓[39m[22m tracks pending, ready, and deleted metadata states
+ [31m❯[39m test/audit-log.integration.test.ts [2m([22m[2m1 test[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 58[2mms[22m[39m
+     [2m[90m↓[39m[22m persists tenant-scoped mutation metadata without request bodies
+ [31m❯[39m test/user-repository.integration.test.ts [2m([22m[2m1 test[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 36[2mms[22m[39m
+     [2m[90m↓[39m[22m creates users and normalizes email lookup
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Suites 10 [49m[22m[31m⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/audit-log.integration.test.ts[2m > [22mMySqlAuditLog
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/audit-log.integration.test.ts:[2m15:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/examinee-repository.integration.test.ts[2m > [22mMySqlExamineeRepository
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/examinee-repository.integration.test.ts:[2m52:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/examinee-repository.integration.test.ts[2m > [22mMySqlExamineeRepository
+[31m[1mError[22m: Table 'foundation_test.examinees' doesn't exist[39m
+[36m [2m❯[22m test/examinee-repository.integration.test.ts:[2m64:16[22m[39m
+    [90m 62|[39m
+    [90m 63|[39m   [34mafterAll[39m([35masync[39m () [33m=>[39m {
+    [90m 64|[39m     await pool.execute("DELETE FROM examinees WHERE tenant_id IN (?, ?…
+    [90m   |[39m                [31m^[39m
+    [90m 65|[39m       scope[33m.[39mtenantId[33m,[39m
+    [90m 66|[39m       otherScope[33m.[39mtenantId[33m,[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/file-metadata-store.integration.test.ts[2m > [22mMySqlFileMetadataStore
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/file-metadata-store.integration.test.ts:[2m20:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/idempotency-store.integration.test.ts[2m > [22mMySqlIdempotencyStore
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/idempotency-store.integration.test.ts:[2m18:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/item-repository.integration.test.ts[2m > [22mMySqlItemRepository
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/item-repository.integration.test.ts:[2m20:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/question-bank-repository.integration.test.ts[2m > [22mMySqlQuestionBankRepository
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/question-bank-repository.integration.test.ts:[2m94:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/question-import-repository.integration.test.ts[2m > [22mMySqlQuestionImportRepository
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/question-import-repository.integration.test.ts:[2m87:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/question-structure-repository.integration.test.ts[2m > [22mMySqlQuestionStructureRepository
+[31m[1mError[22m: Migration 009_examinees failed.[39m
+[36m [2m❯[22m runMigrations src/migrate.ts:[2m197:15[22m[39m
+    [90m195|[39m           () [33m=>[39m undefined[33m,[39m
+    [90m196|[39m         )[33m;[39m
+    [90m197|[39m         throw new Error(`Migration ${migration.id} failed.`, { cause: …
+    [90m   |[39m               [31m^[39m
+    [90m198|[39m       }
+    [90m199|[39m     }
+[90m [2m❯[22m test/question-structure-repository.integration.test.ts:[2m57:5[22m[39m
+
+[31m[1mCaused by: Error[22m: Cannot add foreign key constraint[39m
+[36m [2m❯[22m runMigrations src/migrate.ts:[2m190:28[22m[39m
+[90m [2m❯[22m test/question-structure-repository.integration.test.ts:[2m57:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ code: 'ER_CANNOT_ADD_FOREIGN', errno: 1215, sqlState: 'HY000', sqlMessage: 'Cannot add foreign key constraint', sql: 'CREATE TABLE IF NOT EXISTS examinee_groups (\n  id CHAR(36) NOT NULL,\n  tenant_id VARCHAR(191) NOT NULL,\n  parent_id CHAR(36) NULL,\n  name VARCHAR(100) NOT NULL,\n  proctor_password_ciphertext VARCHAR(1024) NULL,\n  sort_order INT NOT NULL DEFAULT 0,\n  version INT UNSIGNED NOT NULL DEFAULT 1,\n  created_at DATETIME(3) NOT NULL,\n  updated_at DATETIME(3) NOT NULL,\n  deleted_at DATETIME(3) NULL,\n  active_parent_scope VARCHAR(36)\n    GENERATED ALWAYS AS (\n      CASE WHEN deleted_at IS NULL THEN COALESCE(parent_id, \'\') ELSE NULL END\n    ) STORED,\n  active_name VARCHAR(100)\n    GENERATED ALWAYS AS (\n      CASE WHEN deleted_at IS NULL THEN name ELSE NULL END\n    ) STORED,\n  PRIMARY KEY (id),\n  UNIQUE KEY uq_examinee_group_tenant_id (tenant_id, id),\n  UNIQUE KEY uq_examinee_group_active_sibling_name (\n    tenant_id, active_parent_scope, active_name\n  ),\n  KEY idx_examinee_groups_tenant_parent_sort (\n    tenant_id, parent_id, sort_order, id\n  ),\n  CONSTRAINT fk_examinee_group_parent_tenant\n    FOREIGN KEY (tenant_id, parent_id)\n    REFERENCES examinee_groups (tenant_id, id)\n    ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci' }[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/test-booklet-repository.integration.test.ts[2m > [22mMySqlTestBookletRepository
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/test-booklet-repository.integration.test.ts:[2m41:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/user-repository.integration.test.ts[2m > [22mMySqlUserRepository
+[31m[1mError[22m: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint[39m
+[36m [2m❯[22m assertNoDirtyRun src/migrate.ts:[2m124:9[22m[39m
+
+[90m [2m❯[22m runMigrations src/migrate.ts:[2m184:7[22m[39m
+[90m [2m❯[22m test/user-repository.integration.test.ts:[2m18:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m10 failed[39m[22m[90m (10)[39m
+[2m      Tests [22m [33m27 skipped[39m[90m (27)[39m
+[2m   Start at [22m 10:56:31
+[2m   Duration [22m 1.82s[2m (transform 608ms, setup 0ms, import 1.96s, tests 1.25s, environment 2ms)[22m
+
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/audit-log.integration.test.ts > MySqlAuditLog,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/audit-log.integration.test.ts:15:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/examinee-repository.integration.test.ts > MySqlExamineeRepository,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/examinee-repository.integration.test.ts:52:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/test/examinee-repository.integration.test.ts,title=test/examinee-repository.integration.test.ts > MySqlExamineeRepository,line=64,column=16::Error: Table 'foundation_test.examinees' doesn't exist%0A ❯ test/examinee-repository.integration.test.ts:64:16%0A%0A⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯%0ASerialized Error: { code: 'ER_NO_SUCH_TABLE', errno: 1146, sqlState: '42S02', sqlMessage: 'Table \'foundation_test.examinees\' doesn\'t exist', sql: 'DELETE FROM examinees WHERE tenant_id IN (?, ?)' }%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/file-metadata-store.integration.test.ts > MySqlFileMetadataStore,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/file-metadata-store.integration.test.ts:20:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/idempotency-store.integration.test.ts > MySqlIdempotencyStore,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/idempotency-store.integration.test.ts:18:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/item-repository.integration.test.ts > MySqlItemRepository,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/item-repository.integration.test.ts:20:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/question-bank-repository.integration.test.ts > MySqlQuestionBankRepository,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/question-bank-repository.integration.test.ts:94:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/question-import-repository.integration.test.ts > MySqlQuestionImportRepository,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/question-import-repository.integration.test.ts:87:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/question-structure-repository.integration.test.ts > MySqlQuestionStructureRepository,line=197,column=15::Error: Migration 009_examinees failed.%0A ❯ runMigrations src/migrate.ts:197:15%0A ❯ test/question-structure-repository.integration.test.ts:57:5%0A%0ACaused by: Caused by: Error: Cannot add foreign key constraint%0A ❯ runMigrations src/migrate.ts:190:28%0A ❯ test/question-structure-repository.integration.test.ts:57:5%0A%0A⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯%0ASerialized Error: { code: 'ER_CANNOT_ADD_FOREIGN', errno: 1215, sqlState: 'HY000', sqlMessage: 'Cannot add foreign key constraint', sql: 'CREATE TABLE IF NOT EXISTS examinee_groups (\n  id CHAR(36) NOT NULL,\n  tenant_id VARCHAR(191) NOT NULL,\n  parent_id CHAR(36) NULL,\n  name VARCHAR(100) NOT NULL,\n  proctor_password_ciphertext VARCHAR(1024) NULL,\n  sort_order INT NOT NULL DEFAULT 0,\n  version INT UNSIGNED NOT NULL DEFAULT 1,\n  created_at DATETIME(3) NOT NULL,\n  updated_at DATETIME(3) NOT NULL,\n  deleted_at DATETIME(3) NULL,\n  active_parent_scope VARCHAR(36)\n    GENERATED ALWAYS AS (\n      CASE WHEN deleted_at IS NULL THEN COALESCE(parent_id, \'\') ELSE NULL END\n    ) STORED,\n  active_name VARCHAR(100)\n    GENERATED ALWAYS AS (\n      CASE WHEN deleted_at IS NULL THEN name ELSE NULL END\n    ) STORED,\n  PRIMARY KEY (id),\n  UNIQUE KEY uq_examinee_group_tenant_id (tenant_id, id),\n  UNIQUE KEY uq_examinee_group_active_sibling_name (\n    tenant_id, active_parent_scope, active_name\n  ),\n  KEY idx_examinee_groups_tenant_parent_sort (\n    tenant_id, parent_id, sort_order, id\n  ),\n  CONSTRAINT fk_examinee_group_parent_tenant\n    FOREIGN KEY (tenant_id, parent_id)\n    REFERENCES examinee_groups (tenant_id, id)\n    ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci' }%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/test-booklet-repository.integration.test.ts > MySqlTestBookletRepository,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/test-booklet-repository.integration.test.ts:41:5%0A%0A
+
+::error file=/home/runner/work/exam-server/exam-server/packages/adapters/mysql/src/migrate.ts,title=test/user-repository.integration.test.ts > MySqlUserRepository,line=124,column=9::Error: Migration 009_examinees has an unfinished previous run. MySQL DDL may have been partially applied and is not transactionally rollback-safe. Inspect the schema, repair it if necessary, then remove the schema_migration_runs row before retrying. Previous error: Cannot add foreign key constraint%0A ❯ assertNoDirtyRun src/migrate.ts:124:9%0A ❯ runMigrations src/migrate.ts:184:7%0A ❯ test/user-repository.integration.test.ts:18:5%0A%0A
+/home/runner/work/exam-server/exam-server/packages/adapters/mysql:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @server-foundation/mysql-adapter@0.1.0 test:integration: `vitest run test/*.integration.test.ts`
+Exit status 1
+[ELIFECYCLE] Command failed with exit code 1.
+[ELIFECYCLE] Command failed with exit code 1.
