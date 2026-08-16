@@ -10,6 +10,7 @@ import {
   MySqlIdempotencyStore,
   MySqlItemRepository,
   MySqlQuestionBankRepository,
+  MySqlQuestionImportRepository,
   MySqlQuestionStructureRepository,
   MySqlUserRepository,
 } from "@server-foundation/mysql-adapter";
@@ -24,6 +25,7 @@ import {
 import {
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
+  createInMemoryQuestionImportRepository,
   createInMemoryQuestionStructureRepository,
 } from "@server-foundation/testing";
 import { createApp } from "./app.js";
@@ -53,6 +55,9 @@ const main = async () => {
   const questionBankRepository = pool
     ? new MySqlQuestionBankRepository(pool)
     : createInMemoryQuestionBankRepository();
+  const questionImportRepository = pool
+    ? new MySqlQuestionImportRepository(pool)
+    : createInMemoryQuestionImportRepository(questionBankRepository);
   const questionStructureRepository = pool
     ? new MySqlQuestionStructureRepository(pool)
     : createInMemoryQuestionStructureRepository(questionBankRepository);
@@ -142,6 +147,7 @@ const main = async () => {
 
   mountQuestionBankRoutes(app, {
     repository: questionBankRepository,
+    importRepository: questionImportRepository,
     structureRepository: questionStructureRepository,
     authenticationService,
     idempotencyStore,
@@ -164,6 +170,7 @@ const main = async () => {
     authentication: authenticationService ? "enabled" : "disabled",
     privateFiles: blobStorage ? "enabled" : "disabled",
     questionBank: "enabled",
+    questionImport: "enabled",
     questionStructures: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
