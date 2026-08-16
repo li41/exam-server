@@ -15,7 +15,11 @@ export const ExamineeGroupSchema = z.object({
   deletedAt: z.string().min(1).nullable(),
 });
 
-const ProctorPasswordSchema = z.string().trim().min(4).max(50).nullable();
+const ProctorPasswordSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? null : value,
+  z.string().trim().min(4).max(50).nullable(),
+);
 
 export const CreateExamineeGroupSchema = z.object({
   parentId: z.string().trim().min(1).nullable().default(null),
