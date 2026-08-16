@@ -1,0 +1,47 @@
+name: Temporary fix import middleware
+
+on:
+  push:
+    branches:
+      - codex/44-question-import
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/44-question-import
+      - name: Patch exact import middleware
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/api/src/question-bank-routes.ts')
+          s = p.read_text()
+          old = '''    "/question-categories/*",\n    "/question-import",\n    "/question-import/*",\n    "/question-clusters",'''
+          new = '''    "/question-categories/*",\n    "/question-clusters",'''
+          if s.count(old) != 1:
+              raise SystemExit('protected path match failed')
+          s = s.replace(old, new, 1)
+          old = '''  api.get("/question-import/template", () => questionImportTemplateResponse());\n\n  api.post("/question-import", async (context) => {'''
+          new = '''  api.get(\n    "/question-import/template",\n    authenticate,\n    () => questionImportTemplateResponse(),\n  );\n\n  api.post("/question-import", authenticate, enforceIdempotency, async (context) => {'''
+          if s.count(old) != 1:
+              raise SystemExit('import route match failed')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Format and commit exact router
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm exec prettier --write apps/api/src/question-bank-routes.ts
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/api/src/question-bank-routes.ts
+          git diff --cached --check
+          git commit -m "avoid duplicate import idempotency middleware"
+          git push origin HEAD:codex/44-question-import
