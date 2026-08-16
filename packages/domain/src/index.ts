@@ -6,6 +6,8 @@ export * from "./ports/auth.js";
 export * from "./ports/idempotency.js";
 export * from "./ports/item-repository.js";
 export * from "./ports/question-bank-repository.js";
+export * from "./ports/question-structure-repository.js";
 export * from "./ports/provider-capabilities.js";
 export * from "./use-cases/items.js";
 export * from "./use-cases/question-bank.js";
+export * from "./use-cases/question-structures.js";
