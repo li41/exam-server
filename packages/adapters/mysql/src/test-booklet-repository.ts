@@ -209,7 +209,9 @@ export class MySqlTestBookletRepository implements TestBookletRepository {
     );
     const last = visibleRows.at(-1);
     return {
-      items: visibleRows.map((row) => toBooklet(row, itemMap.get(row.id) ?? [])),
+      items: visibleRows.map((row) =>
+        toBooklet(row, itemMap.get(row.id) ?? []),
+      ),
       page: {
         nextCursor:
           hasMore && last
@@ -222,7 +224,10 @@ export class MySqlTestBookletRepository implements TestBookletRepository {
     };
   }
 
-  getBooklet(id: string, scope: QuestionBankScope): Promise<TestBooklet | null> {
+  getBooklet(
+    id: string,
+    scope: QuestionBankScope,
+  ): Promise<TestBooklet | null> {
     return this.getBookletWith(this.pool, id, scope);
   }
 
@@ -266,7 +271,8 @@ export class MySqlTestBookletRepository implements TestBookletRepository {
       throw error;
     }
     const booklet = await this.getBooklet(id, scope);
-    if (!booklet) throw new Error("Test booklet insert succeeded but could not be read.");
+    if (!booklet)
+      throw new Error("Test booklet insert succeeded but could not be read.");
     return booklet;
   }
 
@@ -313,7 +319,9 @@ export class MySqlTestBookletRepository implements TestBookletRepository {
       });
     } catch (error) {
       if (isDuplicateEntry(error)) {
-        throw new ConflictError("Test booklet code already exists in this tenant.");
+        throw new ConflictError(
+          "Test booklet code already exists in this tenant.",
+        );
       }
       throw error;
     }
@@ -391,7 +399,9 @@ export class MySqlTestBookletRepository implements TestBookletRepository {
         );
       } catch (error) {
         if (isDuplicateEntry(error)) {
-          throw new ConflictError("Could not allocate a unique code for the test booklet copy.");
+          throw new ConflictError(
+            "Could not allocate a unique code for the test booklet copy.",
+          );
         }
         throw error;
       }
@@ -399,7 +409,8 @@ export class MySqlTestBookletRepository implements TestBookletRepository {
     });
 
     const copy = await this.getBooklet(newId, scope);
-    if (!copy) throw new Error("Test booklet copy succeeded but could not be read.");
+    if (!copy)
+      throw new Error("Test booklet copy succeeded but could not be read.");
     return copy;
   }
 
@@ -434,7 +445,9 @@ export class MySqlTestBookletRepository implements TestBookletRepository {
       [categoryId, scope.tenantId],
     );
     if (rows.length === 0) {
-      validationError(`Test booklet categoryId "${categoryId}" does not exist.`);
+      validationError(
+        `Test booklet categoryId "${categoryId}" does not exist.`,
+      );
     }
   }
 

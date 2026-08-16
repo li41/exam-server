@@ -51,14 +51,18 @@ export class InMemoryTestBookletRepository implements TestBookletRepository {
   ): Promise<Page<TestBooklet>> {
     const search = query.search?.toLocaleLowerCase();
     const visible = this.booklets.filter((booklet) => {
-      if (booklet.deletedAt || booklet.tenantId !== scope.tenantId) return false;
-      if (query.createdBy && booklet.createdBy !== query.createdBy) return false;
+      if (booklet.deletedAt || booklet.tenantId !== scope.tenantId)
+        return false;
+      if (query.createdBy && booklet.createdBy !== query.createdBy)
+        return false;
       if (query.status && booklet.status !== query.status) return false;
-      if (query.subjectId && booklet.subjectId !== query.subjectId) return false;
-      if (query.categoryId && booklet.categoryId !== query.categoryId) return false;
+      if (query.subjectId && booklet.subjectId !== query.subjectId)
+        return false;
+      if (query.categoryId && booklet.categoryId !== query.categoryId)
+        return false;
       if (!search) return true;
-      return [booklet.code, booklet.name, booklet.description ?? ""].some((value) =>
-        value.toLocaleLowerCase().includes(search),
+      return [booklet.code, booklet.name, booklet.description ?? ""].some(
+        (value) => value.toLocaleLowerCase().includes(search),
       );
     });
     const offset = decodeCursor(query.cursor);
@@ -122,7 +126,9 @@ export class InMemoryTestBookletRepository implements TestBookletRepository {
   ): Promise<TestBooklet> {
     const booklet = this.required(id, scope);
     if (booklet.version !== input.version) {
-      throw new ConflictError(`Test booklet ${id} has changed; reload before updating.`);
+      throw new ConflictError(
+        `Test booklet ${id} has changed; reload before updating.`,
+      );
     }
     if (input.code !== undefined && input.code !== booklet.code) {
       this.assertUniqueCode(input.code, scope, id);
@@ -138,7 +144,8 @@ export class InMemoryTestBookletRepository implements TestBookletRepository {
     }
     if (input.subjectId !== undefined) booklet.subjectId = input.subjectId;
     if (input.name !== undefined) booklet.name = input.name;
-    if (input.description !== undefined) booklet.description = input.description;
+    if (input.description !== undefined)
+      booklet.description = input.description;
     if (input.status !== undefined) booklet.status = input.status;
     booklet.version += 1;
     booklet.updatedAt = new Date().toISOString();
@@ -152,7 +159,9 @@ export class InMemoryTestBookletRepository implements TestBookletRepository {
   ): Promise<void> {
     const booklet = this.required(id, scope);
     if (booklet.version !== version) {
-      throw new ConflictError(`Test booklet ${id} has changed; reload before deleting.`);
+      throw new ConflictError(
+        `Test booklet ${id} has changed; reload before deleting.`,
+      );
     }
     booklet.version += 1;
     booklet.updatedAt = new Date().toISOString();
@@ -211,7 +220,9 @@ export class InMemoryTestBookletRepository implements TestBookletRepository {
         booklet.code === code,
     );
     if (exists) {
-      throw new ConflictError(`Test booklet code ${code} already exists in this tenant.`);
+      throw new ConflictError(
+        `Test booklet code ${code} already exists in this tenant.`,
+      );
     }
   }
 
@@ -221,7 +232,9 @@ export class InMemoryTestBookletRepository implements TestBookletRepository {
   ): Promise<void> {
     if (categoryId === null) return;
     if (!(await this.questions.getCategory(categoryId, scope))) {
-      validationError(`Test booklet categoryId "${categoryId}" does not exist.`);
+      validationError(
+        `Test booklet categoryId "${categoryId}" does not exist.`,
+      );
     }
   }
 
@@ -256,4 +269,5 @@ export class InMemoryTestBookletRepository implements TestBookletRepository {
 export const createInMemoryTestBookletRepository = (
   questions: QuestionBankRepository,
   structures: QuestionStructureRepository,
-): TestBookletRepository => new InMemoryTestBookletRepository(questions, structures);
+): TestBookletRepository =>
+  new InMemoryTestBookletRepository(questions, structures);

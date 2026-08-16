@@ -71,12 +71,14 @@ describe("MySqlTestBookletRepository", () => {
     ]);
 
     await structures.softDeleteGroup(groupB.id, groupB.version, scope);
-    await expect(booklets.getBooklet(booklet.id, scope)).resolves.toMatchObject({
-      items: [
-        { groupId: groupB.id, available: false },
-        { groupId: groupA.id, available: true },
-      ],
-    });
+    await expect(booklets.getBooklet(booklet.id, scope)).resolves.toMatchObject(
+      {
+        items: [
+          { groupId: groupB.id, available: false },
+          { groupId: groupA.id, available: true },
+        ],
+      },
+    );
   });
 
   it("makes cross-tenant and nonexistent group references indistinguishable", async () => {
@@ -105,7 +107,9 @@ describe("MySqlTestBookletRepository", () => {
       message: `Test booklet groupId "${foreignGroup.id}" does not exist.`,
     });
 
-    await pool.execute("DELETE FROM question_groups WHERE id = ?", [foreignGroup.id]);
+    await pool.execute("DELETE FROM question_groups WHERE id = ?", [
+      foreignGroup.id,
+    ]);
 
     const missingError = await booklets
       .createBooklet(

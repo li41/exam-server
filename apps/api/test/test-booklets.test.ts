@@ -68,11 +68,17 @@ describe("test booklet API", () => {
       ],
     });
 
-    const patchResponse = await app.request(`/api/v1/test-booklets/${booklet.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "只改題本名稱", version: booklet.version }),
-    });
+    const patchResponse = await app.request(
+      `/api/v1/test-booklets/${booklet.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "只改題本名稱",
+          version: booklet.version,
+        }),
+      },
+    );
     expect(patchResponse.status).toBe(200);
     const patched = await patchResponse.json();
     expect(patched).toMatchObject({
@@ -104,7 +110,9 @@ describe("test booklet API", () => {
     );
     expect(deleteGroup.status).toBe(204);
 
-    const readAfterDelete = await app.request(`/api/v1/test-booklets/${booklet.id}`);
+    const readAfterDelete = await app.request(
+      `/api/v1/test-booklets/${booklet.id}`,
+    );
     expect(readAfterDelete.status).toBe(200);
     expect(await readAfterDelete.json()).toMatchObject({
       items: [
