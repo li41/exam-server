@@ -4,6 +4,7 @@ import type {
   DownloadSource,
   FileAccessScope,
   QuestionBankRepository,
+  QuestionStructureRepository,
   UploadInput,
 } from "@server-foundation/domain";
 import type {
@@ -16,6 +17,7 @@ export class QuestionAwareBlobStorage implements BlobStorage {
   constructor(
     private readonly inner: BlobStorage,
     private readonly questions: QuestionBankRepository,
+    private readonly structures?: QuestionStructureRepository,
   ) {}
 
   initiateUpload(input: UploadInput): Promise<UploadSession> {
@@ -46,16 +48,21 @@ export class QuestionAwareBlobStorage implements BlobStorage {
   }
 
   async delete(fileId: string, scope: FileAccessScope): Promise<void> {
-    if (
-      await this.questions.isFileReferenced(fileId, {
-        tenantId: scope.tenantId,
-        actorUserId: scope.userId,
-      })
-    ) {
+    const questionScope = {
+      tenantId: scope.tenantId,
+      actorUserId: scope.userId,
+    };
+    if (await this.questions.isFileReferenced(fileId, questionScope)) {
       throw new ConflictError(
         `File ${fileId} is still referenced by an active question. ` +
           `Query /api/v1/questions?fileId=${encodeURIComponent(fileId)} to see affected questions, ` +
           "then remove those media references before deleting the file.",
+      );
+    }
+    if (await this.structures?.isFileReferenced(fileId, questionScope)) {
+      throw new ConflictError(
+        `File ${fileId} is still referenced as an active question cluster stem. ` +
+          "Remove the cluster stemFileId reference before deleting the file.",
       );
     }
     await this.inner.delete(fileId, scope);

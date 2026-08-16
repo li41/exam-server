@@ -73,15 +73,30 @@ const rejectedMediaMessage = async (
   throw new Error("Expected invalid question media to be rejected.");
 };
 
+const cleanupQuestionBankFixtures = async (): Promise<void> => {
+  await pool.execute("DELETE FROM question_files WHERE tenant_id = ?", [
+    scope.tenantId,
+  ]);
+  await pool.execute("DELETE FROM questions WHERE tenant_id = ?", [
+    scope.tenantId,
+  ]);
+  await pool.execute(
+    "DELETE FROM question_categories WHERE tenant_id = ? AND parent_id IS NOT NULL",
+    [scope.tenantId],
+  );
+  await pool.execute("DELETE FROM question_categories WHERE tenant_id = ?", [
+    scope.tenantId,
+  ]);
+};
+
 describe("MySqlQuestionBankRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
-    await pool.execute("DELETE FROM question_files");
-    await pool.execute("DELETE FROM questions");
-    await pool.execute("DELETE FROM question_categories");
+    await cleanupQuestionBankFixtures();
   });
 
   afterAll(async () => {
+    await cleanupQuestionBankFixtures();
     await pool.end();
   });
 

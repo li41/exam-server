@@ -118,6 +118,66 @@
       "idempotent": true
     },
     {
+      "method": "GET",
+      "path": "/api/v1/question-clusters",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/question-clusters/:id",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/question-clusters",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/question-clusters/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/question-clusters/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/question-groups",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/question-groups/:id",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/question-groups",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/question-groups/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/question-groups/:id",
+      "authenticated": true,
+      "idempotent": true
+    },
+    {
       "method": "POST",
       "path": "/api/v1/files/upload-sessions",
       "authenticated": true,
@@ -188,6 +248,9 @@
     ],
     "QuestionStatus": ["enabled", "disabled"],
     "QuestionMediaRole": ["stem", "option", "explanation", "attachment"],
+    "QuestionCollectionStatus": ["enabled", "disabled"],
+    "QuestionGroupFlowMode": ["normal", "shuffle", "skip"],
+    "QuestionGroupItemType": ["question", "cluster"],
     "FileStatus": ["pending", "ready", "deleted"]
   },
   "requestSchemas": {
@@ -247,6 +310,47 @@
     "DeleteQuestionCategoryQuery": {
       "version": { "type": "positive-integer", "required": true }
     },
+    "CreateQuestionCluster": {
+      "code": { "type": "string", "required": true },
+      "name": { "type": "string", "required": true },
+      "stem": { "type": "string", "required": true },
+      "stemFileId": { "type": "nullable-string", "required": false },
+      "description": { "type": "nullable-string", "required": false },
+      "status": { "type": "QuestionCollectionStatus", "required": false },
+      "questionIds": { "type": "string-array", "required": false }
+    },
+    "UpdateQuestionCluster": {
+      "code": { "type": "string", "required": false },
+      "name": { "type": "string", "required": false },
+      "stem": { "type": "string", "required": false },
+      "stemFileId": { "type": "nullable-string", "required": false },
+      "description": { "type": "nullable-string", "required": false },
+      "status": { "type": "QuestionCollectionStatus", "required": false },
+      "questionIds": { "type": "string-array", "required": false },
+      "version": { "type": "positive-integer", "required": true }
+    },
+    "CreateQuestionGroup": {
+      "code": { "type": "string", "required": true },
+      "name": { "type": "string", "required": true },
+      "description": { "type": "nullable-string", "required": false },
+      "subjectId": { "type": "nullable-string", "required": false },
+      "flowMode": { "type": "QuestionGroupFlowMode", "required": false },
+      "status": { "type": "QuestionCollectionStatus", "required": false },
+      "items": { "type": "question-group-item-array", "required": false }
+    },
+    "UpdateQuestionGroup": {
+      "code": { "type": "string", "required": false },
+      "name": { "type": "string", "required": false },
+      "description": { "type": "nullable-string", "required": false },
+      "subjectId": { "type": "nullable-string", "required": false },
+      "flowMode": { "type": "QuestionGroupFlowMode", "required": false },
+      "status": { "type": "QuestionCollectionStatus", "required": false },
+      "items": { "type": "question-group-item-array", "required": false },
+      "version": { "type": "positive-integer", "required": true }
+    },
+    "DeleteQuestionStructureQuery": {
+      "version": { "type": "positive-integer", "required": true }
+    },
     "Login": {
       "email": { "type": "email-string", "required": true },
       "password": { "type": "string", "required": true }
@@ -301,6 +405,40 @@
       "name": { "type": "string", "required": true },
       "sortOrder": { "type": "integer", "required": true },
       "version": { "type": "positive-integer", "required": true },
+      "createdAt": { "type": "iso-string", "required": true },
+      "updatedAt": { "type": "iso-string", "required": true },
+      "deletedAt": { "type": "nullable-iso-string", "required": true }
+    },
+    "QuestionCluster": {
+      "id": { "type": "string", "required": true },
+      "tenantId": { "type": "string", "required": true },
+      "createdBy": { "type": "string", "required": true },
+      "code": { "type": "string", "required": true },
+      "name": { "type": "string", "required": true },
+      "stem": { "type": "string", "required": true },
+      "stemFileId": { "type": "nullable-string", "required": true },
+      "description": { "type": "nullable-string", "required": true },
+      "status": { "type": "QuestionCollectionStatus", "required": true },
+      "usageCount": { "type": "nonnegative-integer", "required": true },
+      "version": { "type": "positive-integer", "required": true },
+      "items": { "type": "question-cluster-item-array", "required": true },
+      "createdAt": { "type": "iso-string", "required": true },
+      "updatedAt": { "type": "iso-string", "required": true },
+      "deletedAt": { "type": "nullable-iso-string", "required": true }
+    },
+    "QuestionGroup": {
+      "id": { "type": "string", "required": true },
+      "tenantId": { "type": "string", "required": true },
+      "createdBy": { "type": "string", "required": true },
+      "code": { "type": "string", "required": true },
+      "name": { "type": "string", "required": true },
+      "description": { "type": "nullable-string", "required": true },
+      "subjectId": { "type": "nullable-string", "required": true },
+      "flowMode": { "type": "QuestionGroupFlowMode", "required": true },
+      "status": { "type": "QuestionCollectionStatus", "required": true },
+      "usageCount": { "type": "nonnegative-integer", "required": true },
+      "version": { "type": "positive-integer", "required": true },
+      "items": { "type": "question-group-item-array", "required": true },
       "createdAt": { "type": "iso-string", "required": true },
       "updatedAt": { "type": "iso-string", "required": true },
       "deletedAt": { "type": "nullable-iso-string", "required": true }

@@ -13,11 +13,12 @@ if (!connectionString) {
 
 const pool = createMySqlPool(connectionString);
 const store = new MySqlFileMetadataStore(pool);
+const fileId = "file-metadata-integration";
 
 describe("MySqlFileMetadataStore", () => {
   beforeAll(async () => {
     await runMigrations(pool);
-    await pool.execute("DELETE FROM files");
+    await pool.execute("DELETE FROM files WHERE file_id = ?", [fileId]);
   });
 
   afterAll(async () => {
@@ -26,7 +27,7 @@ describe("MySqlFileMetadataStore", () => {
 
   it("tracks pending, ready, and deleted metadata states", async () => {
     const metadata: FileMetadata = {
-      fileId: "file-metadata-integration",
+      fileId,
       ownerId: "owner-integration",
       tenantId: "tenant-integration",
       originalName: "report.txt",

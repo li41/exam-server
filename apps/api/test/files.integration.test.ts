@@ -24,7 +24,9 @@ suite("files API with MySQL metadata", () => {
 
   beforeAll(async () => {
     await runMigrations(pool);
-    await pool.execute("DELETE FROM files");
+    await pool.execute("DELETE FROM files WHERE tenant_id = ?", [
+      "local-development-tenant",
+    ]);
     root = await mkdtemp(join(tmpdir(), "server-foundation-api-files-db-"));
     storage = new LocalFileStorage(root, {}, metadataStore);
     app = createApp({

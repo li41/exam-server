@@ -329,3 +329,5 @@ export type AuthIdentity = z.infer<typeof AuthIdentitySchema>;
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 export type RefreshRequest = z.infer<typeof RefreshRequestSchema>;
 export type AuthTokenResponse = z.infer<typeof AuthTokenResponseSchema>;
+
+export * from "./question-structures.js";
