@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS question_cluster_items (
     ON DELETE CASCADE,
   CONSTRAINT fk_question_cluster_items_question
     FOREIGN KEY (question_id) REFERENCES questions(id)
-    ON DELETE RESTRICT
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS question_groups (
@@ -100,8 +100,8 @@ CREATE TABLE IF NOT EXISTS question_group_items (
     ON DELETE CASCADE,
   CONSTRAINT fk_question_group_items_question
     FOREIGN KEY (question_id) REFERENCES questions(id)
-    ON DELETE RESTRICT,
+    ON DELETE CASCADE,
   CONSTRAINT fk_question_group_items_cluster
     FOREIGN KEY (cluster_id) REFERENCES question_clusters(id)
-    ON DELETE RESTRICT
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
