@@ -60,7 +60,11 @@ export class InMemoryExamineeRepository implements ExamineeRepository {
         const parent = (left.parentId ?? left.id).localeCompare(
           right.parentId ?? right.id,
         );
-        return parent || left.sortOrder - right.sortOrder || left.id.localeCompare(right.id);
+        return (
+          parent ||
+          left.sortOrder - right.sortOrder ||
+          left.id.localeCompare(right.id)
+        );
       })
       .map((group) => structuredClone(group));
   }
@@ -83,7 +87,11 @@ export class InMemoryExamineeRepository implements ExamineeRepository {
     scope: QuestionBankScope,
   ): Promise<ExamineeGroup> {
     if (input.parentId !== null) {
-      const parent = this.requiredGroupOrValidation(input.parentId, scope, "parentId");
+      const parent = this.requiredGroupOrValidation(
+        input.parentId,
+        scope,
+        "parentId",
+      );
       if (parent.parentId !== null) {
         validationError("Examinee groups support at most two levels.");
       }
@@ -227,10 +235,7 @@ export class InMemoryExamineeRepository implements ExamineeRepository {
     };
   }
 
-  getExaminee(
-    id: string,
-    scope: QuestionBankScope,
-  ): Promise<Examinee | null> {
+  getExaminee(id: string, scope: QuestionBankScope): Promise<Examinee | null> {
     const examinee = this.examinees.find(
       (candidate) =>
         candidate.id === id &&

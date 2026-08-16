@@ -21,7 +21,11 @@ const createTestApp = () => {
   return app;
 };
 
-const jsonPost = (app: ReturnType<typeof createTestApp>, path: string, body: unknown) =>
+const jsonPost = (
+  app: ReturnType<typeof createTestApp>,
+  path: string,
+  body: unknown,
+) =>
   app.request(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -60,7 +64,9 @@ describe("examinee group API", () => {
 
   it("soft-deletes a group and child while making affected examinees ungrouped", async () => {
     const app = createTestApp();
-    const root = await (await jsonPost(app, "/api/v1/examinee-groups", { name: "Root" })).json();
+    const root = await (
+      await jsonPost(app, "/api/v1/examinee-groups", { name: "Root" })
+    ).json();
     const child = await (
       await jsonPost(app, "/api/v1/examinee-groups", {
         parentId: root.id,
@@ -82,9 +88,9 @@ describe("examinee group API", () => {
     );
     expect(deletion.status).toBe(204);
 
-    expect((await app.request(`/api/v1/examinee-groups/${child.id}`)).status).toBe(
-      404,
-    );
+    expect(
+      (await app.request(`/api/v1/examinee-groups/${child.id}`)).status,
+    ).toBe(404);
     const readExaminee = await app.request(`/api/v1/examinees/${examinee.id}`);
     expect(readExaminee.status).toBe(200);
     expect(await readExaminee.json()).toMatchObject({
@@ -113,11 +119,14 @@ describe("examinee API", () => {
       version: 1,
     });
 
-    const patchResponse = await app.request(`/api/v1/examinees/${examinee.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "只改姓名", version: examinee.version }),
-    });
+    const patchResponse = await app.request(
+      `/api/v1/examinees/${examinee.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "只改姓名", version: examinee.version }),
+      },
+    );
     expect(patchResponse.status).toBe(200);
     expect(await patchResponse.json()).toMatchObject({
       name: "只改姓名",
@@ -128,9 +137,7 @@ describe("examinee API", () => {
       version: 2,
     });
 
-    const lookup = await app.request(
-      "/api/v1/examinees/by-identifier/EMP-100",
-    );
+    const lookup = await app.request("/api/v1/examinees/by-identifier/EMP-100");
     expect(lookup.status).toBe(200);
     expect(await lookup.json()).toMatchObject({
       id: examinee.id,

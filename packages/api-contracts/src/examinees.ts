@@ -70,9 +70,10 @@ export const CreateExamineeSchema = ExamineeWriteFieldsBaseSchema.extend({
   status: ExamineeWriteFieldsBaseSchema.shape.status.default("enabled"),
 });
 
-export const UpdateExamineeSchema = ExamineeWriteFieldsBaseSchema.partial().extend({
-  version: z.number().int().positive(),
-});
+export const UpdateExamineeSchema =
+  ExamineeWriteFieldsBaseSchema.partial().extend({
+    version: z.number().int().positive(),
+  });
 
 export const ExamineeListQuerySchema = z.object({
   cursor: z.string().min(1).optional(),

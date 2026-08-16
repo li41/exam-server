@@ -21,16 +21,16 @@ No PHP code or production database was modified by this work.
 
 ### Examinee
 
-| PHP | server | notes |
-| --- | --- | --- |
-| `company_id` | `tenant_id` | server tenant identity is an opaque string |
-| `group_id` | `group_id` | nullable, active same-tenant group only on writes |
-| `created_by` | `created_by` | authenticated actor user id |
-| `code` | encrypted `code_ciphertext` + keyed `code_digest` | user-visible examinee password |
-| `identifier` | `identifier` | required, active value unique per tenant |
-| `name` | `name` | required, max 100 |
-| `note` | `note` | nullable |
-| `status` 1/0 | `enabled` / `disabled` | explicit enum |
+| PHP          | server                                            | notes                                             |
+| ------------ | ------------------------------------------------- | ------------------------------------------------- |
+| `company_id` | `tenant_id`                                       | server tenant identity is an opaque string        |
+| `group_id`   | `group_id`                                        | nullable, active same-tenant group only on writes |
+| `created_by` | `created_by`                                      | authenticated actor user id                       |
+| `code`       | encrypted `code_ciphertext` + keyed `code_digest` | user-visible examinee password                    |
+| `identifier` | `identifier`                                      | required, active value unique per tenant          |
+| `name`       | `name`                                            | required, max 100                                 |
+| `note`       | `note`                                            | nullable                                          |
+| `status` 1/0 | `enabled` / `disabled`                            | explicit enum                                     |
 
 PHP enforces both `code` and `identifier` uniqueness within one company. The
 server preserves both rules for active rows and allows the same values in
@@ -38,13 +38,13 @@ another tenant.
 
 ### Examinee group
 
-| PHP | server | notes |
-| --- | --- | --- |
-| `company_id` | `tenant_id` | opaque tenant identity |
-| `parent_id` | `parent_id` | nullable; parent cannot be changed by PATCH |
-| `name` | `name` | sibling-name uniqueness per tenant |
-| `proctor_password` | encrypted `proctor_password_ciphertext` | nullable, 4-50 chars when present |
-| `sort_order` | `sort_order` | non-negative |
+| PHP                | server                                  | notes                                       |
+| ------------------ | --------------------------------------- | ------------------------------------------- |
+| `company_id`       | `tenant_id`                             | opaque tenant identity                      |
+| `parent_id`        | `parent_id`                             | nullable; parent cannot be changed by PATCH |
+| `name`             | `name`                                  | sibling-name uniqueness per tenant          |
+| `proctor_password` | encrypted `proctor_password_ciphertext` | nullable, 4-50 chars when present           |
+| `sort_order`       | `sort_order`                            | non-negative                                |
 
 ## Two levels are a real PHP rule
 

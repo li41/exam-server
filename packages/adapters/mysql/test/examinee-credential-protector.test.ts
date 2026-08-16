@@ -41,8 +41,8 @@ describe("AesGcmExamineeCredentialProtector", () => {
     expect(() => parseExamineeCredentialMasterKey("short")).toThrow(
       /64 hexadecimal/,
     );
-    expect(
-      () => parseExamineeCredentialMasterKey(`${"ab".repeat(31)}zz`),
+    expect(() =>
+      parseExamineeCredentialMasterKey(`${"ab".repeat(31)}zz`),
     ).toThrow(/64 hexadecimal/);
   });
 });

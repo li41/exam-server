@@ -352,10 +352,7 @@ export class MySqlExamineeRepository implements ExamineeRepository {
     };
   }
 
-  getExaminee(
-    id: string,
-    scope: QuestionBankScope,
-  ): Promise<Examinee | null> {
+  getExaminee(id: string, scope: QuestionBankScope): Promise<Examinee | null> {
     return this.getExamineeWith(this.pool, id, scope);
   }
 

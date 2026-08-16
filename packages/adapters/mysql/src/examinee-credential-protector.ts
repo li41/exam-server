@@ -19,15 +19,15 @@ export interface ExamineeCredentialProtector {
   digest(value: string): string;
 }
 
-export class AesGcmExamineeCredentialProtector
-  implements ExamineeCredentialProtector
-{
+export class AesGcmExamineeCredentialProtector implements ExamineeCredentialProtector {
   private readonly encryptionKey: Buffer;
   private readonly lookupKey: Buffer;
 
   constructor(masterKey: Buffer) {
     if (masterKey.length !== 32) {
-      throw new Error("Examinee credential master key must be exactly 32 bytes.");
+      throw new Error(
+        "Examinee credential master key must be exactly 32 bytes.",
+      );
     }
     this.encryptionKey = deriveKey(masterKey, "encryption");
     this.lookupKey = deriveKey(masterKey, "lookup");
@@ -71,7 +71,9 @@ export class AesGcmExamineeCredentialProtector
   }
 
   digest(value: string): string {
-    return createHmac("sha256", this.lookupKey).update(value, "utf8").digest("hex");
+    return createHmac("sha256", this.lookupKey)
+      .update(value, "utf8")
+      .digest("hex");
   }
 }
 

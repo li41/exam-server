@@ -1,4 +1,8 @@
-import { ConflictError, DomainError, NotFoundError } from "@server-foundation/domain";
+import {
+  ConflictError,
+  DomainError,
+  NotFoundError,
+} from "@server-foundation/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   AesGcmExamineeCredentialProtector,
@@ -50,10 +54,10 @@ describe("MySqlExamineeRepository", () => {
       scope.tenantId,
       otherScope.tenantId,
     ]);
-    await pool.execute("DELETE FROM examinee_groups WHERE tenant_id IN (?, ?)", [
-      scope.tenantId,
-      otherScope.tenantId,
-    ]);
+    await pool.execute(
+      "DELETE FROM examinee_groups WHERE tenant_id IN (?, ?)",
+      [scope.tenantId, otherScope.tenantId],
+    );
   });
 
   afterAll(async () => {
@@ -61,10 +65,10 @@ describe("MySqlExamineeRepository", () => {
       scope.tenantId,
       otherScope.tenantId,
     ]);
-    await pool.execute("DELETE FROM examinee_groups WHERE tenant_id IN (?, ?)", [
-      scope.tenantId,
-      otherScope.tenantId,
-    ]);
+    await pool.execute(
+      "DELETE FROM examinee_groups WHERE tenant_id IN (?, ?)",
+      [scope.tenantId, otherScope.tenantId],
+    );
     await pool.end();
   });
 
@@ -231,9 +235,9 @@ describe("MySqlExamineeRepository", () => {
     expect((foreignError as Error).message).toBe(
       `Examinee group parentId "${foreignParent.id}" does not exist.`,
     );
-    expect((missingError as Error).message.replace(missingId, foreignParent.id)).toBe(
-      (foreignError as Error).message,
-    );
+    expect(
+      (missingError as Error).message.replace(missingId, foreignParent.id),
+    ).toBe((foreignError as Error).message);
   });
 
   it("makes foreign and nonexistent group references indistinguishable", async () => {
@@ -275,9 +279,9 @@ describe("MySqlExamineeRepository", () => {
       .catch((error: unknown) => error);
     expect(foreignError).toMatchObject({ code: "validation_error" });
     expect(missingError).toMatchObject({ code: "validation_error" });
-    expect((missingError as Error).message.replace(missingId, foreignGroup.id)).toBe(
-      (foreignError as Error).message,
-    );
+    expect(
+      (missingError as Error).message.replace(missingId, foreignGroup.id),
+    ).toBe((foreignError as Error).message);
   });
 
   it("group deletion cascades child removal and unassigns affected examinees only in the tenant", async () => {
@@ -313,11 +317,15 @@ describe("MySqlExamineeRepository", () => {
     await repository.softDeleteGroup(root.id, root.version, scope);
     await expect(repository.getGroup(root.id, scope)).resolves.toBeNull();
     await expect(repository.getGroup(child.id, scope)).resolves.toBeNull();
-    await expect(repository.getExaminee(rootExaminee.id, scope)).resolves.toMatchObject({
+    await expect(
+      repository.getExaminee(rootExaminee.id, scope),
+    ).resolves.toMatchObject({
       groupId: null,
       version: 2,
     });
-    await expect(repository.getExaminee(childExaminee.id, scope)).resolves.toMatchObject({
+    await expect(
+      repository.getExaminee(childExaminee.id, scope),
+    ).resolves.toMatchObject({
       groupId: null,
       version: 2,
     });
@@ -347,7 +355,9 @@ describe("MySqlExamineeRepository", () => {
     await expect(
       repository.softDeleteExaminee(foreign.id, foreign.version, scope),
     ).rejects.toBeInstanceOf(NotFoundError);
-    await expect(repository.getExaminee(foreign.id, otherScope)).resolves.toMatchObject({
+    await expect(
+      repository.getExaminee(foreign.id, otherScope),
+    ).resolves.toMatchObject({
       name: "foreign",
       deletedAt: null,
     });
