@@ -1,0 +1,43 @@
+name: Temporary stabilize import fingerprint
+
+on:
+  push:
+    branches:
+      - codex/44-question-import
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/44-question-import
+      - name: Patch fingerprint
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('apps/api/src/question-bank-routes.ts')
+          s = p.read_text()
+          old = '''import {\n  importQuestionWorkbookFromRequest,\n  questionImportTemplateResponse,\n} from "./question-import-handler.js";'''
+          new = '''import {\n  importQuestionWorkbookFromRequest,\n  questionImportFingerprintPayload,\n  questionImportTemplateResponse,\n} from "./question-import-handler.js";'''
+          if s.count(old) != 1:
+              raise SystemExit('handler import match failed')
+          s = s.replace(old, new, 1)
+          old = '''  const url = new URL(context.req.url);\n  const hash = createHash("sha256");\n  hash.update(context.req.method);\n  hash.update("\\n");\n  hash.update(`${canonicalApiPath(url.pathname)}${url.search}`);\n  hash.update("\\n");\n  if (context.req.raw.body) {\n    hash.update(Buffer.from(await context.req.raw.clone().arrayBuffer()));\n  }'''
+          new = '''  const url = new URL(context.req.url);\n  const canonicalPath = canonicalApiPath(url.pathname);\n  const hash = createHash("sha256");\n  hash.update(context.req.method);\n  hash.update("\\n");\n  hash.update(`${canonicalPath}${url.search}`);\n  hash.update("\\n");\n  if (context.req.raw.body) {\n    const importPayload =\n      context.req.method === "POST" &&\n      canonicalPath === `${LEGACY_API_PREFIX}/question-import`\n        ? await questionImportFingerprintPayload(context.req.raw.clone())\n        : null;\n    hash.update(\n      importPayload ?? Buffer.from(await context.req.raw.clone().arrayBuffer()),\n    );\n  }'''
+          if s.count(old) != 1:
+              raise SystemExit('fingerprint body match failed')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add apps/api/src/question-bank-routes.ts
+          git diff --cached --check
+          git commit -m "stabilize multipart import idempotency fingerprint"
+          git push origin HEAD:codex/44-question-import
