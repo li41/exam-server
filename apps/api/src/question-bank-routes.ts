@@ -26,6 +26,7 @@ import {
   ConflictError,
   DomainError,
   QuestionBankService,
+  QuestionImportService,
   QuestionStructureService,
   UnauthorizedError,
 } from "@server-foundation/domain";
@@ -33,11 +34,17 @@ import type {
   AuthenticationService,
   IdempotencyStore,
   QuestionBankRepository,
+  QuestionImportRepository,
   QuestionStructureRepository,
 } from "@server-foundation/domain";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Logger } from "./logger.js";
+import {
+  importQuestionWorkbookFromRequest,
+  questionImportFingerprintPayload,
+  questionImportTemplateResponse,
+} from "./question-import-handler.js";
 
 type QuestionEnv = {
   Variables: {
@@ -53,6 +60,7 @@ type MountTarget = {
 
 type Dependencies = {
   repository: QuestionBankRepository;
+  importRepository?: QuestionImportRepository;
   structureRepository?: QuestionStructureRepository;
   authenticationService?: AuthenticationService;
   idempotencyStore?: IdempotencyStore;
@@ -125,13 +133,21 @@ const requestFingerprint = async (
   context: Context<QuestionEnv>,
 ): Promise<string> => {
   const url = new URL(context.req.url);
+  const canonicalPath = canonicalApiPath(url.pathname);
   const hash = createHash("sha256");
   hash.update(context.req.method);
   hash.update("\n");
-  hash.update(`${canonicalApiPath(url.pathname)}${url.search}`);
+  hash.update(`${canonicalPath}${url.search}`);
   hash.update("\n");
   if (context.req.raw.body) {
-    hash.update(Buffer.from(await context.req.raw.clone().arrayBuffer()));
+    const importPayload =
+      context.req.method === "POST" &&
+      canonicalPath === `${LEGACY_API_PREFIX}/question-import`
+        ? await questionImportFingerprintPayload(context.req.raw.clone())
+        : null;
+    hash.update(
+      importPayload ?? Buffer.from(await context.req.raw.clone().arrayBuffer()),
+    );
   }
   return hash.digest("hex");
 };
@@ -139,9 +155,19 @@ const requestFingerprint = async (
 const createQuestionRouter = (dependencies: Dependencies) => {
   const api = new Hono<QuestionEnv>();
   const service = new QuestionBankService(dependencies.repository);
+  const importService = dependencies.importRepository
+    ? new QuestionImportService(dependencies.importRepository)
+    : undefined;
   const structureService = dependencies.structureRepository
     ? new QuestionStructureService(dependencies.structureRepository)
     : undefined;
+
+  const requireImportService = (): QuestionImportService => {
+    if (!importService) {
+      throw new CapabilityMissingError("question import");
+    }
+    return importService;
+  };
 
   const requireStructureService = (): QuestionStructureService => {
     if (!structureService) {
@@ -292,6 +318,29 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     if (!identity) throw new UnauthorizedError();
     return { tenantId: identity.tenantId, actorUserId: identity.userId };
   };
+
+  api.get("/question-import/template", authenticate, () =>
+    questionImportTemplateResponse(),
+  );
+
+  api.post(
+    "/question-import",
+    authenticate,
+    enforceIdempotency,
+    async (context) => {
+      const result = await importQuestionWorkbookFromRequest(
+        context.req.raw,
+        requireImportService(),
+        scopeFor(context),
+      );
+      return result.ok
+        ? context.json(
+            { imported: result.imported, errors: result.errors },
+            201,
+          )
+        : context.json({ imported: 0, errors: result.errors }, 400);
+    },
+  );
 
   api.get(
     "/questions",

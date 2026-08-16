@@ -19,6 +19,9 @@ importers:
 
   apps/api:
     dependencies:
+      "@e965/xlsx":
+        specifier: ^0.20.3
+        version: 0.20.3
       "@hono/node-server":
         specifier: ^2.1.0
         version: 2.1.0(hono@4.13.1)
@@ -155,6 +158,14 @@ importers:
         version: link:../domain
 
 packages:
+  "@e965/xlsx@0.20.3":
+    resolution:
+      {
+        integrity: sha512-703RN/3OdsRD5mtse2HBX7Um7xwaP9tlswEG6svOtjqokXoX7rJdQj7DyabD2I+xk22RgaIIU+R6BHgkpZGB/w==,
+      }
+    engines: { node: ">=0.8" }
+    hasBin: true
+
   "@epic-web/invariant@1.0.0":
     resolution:
       {
@@ -1669,6 +1680,8 @@ packages:
       }
 
 snapshots:
+  "@e965/xlsx@0.20.3": {}
+
   "@epic-web/invariant@1.0.0": {}
 
   "@esbuild/aix-ppc64@0.28.1":
