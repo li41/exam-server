@@ -6,10 +6,11 @@ on:
       - codex/48-examinees
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -22,5 +23,22 @@ jobs:
       - run: |
           corepack enable
           corepack prepare pnpm@11.10.0 --activate
-      - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm verify
+          corepack pnpm install --frozen-lockfile
+      - name: Capture verify output
+        run: |
+          set +e
+          corepack pnpm verify > tmp-examinee-verify.log 2>&1
+          code=$?
+          echo "$code" > tmp-examinee-exit-code
+          exit 0
+      - name: Commit failure log
+        run: |
+          code=$(cat tmp-examinee-exit-code)
+          if [ "$code" -ne 0 ]; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add tmp-examinee-verify.log
+            git commit -m "capture next examinee verify failure"
+            git push origin HEAD:codex/48-examinees
+          fi
+          exit "$code"
