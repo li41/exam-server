@@ -20,28 +20,42 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          replacements = {
-            'packages/testing/src/fake-examinee-repository.ts': [
-              (
-                '''    if (!group) {\n      validationError(`Examinee group ${field} \\"${id}\\" does not exist.`);\n    }\n    return group;''',
-                '''    if (!group) {\n      throw new DomainError(\n        "validation_error",\n        `Examinee group ${field} \\"${id}\\" does not exist.`,\n      );\n    }\n    return group;''',
-              ),
-            ],
-            'packages/adapters/mysql/src/examinee-repository.ts': [
-              (
-                '''    if (!parent) {\n      validationError(`Examinee group parentId \\"${parentId}\\" does not exist.`);\n    }\n    if (parent.parent_id !== null) {''',
-                '''    if (!parent) {\n      throw new DomainError(\n        "validation_error",\n        `Examinee group parentId \\"${parentId}\\" does not exist.`,\n      );\n    }\n    if (parent.parent_id !== null) {''',
-              ),
-            ],
-          }
-          for path, pairs in replacements.items():
-            p = Path(path)
-            text = p.read_text()
-            for old, new in pairs:
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
               if text.count(old) != 1:
-                raise SystemExit(f'{path}: marker count {text.count(old)}')
-              text = text.replace(old, new, 1)
-            p.write_text(text)
+                  raise SystemExit(f'{path}: marker count {text.count(old)}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'packages/testing/src/fake-examinee-repository.ts',
+              '''    if (!group) {
+              validationError(`Examinee group ${field} "${id}" does not exist.`);
+            }
+            return group;'''.replace('            ', ''),
+              '''    if (!group) {
+              throw new DomainError(
+                "validation_error",
+                `Examinee group ${field} "${id}" does not exist.`,
+              );
+            }
+            return group;'''.replace('            ', ''),
+          )
+          replace_once(
+              'packages/adapters/mysql/src/examinee-repository.ts',
+              '''    if (!parent) {
+              validationError(`Examinee group parentId "${parentId}" does not exist.`);
+            }
+            if (parent.parent_id !== null) {'''.replace('            ', ''),
+              '''    if (!parent) {
+              throw new DomainError(
+                "validation_error",
+                `Examinee group parentId "${parentId}" does not exist.`,
+              );
+            }
+            if (parent.parent_id !== null) {'''.replace('            ', ''),
+          )
           PY
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
