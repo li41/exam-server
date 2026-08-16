@@ -16,6 +16,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: codex/48-examinees
+      - name: Tighten ambiguous import marker
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/tmp-wire-examinees.py')
+          s = p.read_text()
+          old = "replace_once(route, '  DeleteQuestionCategoryQuerySchema,\\n', '  DeleteExamineeGroupQuerySchema,\\n  DeleteExamineeQuerySchema,\\n  DeleteQuestionCategoryQuerySchema,\\n')"
+          new = "replace_once(route, '  CreateTestBookletSchema,\\n  DeleteQuestionCategoryQuerySchema,\\n', '  CreateTestBookletSchema,\\n  DeleteExamineeGroupQuerySchema,\\n  DeleteExamineeQuerySchema,\\n  DeleteQuestionCategoryQuerySchema,\\n')"
+          if s.count(old) != 1:
+              raise SystemExit(f'prep marker count: {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
       - name: Apply exact wiring
         run: |
           set +e
