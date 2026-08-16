@@ -16,9 +16,7 @@ const createTestApp = () => {
 
 describe("deployment tenant identity API", () => {
   it("exposes only the tenant UUID without authentication", async () => {
-    const response = await createTestApp().request(
-      "/api/v1/deployment/tenant",
-    );
+    const response = await createTestApp().request("/api/v1/deployment/tenant");
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ tenantUuid });

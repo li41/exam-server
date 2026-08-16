@@ -27,7 +27,9 @@ const projectId = (value) => {
 };
 
 const tenantUuid = (value) => {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (!tenantUuidPattern.test(normalized)) {
     throw new Error(
       `${DEPLOYMENT_TENANT_UUID_KEY} must be an exam-control tenant_uuid UUIDv4.`,

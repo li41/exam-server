@@ -63,8 +63,7 @@ test("rejects unsafe backup paths and overlapping roots", () => {
 test("deployment identity requires exam-control tenant UUID and a project id", () => {
   assert.deepEqual(
     deploymentIdentityFromValues({
-      DEPLOYMENT_TENANT_UUID:
-        "F47AC10B-58CC-4372-A567-0E02B2C3D479",
+      DEPLOYMENT_TENANT_UUID: "F47AC10B-58CC-4372-A567-0E02B2C3D479",
       DEPLOYMENT_PROJECT_ID: "item-bank-main",
     }),
     deploymentIdentity,
@@ -80,8 +79,7 @@ test("deployment identity requires exam-control tenant UUID and a project id", (
   assert.throws(
     () =>
       deploymentIdentityFromValues({
-        DEPLOYMENT_TENANT_UUID:
-          "f47ac10b-58cc-5372-a567-0e02b2c3d479",
+        DEPLOYMENT_TENANT_UUID: "f47ac10b-58cc-5372-a567-0e02b2c3d479",
         DEPLOYMENT_PROJECT_ID: "item-bank-main",
       }),
     /exam-control tenant_uuid UUIDv4/u,

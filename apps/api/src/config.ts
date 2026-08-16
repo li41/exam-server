@@ -81,7 +81,9 @@ const parseOptionalUrl = (
   return value;
 };
 
-const parseOptionalTenantUuid = (raw: string | undefined): string | undefined => {
+const parseOptionalTenantUuid = (
+  raw: string | undefined,
+): string | undefined => {
   const value = raw?.trim().toLowerCase();
   if (!value) return undefined;
   if (!tenantUuidPattern.test(value)) {
