@@ -15,6 +15,7 @@ describe("server config", () => {
       redisUrl: undefined,
       fileStorageRoot: undefined,
       deploymentTenantUuid: undefined,
+      examineeCredentialKeyFile: undefined,
       fileCleanupIntervalMs: defaultFileCleanupIntervalMs,
       idempotencyTtlSeconds: 86_400,
       trustProxyHeaders: false,
@@ -32,6 +33,8 @@ describe("server config", () => {
         REDIS_URL: "rediss://127.0.0.1:6380",
         FILE_STORAGE_ROOT: "/srv/private-files",
         DEPLOYMENT_TENANT_UUID: tenantUuid.toUpperCase(),
+        EXAMINEE_CREDENTIAL_KEY_FILE:
+          "/etc/server-foundation/examinee-credential.key",
         FILE_CLEANUP_INTERVAL_SECONDS: "120",
         IDEMPOTENCY_TTL_SECONDS: "3600",
         TRUST_PROXY_HEADERS: "true",
@@ -43,6 +46,8 @@ describe("server config", () => {
       host: "127.0.0.1",
       port: 9443,
       deploymentTenantUuid: tenantUuid,
+      examineeCredentialKeyFile:
+        "/etc/server-foundation/examinee-credential.key",
       fileCleanupIntervalMs: 120_000,
       idempotencyTtlSeconds: 3600,
       trustProxyHeaders: true,
@@ -50,9 +55,9 @@ describe("server config", () => {
     });
   });
 
-  it("requires all production backing services and deployment tenant UUID", () => {
+  it("requires all production backing services, deployment identity, and credential key", () => {
     expect(() => loadConfig({ NODE_ENV: "production" })).toThrow(
-      /DEPLOYMENT_TENANT_UUID/,
+      /EXAMINEE_CREDENTIAL_KEY_FILE/,
     );
   });
 
