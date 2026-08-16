@@ -1,0 +1,66 @@
+name: Format issue 37
+
+on:
+  push:
+    branches:
+      - codex/37-question-clusters-groups
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/37-question-clusters-groups
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Enable pnpm through Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Format issue 37 files
+        run: |
+          corepack pnpm exec prettier --write \
+            apps/api/src/question-bank-routes.ts \
+            apps/api/test/question-structures.test.ts \
+            contracts/api-v1-fixtures.json \
+            contracts/api-v1.json \
+            packages/adapters/mysql/src/question-structure-repository.ts \
+            packages/adapters/mysql/test/question-structure-repository.integration.test.ts \
+            packages/api-contracts/src/question-structures.ts \
+            packages/domain/src/use-cases/question-structures.ts \
+            packages/testing/src/fake-question-structure-repository.ts
+
+      - name: Commit formatting
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            apps/api/src/question-bank-routes.ts \
+            apps/api/test/question-structures.test.ts \
+            contracts/api-v1-fixtures.json \
+            contracts/api-v1.json \
+            packages/adapters/mysql/src/question-structure-repository.ts \
+            packages/adapters/mysql/test/question-structure-repository.integration.test.ts \
+            packages/api-contracts/src/question-structures.ts \
+            packages/domain/src/use-cases/question-structures.ts \
+            packages/testing/src/fake-question-structure-repository.ts
+          if ! git diff --cached --quiet; then
+            git commit -m "format question structure implementation"
+            git push origin HEAD:codex/37-question-clusters-groups
+          fi
