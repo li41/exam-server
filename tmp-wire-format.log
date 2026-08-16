@@ -1,0 +1,26 @@
+Preparing pnpm@11.10.0 for immediate activation...
+Scope: all 9 workspace projects
+? Verifying lockfile against supply-chain policies (175 entries)...
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +89
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 89, reused 0, downloaded 83, added 12
+Progress: resolved 89, reused 0, downloaded 89, added 89, done
+✓ Lockfile passes supply-chain policies (175 entries in 1.7s)
+.../argon2@0.45.1/node_modules/argon2 install$ cross-env ZERO_AR_DATE=1 node-gyp-build
+.../esbuild@0.28.1/node_modules/esbuild postinstall$ node install.js
+.../esbuild@0.28.1/node_modules/esbuild postinstall: Done
+.../argon2@0.45.1/node_modules/argon2 install: Done
+
+devDependencies:
++ oxlint 1.77.0
++ prettier 3.9.6
++ typescript 7.0.2
+
+Done in 2.7s using pnpm v11.10.0
+[90mpackages/adapters/mysql/src/migrate.ts[39m 120ms (unchanged)
+[90mapps/api/src/config.ts[39m 31ms (unchanged)
+[[31merror[39m] No parser could be inferred for file "/home/runner/work/exam-server/exam-server/deploy/env/server-foundation.env.example".
+apps/api/src/question-bank-routes.ts 94ms
+[90mapps/api/src/server.ts[39m 25ms (unchanged)
