@@ -18,7 +18,9 @@ if (!baseRef) {
 
 const mysqlTestUrl = process.env.MYSQL_TEST_URL;
 if (!mysqlTestUrl) {
-  throw new Error("MYSQL_TEST_URL is required for N-1 migration compatibility.");
+  throw new Error(
+    "MYSQL_TEST_URL is required for N-1 migration compatibility.",
+  );
 }
 
 const run = (command, args, cwd, env = process.env) =>
@@ -141,14 +143,24 @@ try {
 
   await run(
     "corepack",
-    ["pnpm", "--filter", "@server-foundation/redis-adapter", "test:integration"],
+    [
+      "pnpm",
+      "--filter",
+      "@server-foundation/redis-adapter",
+      "test:integration",
+    ],
     worktree,
     compatibilityEnv,
   );
 
-  for (const testFile of ["auth.integration.test.ts", "files.integration.test.ts"]) {
+  for (const testFile of [
+    "auth.integration.test.ts",
+    "files.integration.test.ts",
+  ]) {
     await resetCompatibilityDatabase();
-    console.log(`Running N-1 API integration test on current schema: ${testFile}`);
+    console.log(
+      `Running N-1 API integration test on current schema: ${testFile}`,
+    );
     await run(
       "corepack",
       [
