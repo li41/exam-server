@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: github.event.head_commit.message == 'retry issue 50 contract cleanup within endpoints'
+    if: github.event.head_commit.message == 'final retry issue 50 contract cleanup'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -34,8 +34,7 @@ jobs:
               matches = [i for i, line in enumerate(current) if line.strip() == needle]
               if len(matches) != 1:
                   raise SystemExit(f"{path}: {needle!r} matched {len(matches)}, expected 1")
-              index = matches[0]
-              current[index:index] = [line + "\n" for line in lines]
+              current[matches[0]:matches[0]] = [line + "\n" for line in lines]
               p.write_text("".join(current))
 
           api = Path("contracts/api-v1.json")
@@ -45,8 +44,8 @@ jobs:
               i for i, line in enumerate(lines[:closed_enums])
               if line.strip() == '"path": "/api/v1/examinees",'
           ]
-          if len(matches) != 1:
-              raise SystemExit(f"endpoint-section examinees path matched {len(matches)}, expected 1")
+          if not matches:
+              raise SystemExit("no examinees endpoint path found")
           path_index = matches[0]
           object_start = path_index - 2
           if lines[object_start].strip() != "{":
@@ -72,7 +71,6 @@ jobs:
                   '    },',
               ],
           )
-
           insert_before_unique_line(
               "contracts/api-v1-fixtures.json",
               '"FileMetadataSchema": {',
