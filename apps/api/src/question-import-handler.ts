@@ -54,7 +54,7 @@ export const questionImportFingerprintPayload = async (
 
 export const questionImportTemplateResponse = (): Response => {
   const body = buildQuestionImportTemplate();
-  return new Response(body, {
+  return new Response(Uint8Array.from(body), {
     status: 200,
     headers: {
       "Content-Type":
