@@ -1,11 +1,14 @@
 import { readFile } from "node:fs/promises";
 
-export const DEPLOYMENT_COMPANY_ID_KEY = "DEPLOYMENT_COMPANY_ID";
+export const DEPLOYMENT_TENANT_UUID_KEY = "DEPLOYMENT_TENANT_UUID";
 export const DEPLOYMENT_PROJECT_ID_KEY = "DEPLOYMENT_PROJECT_ID";
 export const RESTORE_DEPLOYMENT_OVERRIDE_ENV =
   "RESTORE_DEPLOYMENT_OVERRIDE_CONFIRM";
 export const RESTORE_DEPLOYMENT_OVERRIDE_CONFIRMATION =
   "YES_I_UNDERSTAND_THIS_BACKUP_IS_FOR_A_DIFFERENT_DEPLOYMENT";
+
+const tenantUuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 const projectId = (value) => {
   if (typeof value !== "string") {
@@ -23,24 +26,18 @@ const projectId = (value) => {
   return normalized;
 };
 
-const companyId = (value) => {
-  const normalized = String(value ?? "").trim();
-  if (!/^[1-9][0-9]*$/u.test(normalized)) {
+const tenantUuid = (value) => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!tenantUuidPattern.test(normalized)) {
     throw new Error(
-      `${DEPLOYMENT_COMPANY_ID_KEY} must be a positive exam-control company_id integer.`,
+      `${DEPLOYMENT_TENANT_UUID_KEY} must be an exam-control tenant_uuid UUIDv4.`,
     );
   }
-  const parsed = Number(normalized);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(
-      `${DEPLOYMENT_COMPANY_ID_KEY} exceeds JavaScript safe integer range.`,
-    );
-  }
-  return parsed;
+  return normalized;
 };
 
 export const deploymentIdentityFromValues = (values) => ({
-  companyId: companyId(values?.[DEPLOYMENT_COMPANY_ID_KEY]),
+  tenantUuid: tenantUuid(values?.[DEPLOYMENT_TENANT_UUID_KEY]),
   projectId: projectId(values?.[DEPLOYMENT_PROJECT_ID_KEY]),
 });
 
@@ -49,7 +46,7 @@ export const normalizeDeploymentIdentity = (value) => {
     throw new Error("Deployment identity must be an object.");
   }
   return {
-    companyId: companyId(value.companyId),
+    tenantUuid: tenantUuid(value.tenantUuid),
     projectId: projectId(value.projectId),
   };
 };
@@ -64,7 +61,7 @@ export const loadDeploymentIdentityFromEnvFile = async (path) => {
     if (separator <= 0) continue;
     const key = line.slice(0, separator).trim();
     if (
-      key !== DEPLOYMENT_COMPANY_ID_KEY &&
+      key !== DEPLOYMENT_TENANT_UUID_KEY &&
       key !== DEPLOYMENT_PROJECT_ID_KEY
     ) {
       continue;
@@ -81,11 +78,11 @@ export const loadDeploymentIdentityFromEnvFile = async (path) => {
 
 export const deploymentIdentityLabel = (identity) => {
   const normalized = normalizeDeploymentIdentity(identity);
-  return `company_id=${normalized.companyId}, project_id=${JSON.stringify(normalized.projectId)}`;
+  return `tenant_uuid=${JSON.stringify(normalized.tenantUuid)}, project_id=${JSON.stringify(normalized.projectId)}`;
 };
 
 const sameIdentity = (left, right) =>
-  left.companyId === right.companyId && left.projectId === right.projectId;
+  left.tenantUuid === right.tenantUuid && left.projectId === right.projectId;
 
 const overrideWasTyped = (confirmation) =>
   confirmation === RESTORE_DEPLOYMENT_OVERRIDE_CONFIRMATION;
@@ -150,11 +147,9 @@ export const assertRestoreDeploymentIdentity = ({
 
 export const mismatchedDeploymentIdentityForRehearsal = (identity) => {
   const current = normalizeDeploymentIdentity(identity);
+  const replacement = current.tenantUuid.endsWith("0") ? "1" : "0";
   return {
     ...current,
-    companyId:
-      current.companyId === Number.MAX_SAFE_INTEGER
-        ? current.companyId - 1
-        : current.companyId + 1,
+    tenantUuid: `${current.tenantUuid.slice(0, -1)}${replacement}`,
   };
 };
