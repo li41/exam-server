@@ -1,0 +1,71 @@
+name: Temporary compact booklet contract
+
+on:
+  push:
+    branches:
+      - codex/45-test-booklets
+
+permissions:
+  contents: write
+
+jobs:
+  compact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/45-test-booklets
+          fetch-depth: 0
+      - name: Restore base formatting and apply additive entries
+        run: |
+          git show b6546bbfa1b6851745ef76360508c907456bd8f6:contracts/api-v1.json > contracts/api-v1.json
+          git show b6546bbfa1b6851745ef76360508c907456bd8f6:contracts/api-v1-fixtures.json > contracts/api-v1-fixtures.json
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if s.count(old) != 1:
+                  raise SystemExit(f"marker mismatch in {path}: {old[:60]!r}")
+              p.write_text(s.replace(old, new, 1))
+
+          endpoint_marker = '''    {\n      "method": "POST",\n      "path": "/api/v1/files/upload-sessions",'''
+          endpoint_add = '''    {\n      "method": "GET",\n      "path": "/api/v1/test-booklets",\n      "authenticated": true,\n      "idempotent": false\n    },\n    {\n      "method": "GET",\n      "path": "/api/v1/test-booklets/:id",\n      "authenticated": true,\n      "idempotent": false\n    },\n    {\n      "method": "POST",\n      "path": "/api/v1/test-booklets",\n      "authenticated": true,\n      "idempotent": true\n    },\n    {\n      "method": "PATCH",\n      "path": "/api/v1/test-booklets/:id",\n      "authenticated": true,\n      "idempotent": true\n    },\n    {\n      "method": "DELETE",\n      "path": "/api/v1/test-booklets/:id",\n      "authenticated": true,\n      "idempotent": true\n    },\n    {\n      "method": "POST",\n      "path": "/api/v1/test-booklets/:id/duplicate",\n      "authenticated": true,\n      "idempotent": true\n    },\n'''
+          replace_once('contracts/api-v1.json', endpoint_marker, endpoint_add + endpoint_marker)
+
+          replace_once(
+              'contracts/api-v1.json',
+              '    "FileStatus": ["pending", "ready", "deleted"]',
+              '    "TestBookletStatus": ["enabled", "disabled"],\n    "FileStatus": ["pending", "ready", "deleted"]',
+          )
+
+          request_add = '''    "CreateTestBooklet": {\n      "subjectId": { "type": "nullable-string", "required": false },\n      "categoryId": { "type": "nullable-string", "required": false },\n      "code": { "type": "string", "required": true },\n      "name": { "type": "string", "required": true },\n      "description": { "type": "nullable-string", "required": false },\n      "status": { "type": "TestBookletStatus", "required": false },\n      "groupIds": { "type": "string-array", "required": false }\n    },\n    "UpdateTestBooklet": {\n      "subjectId": { "type": "nullable-string", "required": false },\n      "categoryId": { "type": "nullable-string", "required": false },\n      "code": { "type": "string", "required": false },\n      "name": { "type": "string", "required": false },\n      "description": { "type": "nullable-string", "required": false },\n      "status": { "type": "TestBookletStatus", "required": false },\n      "groupIds": { "type": "string-array", "required": false },\n      "version": { "type": "positive-integer", "required": true }\n    },\n    "DeleteTestBookletQuery": {\n      "version": { "type": "positive-integer", "required": true }\n    },\n'''
+          replace_once('contracts/api-v1.json', '    "Login": {', request_add + '    "Login": {')
+
+          response_add = '''    "TestBooklet": {\n      "id": { "type": "string", "required": true },\n      "tenantId": { "type": "string", "required": true },\n      "createdBy": { "type": "string", "required": true },\n      "subjectId": { "type": "nullable-string", "required": true },\n      "categoryId": { "type": "nullable-string", "required": true },\n      "code": { "type": "string", "required": true },\n      "name": { "type": "string", "required": true },\n      "description": { "type": "nullable-string", "required": true },\n      "status": { "type": "TestBookletStatus", "required": true },\n      "version": { "type": "positive-integer", "required": true },\n      "items": { "type": "test-booklet-item-array", "required": true },\n      "createdAt": { "type": "iso-string", "required": true },\n      "updatedAt": { "type": "iso-string", "required": true },\n      "deletedAt": { "type": "nullable-iso-string", "required": true }\n    },\n'''
+          replace_once('contracts/api-v1.json', '    "FileMetadata": {', response_add + '    "FileMetadata": {')
+
+          fixture_add = '''  "CreateTestBookletSchema": {\n    "subjectId": null,\n    "categoryId": null,\n    "code": "BOOK-001",\n    "name": "Fixture booklet",\n    "description": null,\n    "status": "enabled",\n    "groupIds": ["group-1"]\n  },\n  "UpdateTestBookletSchema": { "name": "Updated fixture booklet", "version": 1 },\n  "DeleteTestBookletQuerySchema": { "version": "1" },\n  "TestBookletSchema": {\n    "id": "booklet-1",\n    "tenantId": "company-opaque",\n    "createdBy": "user-1",\n    "subjectId": null,\n    "categoryId": null,\n    "code": "BOOK-001",\n    "name": "Fixture booklet",\n    "description": null,\n    "status": "enabled",\n    "version": 1,\n    "items": [{ "groupId": "group-1", "position": 0, "available": true }],\n    "createdAt": "2026-08-16T00:00:00.000Z",\n    "updatedAt": "2026-08-16T00:00:00.000Z",\n    "deletedAt": null\n  },\n'''
+          replace_once(
+              'contracts/api-v1-fixtures.json',
+              '  "FileMetadataSchema": {',
+              fixture_add + '  "FileMetadataSchema": {',
+          )
+          PY
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm exec prettier --write contracts/api-v1.json contracts/api-v1-fixtures.json
+      - name: Commit contract files only
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add contracts/api-v1.json contracts/api-v1-fixtures.json
+          git diff --cached --check
+          git commit -m "reduce test booklet contract diff"
+          git push origin HEAD:codex/45-test-booklets
