@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { defaultFileCleanupIntervalMs } from "@server-foundation/local-fs-storage";
 import { loadConfig } from "../src/config.js";
 
+const tenantUuid = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+
 describe("server config", () => {
   it("uses safe development defaults", () => {
     expect(loadConfig({})).toEqual({
@@ -12,6 +14,7 @@ describe("server config", () => {
       mysqlUrl: undefined,
       redisUrl: undefined,
       fileStorageRoot: undefined,
+      deploymentTenantUuid: undefined,
       fileCleanupIntervalMs: defaultFileCleanupIntervalMs,
       idempotencyTtlSeconds: 86_400,
       trustProxyHeaders: false,
@@ -19,7 +22,7 @@ describe("server config", () => {
     });
   });
 
-  it("parses explicit operational settings", () => {
+  it("parses explicit operational settings and normalizes tenant UUID", () => {
     expect(
       loadConfig({
         NODE_ENV: "production",
@@ -28,6 +31,7 @@ describe("server config", () => {
         MYSQL_URL: "mysql://app:secret@127.0.0.1:3306/app",
         REDIS_URL: "rediss://127.0.0.1:6380",
         FILE_STORAGE_ROOT: "/srv/private-files",
+        DEPLOYMENT_TENANT_UUID: tenantUuid.toUpperCase(),
         FILE_CLEANUP_INTERVAL_SECONDS: "120",
         IDEMPOTENCY_TTL_SECONDS: "3600",
         TRUST_PROXY_HEADERS: "true",
@@ -38,6 +42,7 @@ describe("server config", () => {
       production: true,
       host: "127.0.0.1",
       port: 9443,
+      deploymentTenantUuid: tenantUuid,
       fileCleanupIntervalMs: 120_000,
       idempotencyTtlSeconds: 3600,
       trustProxyHeaders: true,
@@ -45,9 +50,9 @@ describe("server config", () => {
     });
   });
 
-  it("requires all production backing services", () => {
+  it("requires all production backing services and deployment tenant UUID", () => {
     expect(() => loadConfig({ NODE_ENV: "production" })).toThrow(
-      /MYSQL_URL, REDIS_URL, and FILE_STORAGE_ROOT/,
+      /DEPLOYMENT_TENANT_UUID/,
     );
   });
 
@@ -55,6 +60,17 @@ describe("server config", () => {
     expect(() => loadConfig({ REDIS_URL: "redis://127.0.0.1:6379" })).toThrow(
       /MYSQL_URL is required/,
     );
+  });
+
+  it("rejects invalid deployment tenant UUID", () => {
+    expect(() => loadConfig({ DEPLOYMENT_TENANT_UUID: "42" })).toThrow(
+      /tenant_uuid UUIDv4/u,
+    );
+    expect(() =>
+      loadConfig({
+        DEPLOYMENT_TENANT_UUID: "f47ac10b-58cc-5372-a567-0e02b2c3d479",
+      }),
+    ).toThrow(/tenant_uuid UUIDv4/u);
   });
 
   it("rejects ambiguous booleans and invalid operational settings", () => {

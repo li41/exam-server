@@ -22,9 +22,10 @@ sudo test -f "$APP_ENV_FILE" \
   || die "請先完成 bootstrap；缺少 $APP_ENV_FILE"
 
 # A scheduled backup without identity would recreate the exact risk #33 fixes.
+# #39 adopts exam-control companies.tenant_uuid as the tenant boundary.
 # Fail closed before installing/enabling the timer. The values are not secrets.
-sudo grep -Eq '^DEPLOYMENT_COMPANY_ID=[1-9][0-9]*$' "$APP_ENV_FILE" \
-  || die "$APP_ENV_FILE 缺少有效 DEPLOYMENT_COMPANY_ID（必須等於 exam-control company_id）"
+sudo grep -Eq '^DEPLOYMENT_TENANT_UUID=[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$' "$APP_ENV_FILE" \
+  || die "$APP_ENV_FILE 缺少有效 DEPLOYMENT_TENANT_UUID（必須等於 exam-control companies.tenant_uuid UUIDv4）"
 sudo grep -Eq '^DEPLOYMENT_PROJECT_ID=.+$' "$APP_ENV_FILE" \
   || die "$APP_ENV_FILE 缺少 DEPLOYMENT_PROJECT_ID"
 if sudo grep -Eq '^DEPLOYMENT_PROJECT_ID=CHANGE_ME$' "$APP_ENV_FILE"; then

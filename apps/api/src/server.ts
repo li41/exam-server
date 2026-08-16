@@ -26,6 +26,7 @@ import {
 } from "@server-foundation/testing";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { mountDeploymentIdentityRoutes } from "./deployment-identity-routes.js";
 import { gracefulShutdown } from "./graceful-shutdown.js";
 import { createJsonLogger, serializeError } from "./logger.js";
 import { QuestionAwareBlobStorage } from "./question-aware-blob-storage.js";
@@ -125,6 +126,10 @@ const main = async () => {
     readinessChecks,
     logger,
   });
+
+  if (config.deploymentTenantUuid) {
+    mountDeploymentIdentityRoutes(app, config.deploymentTenantUuid);
+  }
 
   mountQuestionBankRoutes(app, {
     repository: questionBankRepository,
