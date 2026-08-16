@@ -332,3 +332,4 @@ export type AuthTokenResponse = z.infer<typeof AuthTokenResponseSchema>;
 
 export * from "./question-structures.js";
 export * from "./test-booklets.js";
+export * from "./examinees.js";
