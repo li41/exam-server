@@ -76,9 +76,15 @@ const rejectedMediaMessage = async (
 describe("MySqlQuestionBankRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
-    await pool.execute("DELETE FROM question_files");
-    await pool.execute("DELETE FROM questions");
-    await pool.execute("DELETE FROM question_categories");
+    await pool.execute("DELETE FROM question_files WHERE tenant_id = ?", [
+      scope.tenantId,
+    ]);
+    await pool.execute("DELETE FROM questions WHERE tenant_id = ?", [
+      scope.tenantId,
+    ]);
+    await pool.execute("DELETE FROM question_categories WHERE tenant_id = ?", [
+      scope.tenantId,
+    ]);
   });
 
   afterAll(async () => {
