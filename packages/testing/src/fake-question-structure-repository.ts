@@ -44,9 +44,7 @@ const validationError = (message: string): never => {
   throw new DomainError("validation_error", message);
 };
 
-export class InMemoryQuestionStructureRepository
-  implements QuestionStructureRepository
-{
+export class InMemoryQuestionStructureRepository implements QuestionStructureRepository {
   private readonly clusters: StoredCluster[] = [];
   private readonly groups: StoredGroup[] = [];
   private nextClusterId = 1;
@@ -60,17 +58,24 @@ export class InMemoryQuestionStructureRepository
   ): Promise<Page<QuestionCluster>> {
     const search = query.search?.toLocaleLowerCase();
     const visible = this.clusters.filter((cluster) => {
-      if (cluster.deletedAt || cluster.tenantId !== scope.tenantId) return false;
-      if (query.createdBy && cluster.createdBy !== query.createdBy) return false;
+      if (cluster.deletedAt || cluster.tenantId !== scope.tenantId)
+        return false;
+      if (query.createdBy && cluster.createdBy !== query.createdBy)
+        return false;
       if (query.status && cluster.status !== query.status) return false;
       if (!search) return true;
-      return [cluster.code, cluster.name, cluster.stem, cluster.description ?? ""].some(
-        (value) => value.toLocaleLowerCase().includes(search),
-      );
+      return [
+        cluster.code,
+        cluster.name,
+        cluster.stem,
+        cluster.description ?? "",
+      ].some((value) => value.toLocaleLowerCase().includes(search));
     });
     const offset = decodeCursor(query.cursor);
     const rows = visible.slice(offset, offset + query.limit);
-    const items = await Promise.all(rows.map((row) => this.toCluster(row, scope)));
+    const items = await Promise.all(
+      rows.map((row) => this.toCluster(row, scope)),
+    );
     const nextOffset = offset + rows.length;
     return {
       items,
@@ -144,7 +149,8 @@ export class InMemoryQuestionStructureRepository
     if (input.name !== undefined) cluster.name = input.name;
     if (input.stem !== undefined) cluster.stem = input.stem;
     if (input.stemFileId !== undefined) cluster.stemFileId = input.stemFileId;
-    if (input.description !== undefined) cluster.description = input.description;
+    if (input.description !== undefined)
+      cluster.description = input.description;
     if (input.status !== undefined) cluster.status = input.status;
     cluster.version += 1;
     cluster.updatedAt = new Date().toISOString();
@@ -198,7 +204,9 @@ export class InMemoryQuestionStructureRepository
     });
     const offset = decodeCursor(query.cursor);
     const rows = visible.slice(offset, offset + query.limit);
-    const items = await Promise.all(rows.map((row) => this.toGroup(row, scope)));
+    const items = await Promise.all(
+      rows.map((row) => this.toGroup(row, scope)),
+    );
     const nextOffset = offset + rows.length;
     return {
       items,
@@ -319,7 +327,8 @@ export class InMemoryQuestionStructureRepository
       cluster.questionIds.map(async (questionId, position) => ({
         questionId,
         position,
-        available: (await this.questions.getQuestion(questionId, scope)) !== null,
+        available:
+          (await this.questions.getQuestion(questionId, scope)) !== null,
       })),
     );
     const { questionIds: _questionIds, ...metadata } = cluster;
@@ -337,7 +346,8 @@ export class InMemoryQuestionStructureRepository
             ...item,
             position,
             available:
-              (await this.questions.getQuestion(item.questionId, scope)) !== null,
+              (await this.questions.getQuestion(item.questionId, scope)) !==
+              null,
           } as const;
         }
         return {
@@ -440,7 +450,9 @@ export class InMemoryQuestionStructureRepository
   ): Promise<void> {
     if (subjectId === null) return;
     if (!(await this.questions.getCategory(subjectId, scope))) {
-      validationError(`Question group subjectId "${subjectId}" does not exist.`);
+      validationError(
+        `Question group subjectId "${subjectId}" does not exist.`,
+      );
     }
   }
 

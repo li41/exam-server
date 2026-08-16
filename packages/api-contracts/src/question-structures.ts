@@ -56,8 +56,9 @@ export const CreateQuestionClusterSchema =
       QuestionClusterWriteFieldsBaseSchema.shape.description.default(null),
     status:
       QuestionClusterWriteFieldsBaseSchema.shape.status.default("enabled"),
-    questionIds:
-      QuestionClusterWriteFieldsBaseSchema.shape.questionIds.default([]),
+    questionIds: QuestionClusterWriteFieldsBaseSchema.shape.questionIds.default(
+      [],
+    ),
   });
 
 export const UpdateQuestionClusterSchema =
@@ -153,16 +154,16 @@ const QuestionGroupWriteFieldsBaseSchema = z.object({
   items: uniqueGroupItems,
 });
 
-export const CreateQuestionGroupSchema = QuestionGroupWriteFieldsBaseSchema.extend(
-  {
+export const CreateQuestionGroupSchema =
+  QuestionGroupWriteFieldsBaseSchema.extend({
     description:
       QuestionGroupWriteFieldsBaseSchema.shape.description.default(null),
     subjectId: QuestionGroupWriteFieldsBaseSchema.shape.subjectId.default(null),
-    flowMode: QuestionGroupWriteFieldsBaseSchema.shape.flowMode.default("normal"),
+    flowMode:
+      QuestionGroupWriteFieldsBaseSchema.shape.flowMode.default("normal"),
     status: QuestionGroupWriteFieldsBaseSchema.shape.status.default("enabled"),
     items: QuestionGroupWriteFieldsBaseSchema.shape.items.default([]),
-  },
-);
+  });
 
 export const UpdateQuestionGroupSchema =
   QuestionGroupWriteFieldsBaseSchema.partial().extend({
@@ -208,6 +209,12 @@ export type QuestionGroupItemInput = z.infer<
 >;
 export type QuestionGroupItem = z.infer<typeof QuestionGroupItemSchema>;
 export type QuestionGroup = z.infer<typeof QuestionGroupSchema>;
-export type QuestionGroupListQuery = z.infer<typeof QuestionGroupListQuerySchema>;
-export type CreateQuestionGroupInput = z.infer<typeof CreateQuestionGroupSchema>;
-export type UpdateQuestionGroupInput = z.infer<typeof UpdateQuestionGroupSchema>;
+export type QuestionGroupListQuery = z.infer<
+  typeof QuestionGroupListQuerySchema
+>;
+export type CreateQuestionGroupInput = z.infer<
+  typeof CreateQuestionGroupSchema
+>;
+export type UpdateQuestionGroupInput = z.infer<
+  typeof UpdateQuestionGroupSchema
+>;

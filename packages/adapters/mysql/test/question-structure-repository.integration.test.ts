@@ -75,7 +75,9 @@ describe("MySqlQuestionStructureRepository", () => {
     ]);
 
     await questions.softDeleteQuestion(question.id, question.version, scope);
-    await expect(structures.getCluster(cluster.id, scope)).resolves.toMatchObject({
+    await expect(
+      structures.getCluster(cluster.id, scope),
+    ).resolves.toMatchObject({
       items: [{ questionId: question.id, available: false }],
     });
   });

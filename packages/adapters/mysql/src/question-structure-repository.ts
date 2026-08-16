@@ -256,9 +256,7 @@ const toGroup = (
   deletedAt: toIso(row.deleted_at),
 });
 
-export class MySqlQuestionStructureRepository
-  implements QuestionStructureRepository
-{
+export class MySqlQuestionStructureRepository implements QuestionStructureRepository {
   constructor(private readonly pool: Pool) {}
 
   async listClusters(
@@ -312,7 +310,9 @@ export class MySqlQuestionStructureRepository
     );
     const last = visibleRows.at(-1);
     return {
-      items: visibleRows.map((row) => toCluster(row, itemMap.get(row.id) ?? [])),
+      items: visibleRows.map((row) =>
+        toCluster(row, itemMap.get(row.id) ?? []),
+      ),
       page: {
         nextCursor:
           hasMore && last
@@ -341,7 +341,12 @@ export class MySqlQuestionStructureRepository
     try {
       await withTransaction(this.pool, async (connection) => {
         await this.assertFile(connection, input.stemFileId, scope);
-        await this.assertQuestions(connection, input.questionIds, scope, "cluster");
+        await this.assertQuestions(
+          connection,
+          input.questionIds,
+          scope,
+          "cluster",
+        );
         await connection.execute(
           `INSERT INTO question_clusters (
             id, tenant_id, created_by, code, name, stem, stem_file_id,
@@ -379,7 +384,9 @@ export class MySqlQuestionStructureRepository
     }
     const cluster = await this.getCluster(id, scope);
     if (!cluster) {
-      throw new Error("Question cluster insert succeeded but could not be read.");
+      throw new Error(
+        "Question cluster insert succeeded but could not be read.",
+      );
     }
     return cluster;
   }
@@ -646,7 +653,12 @@ export class MySqlQuestionStructureRepository
           [...values, now, id, scope.tenantId, input.version],
         );
         if (result.affectedRows === 0) {
-          await this.throwGroupUpdateFailure(connection, id, input.version, scope);
+          await this.throwGroupUpdateFailure(
+            connection,
+            id,
+            input.version,
+            scope,
+          );
         }
         if (input.items !== undefined) {
           await this.replaceGroupItems(connection, id, input.items, scope, now);
@@ -745,7 +757,9 @@ export class MySqlQuestionStructureRepository
       [fileId, scope.tenantId],
     );
     if (!rows[0]) {
-      validationError(`Question cluster stemFileId "${fileId}" does not exist.`);
+      validationError(
+        `Question cluster stemFileId "${fileId}" does not exist.`,
+      );
     }
   }
 
@@ -787,7 +801,9 @@ export class MySqlQuestionStructureRepository
     const found = new Set(rows.map((row) => row.id));
     for (const clusterId of clusterIds) {
       if (!found.has(clusterId)) {
-        validationError(`Question group clusterId "${clusterId}" does not exist.`);
+        validationError(
+          `Question group clusterId "${clusterId}" does not exist.`,
+        );
       }
     }
   }
@@ -804,7 +820,9 @@ export class MySqlQuestionStructureRepository
       [subjectId, scope.tenantId],
     );
     if (!rows[0]) {
-      validationError(`Question group subjectId "${subjectId}" does not exist.`);
+      validationError(
+        `Question group subjectId "${subjectId}" does not exist.`,
+      );
     }
   }
 

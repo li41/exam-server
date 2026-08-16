@@ -106,9 +106,7 @@
     "status": "enabled",
     "usageCount": 0,
     "version": 1,
-    "items": [
-      { "questionId": "question-1", "position": 0, "available": true }
-    ],
+    "items": [{ "questionId": "question-1", "position": 0, "available": true }],
     "createdAt": "2026-08-10T00:00:00.000Z",
     "updatedAt": "2026-08-10T00:00:00.000Z",
     "deletedAt": null

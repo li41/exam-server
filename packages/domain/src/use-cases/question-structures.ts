@@ -23,7 +23,10 @@ export class QuestionStructureService {
     return this.repository.listClusters(query, scope);
   }
 
-  async getCluster(id: string, scope: QuestionBankScope): Promise<QuestionCluster> {
+  async getCluster(
+    id: string,
+    scope: QuestionBankScope,
+  ): Promise<QuestionCluster> {
     const cluster = await this.repository.getCluster(id, scope);
     if (!cluster) throw new NotFoundError("question cluster", id);
     return cluster;

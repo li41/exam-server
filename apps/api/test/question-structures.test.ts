@@ -45,7 +45,10 @@ const createTestApp = () => {
   return app;
 };
 
-const createQuestion = async (app: ReturnType<typeof createTestApp>, code: string) => {
+const createQuestion = async (
+  app: ReturnType<typeof createTestApp>,
+  code: string,
+) => {
   const response = await app.request("/api/v1/questions", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -200,11 +203,14 @@ describe("question group API", () => {
       ],
     });
 
-    const patchResponse = await app.request(`/api/v1/question-groups/${group.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "只改區塊名稱", version: group.version }),
-    });
+    const patchResponse = await app.request(
+      `/api/v1/question-groups/${group.id}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "只改區塊名稱", version: group.version }),
+      },
+    );
     expect(patchResponse.status).toBe(200);
     expect(await patchResponse.json()).toMatchObject({
       name: "只改區塊名稱",

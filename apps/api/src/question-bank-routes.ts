@@ -447,7 +447,10 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     "/question-clusters",
     zValidator("query", QuestionClusterListQuerySchema, (result, context) => {
       if (!result.success) {
-        return validationError(context, "Invalid question cluster query parameters.");
+        return validationError(
+          context,
+          "Invalid question cluster query parameters.",
+        );
       }
     }),
     async (context) =>
@@ -504,11 +507,15 @@ const createQuestionRouter = (dependencies: Dependencies) => {
 
   api.delete(
     "/question-clusters/:id",
-    zValidator("query", DeleteQuestionStructureQuerySchema, (result, context) => {
-      if (!result.success) {
-        return validationError(context, "A valid version is required.");
-      }
-    }),
+    zValidator(
+      "query",
+      DeleteQuestionStructureQuerySchema,
+      (result, context) => {
+        if (!result.success) {
+          return validationError(context, "A valid version is required.");
+        }
+      },
+    ),
     async (context) => {
       await requireStructureService().softDeleteCluster(
         context.req.param("id"),
@@ -523,7 +530,10 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     "/question-groups",
     zValidator("query", QuestionGroupListQuerySchema, (result, context) => {
       if (!result.success) {
-        return validationError(context, "Invalid question group query parameters.");
+        return validationError(
+          context,
+          "Invalid question group query parameters.",
+        );
       }
     }),
     async (context) =>
@@ -580,11 +590,15 @@ const createQuestionRouter = (dependencies: Dependencies) => {
 
   api.delete(
     "/question-groups/:id",
-    zValidator("query", DeleteQuestionStructureQuerySchema, (result, context) => {
-      if (!result.success) {
-        return validationError(context, "A valid version is required.");
-      }
-    }),
+    zValidator(
+      "query",
+      DeleteQuestionStructureQuerySchema,
+      (result, context) => {
+        if (!result.success) {
+          return validationError(context, "A valid version is required.");
+        }
+      },
+    ),
     async (context) => {
       await requireStructureService().softDeleteGroup(
         context.req.param("id"),
