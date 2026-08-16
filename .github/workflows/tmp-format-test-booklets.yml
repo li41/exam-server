@@ -1,0 +1,42 @@
+name: Temporary format test booklets
+
+on:
+  push:
+    branches:
+      - codex/45-test-booklets
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/45-test-booklets
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm exec prettier --write \
+            apps/api/test/test-booklets.test.ts \
+            packages/adapters/mysql/src/test-booklet-repository.ts \
+            packages/adapters/mysql/test/test-booklet-repository.integration.test.ts \
+            packages/testing/src/fake-test-booklet-repository.ts
+      - name: Commit only formatted files
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            apps/api/test/test-booklets.test.ts \
+            packages/adapters/mysql/src/test-booklet-repository.ts \
+            packages/adapters/mysql/test/test-booklet-repository.integration.test.ts \
+            packages/testing/src/fake-test-booklet-repository.ts
+          git diff --cached --check
+          git commit -m "format test booklet implementation"
+          git push origin HEAD:codex/45-test-booklets
