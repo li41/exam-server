@@ -10,6 +10,7 @@ import {
   MySqlIdempotencyStore,
   MySqlItemRepository,
   MySqlQuestionBankRepository,
+  MySqlQuestionStructureRepository,
   MySqlUserRepository,
 } from "@server-foundation/mysql-adapter";
 import {
@@ -23,6 +24,7 @@ import {
 import {
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
+  createInMemoryQuestionStructureRepository,
 } from "@server-foundation/testing";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -51,6 +53,9 @@ const main = async () => {
   const questionBankRepository = pool
     ? new MySqlQuestionBankRepository(pool)
     : createInMemoryQuestionBankRepository();
+  const questionStructureRepository = pool
+    ? new MySqlQuestionStructureRepository(pool)
+    : createInMemoryQuestionStructureRepository(questionBankRepository);
   const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
@@ -86,7 +91,11 @@ const main = async () => {
     ? new MySqlItemRepository(pool)
     : createInMemoryItemRepository();
   const blobStorage = localBlobStorage
-    ? new QuestionAwareBlobStorage(localBlobStorage, questionBankRepository)
+    ? new QuestionAwareBlobStorage(
+        localBlobStorage,
+        questionBankRepository,
+        questionStructureRepository,
+      )
     : undefined;
   const auditLog = pool ? new MySqlAuditLog(pool) : undefined;
 
@@ -133,6 +142,7 @@ const main = async () => {
 
   mountQuestionBankRoutes(app, {
     repository: questionBankRepository,
+    structureRepository: questionStructureRepository,
     authenticationService,
     idempotencyStore,
     idempotencyTtlSeconds: config.idempotencyTtlSeconds,
@@ -154,6 +164,7 @@ const main = async () => {
     authentication: authenticationService ? "enabled" : "disabled",
     privateFiles: blobStorage ? "enabled" : "disabled",
     questionBank: "enabled",
+    questionStructures: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
