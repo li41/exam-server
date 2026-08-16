@@ -351,7 +351,10 @@ export class InMemoryExamineeRepository implements ExamineeRepository {
         !candidate.deletedAt,
     );
     if (!group) {
-      validationError(`Examinee group ${field} "${id}" does not exist.`);
+      throw new DomainError(
+        "validation_error",
+        `Examinee group ${field} "${id}" does not exist.`,
+      );
     }
     return group;
   }

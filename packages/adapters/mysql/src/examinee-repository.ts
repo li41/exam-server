@@ -530,7 +530,10 @@ export class MySqlExamineeRepository implements ExamineeRepository {
     );
     const parent = rows[0];
     if (!parent) {
-      validationError(`Examinee group parentId "${parentId}" does not exist.`);
+      throw new DomainError(
+        "validation_error",
+        `Examinee group parentId "${parentId}" does not exist.`,
+      );
     }
     if (parent.parent_id !== null) {
       validationError("Examinee groups support at most two levels.");
