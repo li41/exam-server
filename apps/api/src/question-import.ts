@@ -9,10 +9,14 @@ import type {
   QuestionCategory,
   QuestionType,
 } from "@server-foundation/api-contracts";
-import { DomainError, validateKnownQuestionShape } from "@server-foundation/domain";
+import {
+  DomainError,
+  validateKnownQuestionShape,
+} from "@server-foundation/domain";
 
 export const MAX_QUESTION_IMPORT_BYTES = 10 * 1024 * 1024;
-export const QUESTION_IMPORT_TEMPLATE_FILENAME = "question-import-template.xlsx";
+export const QUESTION_IMPORT_TEMPLATE_FILENAME =
+  "question-import-template.xlsx";
 
 export type QuestionImportIssue = {
   sheet: QuestionType | null;
@@ -151,7 +155,15 @@ const examples: Record<
     options: null,
     answer: {
       chart: {},
-      lines: [{ name: "line-1", points: [[0, 0], [1, 1]] }],
+      lines: [
+        {
+          name: "line-1",
+          points: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      ],
     },
   },
   interactive: {
@@ -231,7 +243,9 @@ const categoryResolver = (categories: QuestionCategory[]) => {
   };
 };
 
-const zodMessage = (error: { issues: Array<{ path: PropertyKey[]; message: string }> }) =>
+const zodMessage = (error: {
+  issues: Array<{ path: PropertyKey[]; message: string }>;
+}) =>
   error.issues
     .map((entry) => {
       const path = entry.path.map(String).join(".");
@@ -353,14 +367,26 @@ export const parseQuestionImportWorkbook = (
       const difficulty = difficultyText ? difficultyMap.get(difficultyText) : 3;
       if (difficulty === undefined) {
         errors.push(
-          issue(type, rowNumber, code, "difficulty 必須是 1~5 或 極易/易/中/難/極難。"),
+          issue(
+            type,
+            rowNumber,
+            code,
+            "difficulty 必須是 1~5 或 極易/易/中/難/極難。",
+          ),
         );
         continue;
       }
       const pointsText = getCell(values, "points");
       const points = pointsText ? Number(pointsText) : 1;
       if (!Number.isFinite(points) || points <= 0 || points > 9999.9) {
-        errors.push(issue(type, rowNumber, code, "points 必須是 0 到 9999.9 之間的正數。"));
+        errors.push(
+          issue(
+            type,
+            rowNumber,
+            code,
+            "points 必須是 0 到 9999.9 之間的正數。",
+          ),
+        );
         continue;
       }
 
@@ -368,7 +394,14 @@ export const parseQuestionImportWorkbook = (
       let status: "enabled" | "disabled" = "enabled";
       if (["disabled", "停用", "0"].includes(statusText)) status = "disabled";
       else if (statusText && !["enabled", "啟用", "1"].includes(statusText)) {
-        errors.push(issue(type, rowNumber, code, "status 必須是 enabled/disabled、啟用/停用 或 1/0。"));
+        errors.push(
+          issue(
+            type,
+            rowNumber,
+            code,
+            "status 必須是 enabled/disabled、啟用/停用 或 1/0。",
+          ),
+        );
         continue;
       }
 

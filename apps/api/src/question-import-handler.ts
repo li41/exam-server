@@ -23,7 +23,8 @@ export type QuestionImportSuccess = {
   errors: [];
 };
 
-export type QuestionImportResult = QuestionImportFailure | QuestionImportSuccess;
+export type QuestionImportResult =
+  QuestionImportFailure | QuestionImportSuccess;
 
 const failure = (message: string): QuestionImportFailure => ({
   ok: false,

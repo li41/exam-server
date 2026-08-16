@@ -95,7 +95,10 @@ describe("MySqlQuestionImportRepository", () => {
 
   it("writes a valid batch in one transaction", async () => {
     await expect(
-      imports.createQuestions([input("IMPORT-TX-1"), input("IMPORT-TX-2")], scope),
+      imports.createQuestions(
+        [input("IMPORT-TX-1"), input("IMPORT-TX-2")],
+        scope,
+      ),
     ).resolves.toBe(2);
     await expect(
       imports.findExistingQuestionCodes(
@@ -128,9 +131,7 @@ describe("MySqlQuestionImportRepository", () => {
     const fileId = "00000000-0000-4000-8000-000000000144";
     await pool.execute("DELETE FROM files WHERE file_id = ?", [fileId]);
     const missing = await rejectedMediaMessage("IMPORT-MISSING-FILE", fileId);
-    expect(missing).toBe(
-      `Question media fileId "${fileId}" does not exist.`,
-    );
+    expect(missing).toBe(`Question media fileId "${fileId}" does not exist.`);
 
     await insertReadyFile(fileId, "other-import-tenant");
     const crossTenant = await rejectedMediaMessage(

@@ -6,9 +6,7 @@ import type {
   QuestionImportRepository,
 } from "@server-foundation/domain";
 
-export class InMemoryQuestionImportRepository
-  implements QuestionImportRepository
-{
+export class InMemoryQuestionImportRepository implements QuestionImportRepository {
   constructor(private readonly questions: QuestionBankRepository) {}
 
   listCategories(scope: QuestionBankScope) {

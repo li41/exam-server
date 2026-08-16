@@ -9,11 +9,7 @@ import type {
   QuestionBankScope,
   QuestionImportRepository,
 } from "@server-foundation/domain";
-import type {
-  Pool,
-  PoolConnection,
-  RowDataPacket,
-} from "mysql2/promise";
+import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import { withTransaction } from "./transaction.js";
 
 type CategoryRow = RowDataPacket & {
@@ -118,7 +114,11 @@ export class MySqlQuestionImportRepository implements QuestionImportRepository {
     try {
       await withTransaction(this.pool, async (connection) => {
         for (const input of inputs) {
-          await this.assertCategory(connection, input.categoryId ?? null, scope);
+          await this.assertCategory(
+            connection,
+            input.categoryId ?? null,
+            scope,
+          );
           await this.assertMediaFiles(connection, input.media, scope);
         }
 

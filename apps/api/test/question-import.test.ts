@@ -121,7 +121,11 @@ class MemoryIdempotencyStore implements IdempotencyStore {
     this.entries.set(`${scope}:${key}`, { hash: requestHash, response });
   }
 
-  async release(scope: string, key: string, requestHash: string): Promise<void> {
+  async release(
+    scope: string,
+    key: string,
+    requestHash: string,
+  ): Promise<void> {
     const storageKey = `${scope}:${key}`;
     if (this.entries.get(storageKey)?.hash === requestHash) {
       this.entries.delete(storageKey);
