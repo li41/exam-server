@@ -256,7 +256,7 @@ export const buildQuestionImportTemplate = (): Buffer => {
       JSON.stringify(example.answer),
       "",
     ];
-    const sheet = XLSX.utils.aoa_to_sheet([headers, row]);
+    const sheet = XLSX.utils.aoa_to_sheet([[...headers], row]);
     XLSX.utils.book_append_sheet(workbook, sheet, type);
   }
   const output = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
