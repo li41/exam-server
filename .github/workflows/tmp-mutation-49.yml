@@ -1,0 +1,77 @@
+name: Temporary mutation issue 49
+
+on:
+  push:
+    branches:
+      - codex/49-integration-test-rerunnable
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: foundation_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MYSQL_TEST_URL: mysql://root:root@127.0.0.1:3306/foundation_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: codex/49-integration-test-rerunnable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Enable pnpm and install
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.10.0 --activate
+          corepack pnpm install --frozen-lockfile
+      - name: Remove cleanup locally
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          mutations = [
+              (Path('packages/adapters/mysql/test/question-structure-repository.integration.test.ts'), 'cleanupQuestionStructureFixtures'),
+              (Path('packages/adapters/mysql/test/test-booklet-repository.integration.test.ts'), 'cleanupTestBookletFixtures'),
+          ]
+          for path, function_name in mutations:
+              text = path.read_text()
+              needle = f'    await {function_name}();\n'
+              count = text.count(needle)
+              if count != 2:
+                  raise SystemExit(f'{path}: expected 2 cleanup calls, got {count}')
+              path.write_text(text.replace(needle, '    // mutation: cleanup intentionally removed\n'))
+          PY
+      - name: Build workspace under mutation
+        run: corepack pnpm build
+      - name: First MySQL pass under mutation
+        run: corepack pnpm test:integration:mysql
+      - name: Require second pass to reproduce conflict
+        run: |
+          set +e
+          corepack pnpm test:integration:mysql > mutation-second-pass.log 2>&1
+          code=$?
+          set -e
+          cat mutation-second-pass.log
+          if [ "$code" -eq 0 ]; then
+            echo "Cleanup mutation survived: second pass unexpectedly succeeded."
+            exit 1
+          fi
+          if ! grep -q "already exists in this tenant" mutation-second-pass.log; then
+            echo "Second pass failed, but not with the expected uniqueness conflict."
+            exit 1
+          fi
+          echo "Cleanup mutation killed: second pass reproduced the tenant uniqueness conflict."
