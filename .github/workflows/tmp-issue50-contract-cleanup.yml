@@ -1,0 +1,110 @@
+name: tmp issue 50 contract cleanup
+
+on:
+  push:
+    branches:
+      - codex/50-examinee-import
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'add temporary issue 50 contract cleanup workflow'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: codex/50-examinee-import
+          fetch-depth: 0
+
+      - name: Restore base formatting and add only issue 50 contract entries
+        env:
+          BASE_SHA: 36d67dc1aa7a8be9612524f3c84fac7c3517220e
+        run: |
+          git show "$BASE_SHA:contracts/api-v1.json" > contracts/api-v1.json
+          git show "$BASE_SHA:contracts/api-v1-fixtures.json" > contracts/api-v1-fixtures.json
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: marker count {count}, expected 1")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "contracts/api-v1.json",
+              '''    {
+              "method": "GET",
+              "path": "/api/v1/examinees",
+              "authenticated": true,
+              "idempotent": false
+            },
+          ''',
+              '''    {
+              "method": "POST",
+              "path": "/api/v1/examinee-import",
+              "authenticated": true,
+              "idempotent": true
+            },
+            {
+              "method": "GET",
+              "path": "/api/v1/examinees",
+              "authenticated": true,
+              "idempotent": false
+            },
+          ''',
+          )
+
+          replace_once(
+              "contracts/api-v1.json",
+              '''    "FileMetadata": {
+          ''',
+              '''    "ExamineeImport": {
+              "imported": { "type": "nonnegative-integer", "required": true },
+              "updated": { "type": "nonnegative-integer", "required": true },
+              "errors": { "type": "examinee-import-issue-array", "required": true }
+            },
+            "FileMetadata": {
+          ''',
+          )
+
+          replace_once(
+              "contracts/api-v1-fixtures.json",
+              '''  "FileMetadataSchema": {
+          ''',
+              '''  "ExamineeImportIssueSchema": {
+              "sheet": "受測者",
+              "row": 2,
+              "identifier": "student-001",
+              "message": "Fixture import error"
+            },
+            "ExamineeImportResponseSchema": {
+              "imported": 1,
+              "updated": 0,
+              "errors": []
+            },
+            "FileMetadataSchema": {
+          ''',
+          )
+          PY
+          node -e 'JSON.parse(require("fs").readFileSync("contracts/api-v1.json","utf8")); JSON.parse(require("fs").readFileSync("contracts/api-v1-fixtures.json","utf8"))'
+          git diff --check -- contracts/api-v1.json contracts/api-v1-fixtures.json
+
+      - name: Commit clean contract diff
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add contracts/api-v1.json contracts/api-v1-fixtures.json
+          git commit -m "keep examinee import contract diff additive"
+          git push origin HEAD:codex/50-examinee-import
+
+      - name: Remove temporary cleanup workflow
+        run: |
+          git rm .github/workflows/tmp-issue50-contract-cleanup.yml
+          git commit -m "remove temporary issue 50 contract cleanup workflow"
+          git push origin HEAD:codex/50-examinee-import
