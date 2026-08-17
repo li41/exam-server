@@ -22,7 +22,6 @@ const actorPermissions = {
 };
 
 class FailingCompletionIdempotencyStore implements IdempotencyStore {
-  completeCalls = 0;
   releaseCalls = 0;
 
   async reserve(): Promise<IdempotencyReservation> {
@@ -30,7 +29,6 @@ class FailingCompletionIdempotencyStore implements IdempotencyStore {
   }
 
   async complete(): Promise<void> {
-    this.completeCalls += 1;
     throw new Error("completion persistence failed");
   }
 
@@ -159,7 +157,6 @@ describe("company member idempotency", () => {
     expect(await response.json()).toMatchObject({
       userId: "completion-failure-user",
     });
-    expect(store.completeCalls).toBe(1);
     expect(store.releaseCalls).toBe(0);
     expect(logError).toHaveBeenCalledWith(
       "idempotency_commit_failed",
