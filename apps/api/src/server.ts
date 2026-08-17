@@ -4,9 +4,12 @@ import { serve } from "@hono/node-server";
 import { createClient } from "redis";
 import { Argon2PasswordHasher, AuthService } from "@server-foundation/auth";
 import {
+  AesGcmAffairReceiptProtector,
   AesGcmExamineeCredentialProtector,
   createMySqlPool,
   MySqlAffairConfigurationRepository,
+  MySqlAffairReceiptAccessLog,
+  MySqlAffairReceiptRepository,
   MySqlAffairRepository,
   MySqlAffairSubmissionRepository,
   MySqlAuditLog,
@@ -31,6 +34,7 @@ import {
 } from "@server-foundation/local-fs-storage";
 import {
   createInMemoryAffairConfigurationRepository,
+  createInMemoryAffairReceiptRepository,
   createInMemoryAffairRepository,
   createInMemoryAffairSubmissionRepository,
   createInMemoryExamineeRepository,
@@ -39,8 +43,10 @@ import {
   createInMemoryQuestionImportRepository,
   createInMemoryQuestionStructureRepository,
   createInMemoryTestBookletRepository,
+  InMemoryAffairReceiptAccessLog,
 } from "@server-foundation/testing";
 import { mountAffairConfigurationRoutes } from "./affair-configuration-routes.js";
+import { mountAffairReceiptRoutes } from "./affair-receipt-routes.js";
 import { mountAffairRoutes } from "./affair-routes.js";
 import { mountAffairSubmissionRoutes } from "./affair-submission-routes.js";
 import { createApp } from "./app.js";
@@ -67,6 +73,20 @@ const main = async () => {
     await redisClient.connect();
   }
 
+  const sensitiveDataMasterKey = pool
+    ? parseExamineeCredentialMasterKey(
+        await readFile(
+          config.examineeCredentialKeyFile ??
+            (() => {
+              throw new Error(
+                "EXAMINEE_CREDENTIAL_KEY_FILE is required when MYSQL_URL is configured.",
+              );
+            })(),
+          "utf8",
+        ),
+      )
+    : undefined;
+
   const questionBankRepository = pool
     ? new MySqlQuestionBankRepository(pool)
     : createInMemoryQuestionBankRepository();
@@ -85,19 +105,7 @@ const main = async () => {
   const examineeRepository = pool
     ? new MySqlExamineeRepository(
         pool,
-        new AesGcmExamineeCredentialProtector(
-          parseExamineeCredentialMasterKey(
-            await readFile(
-              config.examineeCredentialKeyFile ??
-                (() => {
-                  throw new Error(
-                    "EXAMINEE_CREDENTIAL_KEY_FILE is required when MYSQL_URL is configured.",
-                  );
-                })(),
-              "utf8",
-            ),
-          ),
-        ),
+        new AesGcmExamineeCredentialProtector(sensitiveDataMasterKey as Buffer),
       )
     : createInMemoryExamineeRepository();
   const affairRepository = pool
@@ -109,12 +117,18 @@ const main = async () => {
   const affairSubmissionRepository = pool
     ? new MySqlAffairSubmissionRepository(pool)
     : createInMemoryAffairSubmissionRepository(affairConfigurationRepository);
-  const localBlobStorage = config.fileStorageRoot
-    ? new LocalFileStorage(
-        config.fileStorageRoot,
-        {},
-        pool ? new MySqlFileMetadataStore(pool) : undefined,
+  const affairReceiptRepository = pool
+    ? new MySqlAffairReceiptRepository(
+        pool,
+        new AesGcmAffairReceiptProtector(sensitiveDataMasterKey as Buffer),
       )
+    : createInMemoryAffairReceiptRepository(affairRepository);
+  const affairReceiptAccessLog = pool
+    ? new MySqlAffairReceiptAccessLog(pool)
+    : new InMemoryAffairReceiptAccessLog();
+  const fileMetadataStore = pool ? new MySqlFileMetadataStore(pool) : undefined;
+  const localBlobStorage = config.fileStorageRoot
+    ? new LocalFileStorage(config.fileStorageRoot, {}, fileMetadataStore)
     : undefined;
   await localBlobStorage?.initialize();
   const fileCleanupJob = localBlobStorage
@@ -236,6 +250,22 @@ const main = async () => {
     logger,
   });
 
+  if (fileMetadataStore && blobStorage) {
+    mountAffairReceiptRoutes(app, {
+      repository: affairReceiptRepository,
+      accessLog: affairReceiptAccessLog,
+      affairRepository,
+      fileMetadata: fileMetadataStore,
+      blobStorage,
+      authenticationService,
+      idempotencyStore,
+      idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+      allowUnauthenticated: !config.production && !authenticationService,
+      trustProxyHeaders: config.trustProxyHeaders,
+      logger,
+    });
+  }
+
   const server = serve({
     fetch: app.fetch,
     hostname: config.host,
@@ -257,6 +287,7 @@ const main = async () => {
     affairs: "enabled",
     affairConfigurations: "enabled",
     affairSubmissions: "enabled",
+    affairReceipts: fileMetadataStore && blobStorage ? "enabled" : "disabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
