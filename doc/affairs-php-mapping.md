@@ -1,8 +1,8 @@
-# Affairs A-wave PHP mapping
+# Affairs PHP mapping
 
-Issue: #57 `WO-AFFAIRS-TO-SERVER`
+Issues: #57 `WO-AFFAIRS-TO-SERVER`, #59 `WO-AFFAIRS-TO-SERVER-B`
 
-This document records the A-wave behavior copied from the PHP truth source. It intentionally does not claim that B/C/D-wave tables or workflows are implemented.
+This document records the PHP truth-source mapping for the implemented A and B waves. C/D structures are documented for dependency planning but are not claimed as implemented.
 
 ## Scope and source coordinates
 
@@ -127,7 +127,7 @@ The intended behavior oracles are:
 
 The requested widening (`OR 1=1`) and reverse (`AND 1=0`) mutation runs require an executable checkout plus MySQL integration environment. In the current agent environment the GitHub repository cannot be materialized (outbound GitHub DNS is unavailable), so those mutation runs were **not executed** here and are not claimed as PASS.
 
-## Verification status at authoring time
+## Verification status at A-wave authoring time
 
 - Full `pnpm verify`: **not executed** — no local checkout can be materialized in this execution environment.
 - Unit tests, including `apps/api/test/affairs.test.ts`: **not executed locally** for the same reason.
@@ -176,6 +176,8 @@ The PHP enum is preserved exactly: `form | excel | receipt`. `receipt` is a vali
 Collections are affair-owned and company-owned in PHP. Server stores `tenant_id + affair_id` and uses a tenant-qualified FK to A-wave `affairs`. PHP DDL uses `ON DELETE CASCADE`, but PHP application deletion first checks dependent collections/submissions/receipts. Server therefore uses `ON DELETE RESTRICT` and still does **not** expose affair hard-delete.
 
 PHP create validates that the affair belongs to the current company, auto-assigns the next sort order and allows only one `receipt` collection per `(affair, target)`. Server copies those behaviors. PHP update does not change the collection type; server PATCH likewise exposes name/target/status/sort only.
+
+B wave supports `target=city`, but it does not alter city credentials. The A-wave PHP truth source still initializes every city with predictable `EDU{city_code}` account **and password**. This is a pre-existing PHP credential defect; server preserves it for behavioral parity in A wave and B wave does not silently change it.
 
 **Collection delete is deliberately deferred.** PHP `doAffairCollectionDelete()` blocks deletion when C-wave submissions exist and, for receipt collections, when D-wave receipts exist. Those blockers cannot yet be represented on server without inventing an incomplete rule. Binding/reference-data cleanup is supported through replacement APIs, but collection deletion itself waits for C/D.
 
