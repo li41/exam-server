@@ -26,6 +26,11 @@ export interface AffairSubmissionRepository {
     input: SaveAffairSubmissionInput,
     scope: QuestionBankScope,
   ): Promise<AffairSubmissionDetail>;
+  stageSubmitPayload(
+    id: string,
+    input: SaveAffairSubmissionInput,
+    scope: QuestionBankScope,
+  ): Promise<AffairSubmissionDetail>;
   submit(
     id: string,
     input: SaveAffairSubmissionInput,
