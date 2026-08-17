@@ -70,7 +70,8 @@ export class InMemoryCompanyMemberRepository implements CompanyMemberRepository 
 
   get(id: string, scope: CompanyMemberScope): Promise<CompanyMember | null> {
     const member = this.members.find(
-      (candidate) => candidate.id === id && candidate.tenantId === scope.tenantId,
+      (candidate) =>
+        candidate.id === id && candidate.tenantId === scope.tenantId,
     );
     return Promise.resolve(member ? structuredClone(member) : null);
   }
@@ -120,9 +121,11 @@ export class InMemoryCompanyMemberRepository implements CompanyMemberRepository 
       this.assertUniqueUser(input.userId, scope, id);
       member.userId = input.userId;
     }
-    if (input.invitedEmail !== undefined) member.invitedEmail = input.invitedEmail;
+    if (input.invitedEmail !== undefined)
+      member.invitedEmail = input.invitedEmail;
     if (input.isAdmin !== undefined) member.isAdmin = input.isAdmin;
-    if (input.permissions !== undefined) member.permissions = structuredClone(input.permissions);
+    if (input.permissions !== undefined)
+      member.permissions = structuredClone(input.permissions);
     if (input.status !== undefined) member.status = input.status;
     if (input.reviewStatus !== undefined) {
       member.reviewStatus = input.reviewStatus;
@@ -153,7 +156,8 @@ export class InMemoryCompanyMemberRepository implements CompanyMemberRepository 
 
   private requiredMember(id: string, scope: CompanyMemberScope): CompanyMember {
     const member = this.members.find(
-      (candidate) => candidate.id === id && candidate.tenantId === scope.tenantId,
+      (candidate) =>
+        candidate.id === id && candidate.tenantId === scope.tenantId,
     );
     if (!member) throw new NotFoundError("company member", id);
     return member;
