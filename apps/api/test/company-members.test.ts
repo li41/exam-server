@@ -2,22 +2,49 @@ import {
   COMPANY_MEMBER_ADMIN_PERMISSIONS,
   COMPANY_MEMBER_NO_PERMISSIONS,
 } from "@server-foundation/domain";
+import type {
+  IdempotencyReservation,
+  IdempotencyStore,
+} from "@server-foundation/domain";
 import {
   companyMemberFixture,
   createInMemoryCompanyMemberRepository,
   createInMemoryItemRepository,
 } from "@server-foundation/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { mountCompanyMemberRoutes } from "../src/company-member-routes.js";
+import type { Logger } from "../src/logger.js";
 
 const actorPermissions = {
   ...COMPANY_MEMBER_NO_PERMISSIONS,
   members: true,
 };
 
+class FailingCompletionIdempotencyStore implements IdempotencyStore {
+  completeCalls = 0;
+  releaseCalls = 0;
+
+  async reserve(): Promise<IdempotencyReservation> {
+    return { state: "acquired" };
+  }
+
+  async complete(): Promise<void> {
+    this.completeCalls += 1;
+    throw new Error("completion persistence failed");
+  }
+
+  async release(): Promise<void> {
+    this.releaseCalls += 1;
+  }
+}
+
 const createTestApp = (
   actorOverrides: Parameters<typeof companyMemberFixture>[0] = {},
+  routeDependencies: {
+    idempotencyStore?: IdempotencyStore;
+    logger?: Logger;
+  } = {},
 ) => {
   const repository = createInMemoryCompanyMemberRepository([
     companyMemberFixture({
@@ -41,6 +68,7 @@ const createTestApp = (
   mountCompanyMemberRoutes(app, {
     repository,
     allowUnauthenticated: true,
+    ...routeDependencies,
   });
   return app;
 };
@@ -100,6 +128,42 @@ describe("company member permission contract", () => {
     expect(response.status).toBe(201);
     expect((await response.json()).permissions).toEqual(
       COMPANY_MEMBER_ADMIN_PERMISSIONS,
+    );
+  });
+});
+
+describe("company member idempotency", () => {
+  it("keeps a successful mutation response when completion persistence fails", async () => {
+    const store = new FailingCompletionIdempotencyStore();
+    const logError = vi.fn();
+    const logger: Logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: logError,
+    };
+    const app = createTestApp({}, { idempotencyStore: store, logger });
+
+    const response = await app.request("/api/v1/company-members", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "completion-failure",
+      },
+      body: JSON.stringify({
+        userId: "completion-failure-user",
+        permissions: { ...COMPANY_MEMBER_NO_PERMISSIONS },
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      userId: "completion-failure-user",
+    });
+    expect(store.completeCalls).toBe(1);
+    expect(store.releaseCalls).toBe(0);
+    expect(logError).toHaveBeenCalledWith(
+      "idempotency_commit_failed",
+      expect.objectContaining({ error: "completion persistence failed" }),
     );
   });
 });
