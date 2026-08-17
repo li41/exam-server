@@ -225,9 +225,7 @@ const createRouter = (dependencies: Dependencies) => {
   );
 
   api.get("/company-members/:id", async (context) =>
-    context.json(
-      await service.get(context.req.param("id"), scopeFor(context)),
-    ),
+    context.json(await service.get(context.req.param("id"), scopeFor(context))),
   );
 
   api.post("/company-members", async (context) =>
