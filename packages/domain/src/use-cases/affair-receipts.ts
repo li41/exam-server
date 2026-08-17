@@ -1,6 +1,7 @@
 import type {
   AffairReceiptAccessAction,
   AffairReceiptDetail,
+  AffairReceiptListItem,
   AffairReceiptListQuery,
   AffairReceiptLookupInput,
   AffairReceiptSelectionInput,
@@ -9,9 +10,16 @@ import type {
   UpdateAffairReceiptInput,
 } from "@server-foundation/api-contracts";
 import { ConflictError, DomainError, NotFoundError } from "../errors.js";
-import type { BlobStorage, DownloadSource, FileAccessScope } from "../ports/blob-storage.js";
+import type {
+  BlobStorage,
+  DownloadSource,
+  FileAccessScope,
+} from "../ports/blob-storage.js";
 import type { FileMetadataStore } from "../ports/file-metadata.js";
-import type { AffairReceiptAccessLog, AffairReceiptRepository } from "../ports/affair-receipt-repository.js";
+import type {
+  AffairReceiptAccessLog,
+  AffairReceiptRepository,
+} from "../ports/affair-receipt-repository.js";
 import type { AffairRepository } from "../ports/affair-repository.js";
 import type { QuestionBankScope } from "../ports/question-bank-repository.js";
 
@@ -41,11 +49,18 @@ const isValidTwId = (value: string): boolean => {
   return sum % 10 === 0;
 };
 
-const validateBusinessRules = (receipt: CreateAffairReceiptInput | AffairReceiptDetail): void => {
-  if (!isValidTwId(receipt.idNumber)) invalid("idNumber is not a valid Taiwan ID number.");
+const validateBusinessRules = (
+  receipt: CreateAffairReceiptInput | AffairReceiptDetail,
+): void => {
+  if (!isValidTwId(receipt.idNumber)) {
+    invalid("idNumber is not a valid Taiwan ID number.");
+  }
   if (!receipt.agreed) invalid("The receipt agreement must be accepted.");
+
   if (receipt.submitterType === "school") {
-    if (receipt.positions.length === 0) invalid("At least one school position is required.");
+    if (receipt.positions.length === 0) {
+      invalid("At least one school position is required.");
+    }
     if (
       !receipt.positions.includes("無擔任") &&
       receipt.positions.includes("監考或資訊教師") &&
@@ -54,8 +69,11 @@ const validateBusinessRules = (receipt: CreateAffairReceiptInput | AffairReceipt
       invalid("monitorClasses is required for monitoring/information teachers.");
     }
   }
+
   if (receipt.briefingRegion && receipt.briefingRegion !== "online") {
-    if (!receipt.transportType) invalid("transportType is required for an in-person briefing.");
+    if (!receipt.transportType) {
+      invalid("transportType is required for an in-person briefing.");
+    }
     if (receipt.transportType === "rail") {
       if (!receipt.transportOriginArea || !receipt.transportOriginStation) {
         invalid("Rail transport requires an origin area and station.");
@@ -68,7 +86,10 @@ const validateBusinessRules = (receipt: CreateAffairReceiptInput | AffairReceipt
         invalid("Rail origin and destination stations must differ.");
       }
     }
-    if (receipt.transportType === "island" && (!receipt.transportFee || receipt.transportFee <= 0)) {
+    if (
+      receipt.transportType === "island" &&
+      (!receipt.transportFee || receipt.transportFee <= 0)
+    ) {
       invalid("Island transport requires a positive transport fee.");
     }
   }
@@ -87,10 +108,17 @@ export class AffairReceiptService {
     query: AffairReceiptListQuery,
     actor: AffairReceiptAccessActor,
     scope: QuestionBankScope,
-  ): Promise<Page<import("@server-foundation/api-contracts").AffairReceiptListItem>> {
+  ): Promise<Page<AffairReceiptListItem>> {
     await this.requireAffair(query.affairId, scope);
     const result = await this.receipts.listReceipts(query, scope);
-    await this.audit("list", query.affairId, null, result.items.length, actor, scope);
+    await this.audit(
+      "list",
+      query.affairId,
+      null,
+      result.items.length,
+      actor,
+      scope,
+    );
     return result;
   }
 
@@ -140,6 +168,7 @@ export class AffairReceiptService {
     id: string,
     input: UpdateAffairReceiptInput,
     scope: QuestionBankScope,
+    fileScope: FileAccessScope,
   ): Promise<AffairReceiptDetail> {
     const current = await this.requireReceipt(id, scope);
     if (current.version !== input.version) {
@@ -147,10 +176,15 @@ export class AffairReceiptService {
     }
     const next = { ...current, ...input } as AffairReceiptDetail;
     validateBusinessRules(next);
-    if (input.bankbookFileId) await this.assertBankbookReady(input.bankbookFileId, scope);
+    if (input.bankbookFileId) {
+      await this.assertBankbookReady(input.bankbookFileId, scope);
+    }
     const updated = await this.receipts.updateReceipt(id, input, scope);
-    if (input.bankbookFileId && input.bankbookFileId !== current.bankbookFileId) {
-      await this.deleteBlobIfPresent(current.bankbookFileId, scope);
+    if (
+      input.bankbookFileId &&
+      input.bankbookFileId !== current.bankbookFileId
+    ) {
+      await this.deleteBlobIfPresent(current.bankbookFileId, scope, fileScope);
     }
     return updated;
   }
@@ -194,12 +228,11 @@ export class AffairReceiptService {
       throw new ConflictError("affair receipt was modified by another request.");
     }
 
-    // Fail closed: irreversible deletion is not attempted unless the audit row exists.
+    // Fail closed: the irreversible mutation is not attempted unless its audit row exists.
     await this.audit("delete", receipt.affairId, receipt.id, 1, actor, scope);
 
-    // PII priority: remove the private bankbook blob before the DB row. If the
-    // following DB delete fails, the receipt is visibly repairable (missing image)
-    // instead of leaving an untracked personal-data blob behind.
+    // PII priority: remove the bankbook blob before the DB row. A subsequent DB
+    // failure leaves a visible/repairable missing image, not an untracked PII blob.
     await this.deleteBlobIfPresent(receipt.bankbookFileId, scope, fileScope);
     await this.receipts.deleteReceipt(id, version, scope);
   }
@@ -221,28 +254,38 @@ export class AffairReceiptService {
     scope: QuestionBankScope,
   ): Promise<void> {
     const metadata = await this.fileMetadata.get(fileId);
-    if (!metadata || metadata.tenantId !== scope.tenantId || metadata.status !== "ready") {
+    if (
+      !metadata ||
+      metadata.tenantId !== scope.tenantId ||
+      metadata.status !== "ready"
+    ) {
       throw new NotFoundError("bankbook file", fileId);
     }
-    if (!metadata.mimeType.startsWith("image/")) invalid("bankbookFileId must reference an image.");
-    if (metadata.sizeBytes > 10 * 1024 * 1024) invalid("Bankbook image must not exceed 10 MiB.");
+    if (!metadata.mimeType.startsWith("image/")) {
+      invalid("bankbookFileId must reference an image.");
+    }
+    if (metadata.sizeBytes > 10 * 1024 * 1024) {
+      invalid("Bankbook image must not exceed 10 MiB.");
+    }
   }
 
   private async deleteBlobIfPresent(
     fileId: string,
     scope: QuestionBankScope,
-    fileScope?: FileAccessScope,
+    fileScope: FileAccessScope,
   ): Promise<void> {
     const metadata = await this.fileMetadata.get(fileId);
     if (!metadata || metadata.status === "deleted") return;
-    if (metadata.tenantId !== scope.tenantId) throw new NotFoundError("bankbook file", fileId);
-    await this.blobStorage.delete(
-      fileId,
-      fileScope ?? { userId: scope.actorUserId, tenantId: scope.tenantId, roles: ["developer"] },
-    );
+    if (metadata.tenantId !== scope.tenantId) {
+      throw new NotFoundError("bankbook file", fileId);
+    }
+    await this.blobStorage.delete(fileId, fileScope);
   }
 
-  private async requireAffair(id: string, scope: QuestionBankScope): Promise<void> {
+  private async requireAffair(
+    id: string,
+    scope: QuestionBankScope,
+  ): Promise<void> {
     const affair = await this.affairs.getAffair(id, scope);
     if (!affair) throw new NotFoundError("affair", id);
   }
