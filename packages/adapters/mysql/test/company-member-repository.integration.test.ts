@@ -44,7 +44,6 @@ const insertUser = async (id: string, email: string, tenantId: string) => {
   );
 };
 
-// prettier-ignore
 describe("MySqlCompanyMemberRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
@@ -75,6 +74,7 @@ describe("MySqlCompanyMemberRepository", () => {
     await pool.end();
   });
 
+  // prettier-ignore
   it("keeps reads and updates tenant-scoped", async () => {
     const member = await repository.create(
       {
@@ -124,6 +124,7 @@ describe("MySqlCompanyMemberRepository", () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
+  // prettier-ignore
   it("rejects a user from another tenant instead of creating a cross-tenant membership", async () => {
     await expect(
       repository.create(
