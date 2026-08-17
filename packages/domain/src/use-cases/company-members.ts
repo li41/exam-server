@@ -254,7 +254,11 @@ export const parseUpdateCompanyMemberInput = (
     );
   }
   if (record.reviewNote !== undefined) {
-    input.reviewNote = parseNullableString(record.reviewNote, "reviewNote", 500);
+    input.reviewNote = parseNullableString(
+      record.reviewNote,
+      "reviewNote",
+      500,
+    );
   }
   if (Object.keys(input).length === 1) {
     validationError("Company member update must change at least one field.");
