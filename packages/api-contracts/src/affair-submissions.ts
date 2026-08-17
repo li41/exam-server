@@ -115,11 +115,7 @@ export const AffairSubmissionWritePayloadSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("excel"),
       rows: z
-        .array(
-          z
-            .object({ values: AffairSubmissionRowValuesSchema })
-            .strict(),
-        )
+        .array(z.object({ values: AffairSubmissionRowValuesSchema }).strict())
         .max(10000),
     })
     .strict(),
@@ -151,10 +147,18 @@ export const SaveAffairSubmissionSchema = z
   })
   .strict();
 
+const ReturnReasonSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .transform((value) => value || null)
+  .nullable()
+  .default(null);
+
 export const ReturnAffairSubmissionSchema = z
   .object({
     version: z.number().int().positive(),
-    reason: z.string().trim().max(500).nullable().default(null),
+    reason: ReturnReasonSchema,
   })
   .strict();
 
@@ -171,7 +175,7 @@ export const BatchReturnAffairSubmissionsSchema = z
       )
       .min(1)
       .max(500),
-    reason: z.string().trim().max(500).nullable().default(null),
+    reason: ReturnReasonSchema,
   })
   .strict();
 
