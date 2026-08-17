@@ -199,13 +199,14 @@ export const parseCreateCompanyMemberInput = (
         ? null
         : parseNullableEmail(record.invitedEmail),
     isAdmin:
-      record.isAdmin === undefined ? false : parseBoolean(record.isAdmin, "isAdmin"),
+      record.isAdmin === undefined
+        ? false
+        : parseBoolean(record.isAdmin, "isAdmin"),
     permissions:
       record.permissions === undefined
         ? { ...COMPANY_MEMBER_NO_PERMISSIONS }
         : parseCompanyMemberPermissions(record.permissions),
-    status:
-      record.status === undefined ? "active" : parseStatus(record.status),
+    status: record.status === undefined ? "active" : parseStatus(record.status),
     reviewStatus:
       record.reviewStatus === undefined
         ? "approved"
