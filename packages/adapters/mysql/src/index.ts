@@ -3,6 +3,7 @@ export * from "./cursor.js";
 export * from "./examinee-credential-protector.js";
 export * from "./examinee-repository.js";
 export * from "./affair-repository.js";
+export * from "./affair-deletion-repository.js";
 export * from "./affair-configuration-repository.js";
 export * from "./affair-submission-repository.js";
 export * from "./affair-receipt-repository.js";
