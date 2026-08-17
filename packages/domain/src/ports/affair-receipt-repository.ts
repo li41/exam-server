@@ -38,6 +38,10 @@ export interface AffairReceiptRepository {
     input: AffairReceiptSelectionInput,
     scope: QuestionBankScope,
   ): Promise<AffairReceiptDetail[]>;
+  countBankbookReferences(
+    fileId: string,
+    scope: QuestionBankScope,
+  ): Promise<number>;
   deleteReceipt(
     id: string,
     version: number,
