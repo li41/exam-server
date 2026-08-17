@@ -6,6 +6,7 @@ import { Argon2PasswordHasher, AuthService } from "@server-foundation/auth";
 import {
   AesGcmExamineeCredentialProtector,
   createMySqlPool,
+  MySqlAffairRepository,
   MySqlAuditLog,
   MySqlExamineeRepository,
   MySqlFileMetadataStore,
@@ -27,6 +28,7 @@ import {
   startFileCleanupJob,
 } from "@server-foundation/local-fs-storage";
 import {
+  createInMemoryAffairRepository,
   createInMemoryExamineeRepository,
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
@@ -34,6 +36,7 @@ import {
   createInMemoryQuestionStructureRepository,
   createInMemoryTestBookletRepository,
 } from "@server-foundation/testing";
+import { mountAffairRoutes } from "./affair-routes.js";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { mountDeploymentIdentityRoutes } from "./deployment-identity-routes.js";
@@ -91,6 +94,9 @@ const main = async () => {
         ),
       )
     : createInMemoryExamineeRepository();
+  const affairRepository = pool
+    ? new MySqlAffairRepository(pool)
+    : createInMemoryAffairRepository();
   const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
@@ -188,6 +194,15 @@ const main = async () => {
     logger,
   });
 
+  mountAffairRoutes(app, {
+    repository: affairRepository,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
   const server = serve({
     fetch: app.fetch,
     hostname: config.host,
@@ -206,6 +221,7 @@ const main = async () => {
     questionStructures: "enabled",
     testBooklets: "enabled",
     examinees: "enabled",
+    affairs: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
