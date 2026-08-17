@@ -4,3 +4,4 @@ export * from "./fake-question-import-repository.js";
 export * from "./fake-question-structure-repository.js";
 export * from "./fake-test-booklet-repository.js";
 export * from "./fake-examinee-repository.js";
+export * from "./fake-company-member-repository.js";

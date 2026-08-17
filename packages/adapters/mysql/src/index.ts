@@ -1,4 +1,5 @@
 export * from "./audit-log.js";
+export * from "./company-member-repository.js";
 export * from "./cursor.js";
 export * from "./examinee-credential-protector.js";
 export * from "./examinee-repository.js";

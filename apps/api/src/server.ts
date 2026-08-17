@@ -7,6 +7,7 @@ import {
   AesGcmExamineeCredentialProtector,
   createMySqlPool,
   MySqlAuditLog,
+  MySqlCompanyMemberRepository,
   MySqlExamineeRepository,
   MySqlFileMetadataStore,
   MySqlIdempotencyStore,
@@ -27,6 +28,7 @@ import {
   startFileCleanupJob,
 } from "@server-foundation/local-fs-storage";
 import {
+  createInMemoryCompanyMemberRepository,
   createInMemoryExamineeRepository,
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
@@ -35,6 +37,7 @@ import {
   createInMemoryTestBookletRepository,
 } from "@server-foundation/testing";
 import { createApp } from "./app.js";
+import { mountCompanyMemberRoutes } from "./company-member-routes.js";
 import { loadConfig } from "./config.js";
 import { mountDeploymentIdentityRoutes } from "./deployment-identity-routes.js";
 import { gracefulShutdown } from "./graceful-shutdown.js";
@@ -91,6 +94,9 @@ const main = async () => {
         ),
       )
     : createInMemoryExamineeRepository();
+  const companyMemberRepository = pool
+    ? new MySqlCompanyMemberRepository(pool)
+    : createInMemoryCompanyMemberRepository();
   const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
@@ -188,6 +194,14 @@ const main = async () => {
     logger,
   });
 
+  mountCompanyMemberRoutes(app, {
+    repository: companyMemberRepository,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+  });
+
   const server = serve({
     fetch: app.fetch,
     hostname: config.host,
@@ -206,6 +220,7 @@ const main = async () => {
     questionStructures: "enabled",
     testBooklets: "enabled",
     examinees: "enabled",
+    companyMembers: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
