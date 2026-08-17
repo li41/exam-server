@@ -9,7 +9,12 @@ import type {
   Page,
   UpdateAffairReceiptInput,
 } from "@server-foundation/api-contracts";
-import { ConflictError, DomainError, NotFoundError } from "../errors.js";
+import {
+  CapabilityMissingError,
+  ConflictError,
+  DomainError,
+  NotFoundError,
+} from "../errors.js";
 import type {
   BlobStorage,
   DownloadSource,
@@ -100,8 +105,8 @@ export class AffairReceiptService {
     private readonly receipts: AffairReceiptRepository,
     private readonly accessLog: AffairReceiptAccessLog,
     private readonly affairs: AffairRepository,
-    private readonly fileMetadata: FileMetadataStore,
-    private readonly blobStorage: BlobStorage,
+    private readonly fileMetadata?: FileMetadataStore,
+    private readonly blobStorage?: BlobStorage,
   ) {}
 
   async listReceipts(
@@ -213,7 +218,7 @@ export class AffairReceiptService {
   ): Promise<DownloadSource> {
     const receipt = await this.requireReceipt(id, scope);
     await this.audit("view", receipt.affairId, receipt.id, 1, actor, scope);
-    return this.blobStorage.getDownload(receipt.bankbookFileId, fileScope);
+    return this.requireBlobStorage().getDownload(receipt.bankbookFileId, fileScope);
   }
 
   async deleteReceipt(
@@ -228,7 +233,6 @@ export class AffairReceiptService {
       throw new ConflictError("affair receipt was modified by another request.");
     }
 
-    // Fail closed: the irreversible mutation is not attempted unless its audit row exists.
     await this.audit("delete", receipt.affairId, receipt.id, 1, actor, scope);
 
     // PII priority: remove the bankbook blob before the DB row. A subsequent DB
@@ -253,7 +257,7 @@ export class AffairReceiptService {
     fileId: string,
     scope: QuestionBankScope,
   ): Promise<void> {
-    const metadata = await this.fileMetadata.get(fileId);
+    const metadata = await this.requireFileMetadata().get(fileId);
     if (
       !metadata ||
       metadata.tenantId !== scope.tenantId ||
@@ -274,12 +278,24 @@ export class AffairReceiptService {
     scope: QuestionBankScope,
     fileScope: FileAccessScope,
   ): Promise<void> {
-    const metadata = await this.fileMetadata.get(fileId);
+    const metadata = await this.requireFileMetadata().get(fileId);
     if (!metadata || metadata.status === "deleted") return;
     if (metadata.tenantId !== scope.tenantId) {
       throw new NotFoundError("bankbook file", fileId);
     }
-    await this.blobStorage.delete(fileId, fileScope);
+    await this.requireBlobStorage().delete(fileId, fileScope);
+  }
+
+  private requireFileMetadata(): FileMetadataStore {
+    if (!this.fileMetadata) {
+      throw new CapabilityMissingError("file metadata storage");
+    }
+    return this.fileMetadata;
+  }
+
+  private requireBlobStorage(): BlobStorage {
+    if (!this.blobStorage) throw new CapabilityMissingError("blob storage");
+    return this.blobStorage;
   }
 
   private async requireAffair(
