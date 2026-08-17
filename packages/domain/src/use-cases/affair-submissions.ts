@@ -22,11 +22,19 @@ const invalid = (message: string): never => {
 
 const patternMatches = (pattern: string, value: string): boolean => {
   try {
-    const delimited = pattern.match(/^\/(.*)\/([a-z]*)$/i);
-    const expression = delimited
-      ? new RegExp(delimited[1] ?? "", (delimited[2] ?? "").replace("u", "u"))
-      : new RegExp(pattern, "u");
-    return expression.test(value);
+    let source = pattern;
+    let flags = "u";
+    const first = pattern[0];
+    if (first && !/[A-Za-z0-9\\\s]/.test(first)) {
+      const last = pattern.lastIndexOf(first);
+      if (last > 0) {
+        source = pattern.slice(1, last);
+        const phpFlags = pattern.slice(last + 1);
+        if (/[^imsu]/.test(phpFlags)) return false;
+        flags = Array.from(new Set(`${phpFlags}u`)).join("");
+      }
+    }
+    return new RegExp(source, flags).test(value);
   } catch {
     return false;
   }
@@ -52,22 +60,16 @@ const validateValue = (
       invalid(`${label} must not be greater than ${rules.max}.`);
     }
   }
-  if (field.dataType === "text") {
-    if (
-      rules.min_length !== undefined &&
-      rules.min_length !== null &&
-      value.length < rules.min_length
-    ) {
-      invalid(`${label} is shorter than the configured minimum length.`);
-    }
-    if (
-      rules.max_length !== undefined &&
-      rules.max_length !== null &&
-      value.length > rules.max_length
-    ) {
-      invalid(`${label} is longer than the configured maximum length.`);
-    }
+
+  // PHP applies min/max length to every non-empty value, regardless of data_type.
+  const length = Array.from(value).length;
+  if (rules.min_length && length < rules.min_length) {
+    invalid(`${label} is shorter than the configured minimum length.`);
   }
+  if (rules.max_length && length > rules.max_length) {
+    invalid(`${label} is longer than the configured maximum length.`);
+  }
+
   if (field.dataType === "date") {
     if (rules.min_date && value < rules.min_date) {
       invalid(`${label} is earlier than the configured minimum date.`);
@@ -84,13 +86,7 @@ const validateValue = (
       invalid(`${label} is later than the configured maximum time.`);
     }
   }
-  if (
-    field.dataType === "select" &&
-    field.selectOptions &&
-    !field.selectOptions.includes(value)
-  ) {
-    invalid(`${label} is not one of the configured options.`);
-  }
+  // PHP does not re-check select_options at submission time; preserve that behavior.
   if (rules.pattern && !patternMatches(rules.pattern, value)) {
     invalid(rules.pattern_desc || `${label} has an invalid format.`);
   }
@@ -228,8 +224,17 @@ export class AffairSubmissionService {
           scope,
         );
         returned++;
-      } catch {
-        skipped++;
+      } catch (error) {
+        if (
+          error instanceof DomainError &&
+          (error.code === "not_found" ||
+            error.code === "conflict" ||
+            error.code === "validation_error")
+        ) {
+          skipped++;
+          continue;
+        }
+        throw error;
       }
     }
     return { returned, skipped };
