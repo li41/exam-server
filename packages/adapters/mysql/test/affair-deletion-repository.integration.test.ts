@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { PoolConnection } from "mysql2/promise";
+import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   AesGcmAffairReceiptProtector,
@@ -112,7 +112,14 @@ const insertForeignBlocker = async (
         id, affair_id, tenant_id, city, school_level, school_code, school_name,
         test_classes, test_sessions, password, status, version, created_at, updated_at
       ) VALUES (?, ?, ?, '臺北市', 1, ?, 'foreign school', 1, 1, 'pw', 'enabled', 1, ?, ?)`,
-      [randomUUID(), affairId, tenantB.tenantId, randomUUID().slice(0, 12), now, now],
+      [
+        randomUUID(),
+        affairId,
+        tenantB.tenantId,
+        randomUUID().slice(0, 12),
+        now,
+        now,
+      ],
     );
     return;
   }
@@ -178,7 +185,10 @@ afterAll(async () => {
 
 describe("MySqlAffairDeletionRepository", () => {
   it("blocks schools first", async () => {
-    const affair = await affairs.createAffair(affairInput("school blocker"), tenantA);
+    const affair = await affairs.createAffair(
+      affairInput("school blocker"),
+      tenantA,
+    );
     await affairs.createSchool(
       {
         affairId: affair.id,
@@ -196,14 +206,19 @@ describe("MySqlAffairDeletionRepository", () => {
       tenantA,
     );
 
-    await expect(deletion.deleteAffair(affair.id, affair.version, tenantA)).resolves.toEqual({
+    await expect(
+      deletion.deleteAffair(affair.id, affair.version, tenantA),
+    ).resolves.toEqual({
       kind: "schools",
       count: 1,
     });
   });
 
   it("blocks submissions before their required collection", async () => {
-    const affair = await affairs.createAffair(affairInput("submission blocker"), tenantA);
+    const affair = await affairs.createAffair(
+      affairInput("submission blocker"),
+      tenantA,
+    );
     await affairs.initializeCities(tenantA);
     const city = (await affairs.listCities(tenantA))[0];
     expect(city).toBeDefined();
@@ -225,14 +240,19 @@ describe("MySqlAffairDeletionRepository", () => {
       ],
     );
 
-    await expect(deletion.deleteAffair(affair.id, affair.version, tenantA)).resolves.toEqual({
+    await expect(
+      deletion.deleteAffair(affair.id, affair.version, tenantA),
+    ).resolves.toEqual({
       kind: "submissions",
       count: 1,
     });
   });
 
   it("blocks receipts", async () => {
-    const affair = await affairs.createAffair(affairInput("receipt blocker"), tenantA);
+    const affair = await affairs.createAffair(
+      affairInput("receipt blocker"),
+      tenantA,
+    );
     await affairs.initializeCities(tenantA);
     const city = (await affairs.listCities(tenantA))[0];
     expect(city).toBeDefined();
@@ -273,17 +293,24 @@ describe("MySqlAffairDeletionRepository", () => {
       tenantA,
     );
 
-    await expect(deletion.deleteAffair(affair.id, affair.version, tenantA)).resolves.toEqual({
+    await expect(
+      deletion.deleteAffair(affair.id, affair.version, tenantA),
+    ).resolves.toEqual({
       kind: "receipts",
       count: 1,
     });
   });
 
   it("blocks collections after the other three categories are empty", async () => {
-    const affair = await affairs.createAffair(affairInput("collection blocker"), tenantA);
+    const affair = await affairs.createAffair(
+      affairInput("collection blocker"),
+      tenantA,
+    );
     await insertCollection(affair.id);
 
-    await expect(deletion.deleteAffair(affair.id, affair.version, tenantA)).resolves.toEqual({
+    await expect(
+      deletion.deleteAffair(affair.id, affair.version, tenantA),
+    ).resolves.toEqual({
       kind: "collections",
       count: 1,
     });
@@ -291,7 +318,9 @@ describe("MySqlAffairDeletionRepository", () => {
 
   it("deletes the affair when no blockers exist", async () => {
     const affair = await affairs.createAffair(affairInput("deletable"), tenantA);
-    await expect(deletion.deleteAffair(affair.id, affair.version, tenantA)).resolves.toBeNull();
+    await expect(
+      deletion.deleteAffair(affair.id, affair.version, tenantA),
+    ).resolves.toBeNull();
     await expect(affairs.getAffair(affair.id, tenantA)).resolves.toBeNull();
   });
 
@@ -312,23 +341,33 @@ describe("MySqlAffairDeletionRepository", () => {
     "collections",
   ] as const) {
     it(`ignores a foreign-tenant ${kind} row with the same affair id`, async () => {
-      const affair = await affairs.createAffair(affairInput(`foreign ${kind}`), tenantA);
+      const affair = await affairs.createAffair(
+        affairInput(`foreign ${kind}`),
+        tenantA,
+      );
       const connection = await pool.getConnection();
       try {
         await connection.query("SET FOREIGN_KEY_CHECKS = 0");
         await insertForeignBlocker(connection, kind, affair.id);
       } finally {
-        await connection.query("SET FOREIGN_KEY_CHECKS = 1").catch(() => undefined);
+        await connection
+          .query("SET FOREIGN_KEY_CHECKS = 1")
+          .catch(() => undefined);
         connection.release();
       }
 
-      await expect(deletion.deleteAffair(affair.id, affair.version, tenantA)).resolves.toBeNull();
+      await expect(
+        deletion.deleteAffair(affair.id, affair.version, tenantA),
+      ).resolves.toBeNull();
       await expect(affairs.getAffair(affair.id, tenantA)).resolves.toBeNull();
     });
   }
 
   it("keeps receipt access audit after both receipt and affair business rows are deleted", async () => {
-    const affair = await affairs.createAffair(affairInput("audit survives"), tenantA);
+    const affair = await affairs.createAffair(
+      affairInput("audit survives"),
+      tenantA,
+    );
     await affairs.initializeCities(tenantA);
     const city = (await affairs.listCities(tenantA))[0];
     expect(city).toBeDefined();
@@ -380,9 +419,13 @@ describe("MySqlAffairDeletionRepository", () => {
       ip: "203.0.113.65",
     });
     await receipts.deleteReceipt(receipt.id, receipt.version, tenantA);
-    await expect(deletion.deleteAffair(affair.id, affair.version, tenantA)).resolves.toBeNull();
+    await expect(
+      deletion.deleteAffair(affair.id, affair.version, tenantA),
+    ).resolves.toBeNull();
 
-    const [rows] = await pool.execute<Array<{ receipt_id: string | null } & import("mysql2/promise").RowDataPacket>>(
+    const [rows] = await pool.execute<
+      Array<RowDataPacket & { receipt_id: string | null }>
+    >(
       "SELECT receipt_id FROM affair_receipt_access_logs WHERE tenant_id = ? AND receipt_id = ?",
       [tenantA.tenantId, receipt.id],
     );
