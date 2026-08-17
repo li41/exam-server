@@ -138,6 +138,24 @@ class InMemoryAffairSubmissionRepository implements AffairSubmissionRepository {
     return copy(item);
   }
 
+  async stageSubmitPayload(
+    id: string,
+    input: SaveAffairSubmissionInput,
+    scope: QuestionBankScope,
+  ): Promise<AffairSubmissionDetail> {
+    const item = this.require(id, scope);
+    this.assertVersion(item, input.version);
+    if (item.status === "submitted") {
+      throw new DomainError(
+        "validation_error",
+        "The submission was already submitted.",
+      );
+    }
+    this.writePayload(item, input);
+    item.updatedAt = now();
+    return copy(item);
+  }
+
   async submit(
     id: string,
     input: SaveAffairSubmissionInput,
@@ -154,6 +172,7 @@ class InMemoryAffairSubmissionRepository implements AffairSubmissionRepository {
     this.writePayload(item, input);
     const timestamp = now();
     item.status = "submitted";
+    item.accountType = item.submitterType === "school" ? "SC" : "EDU";
     item.submittedAt = timestamp;
     item.version++;
     item.updatedAt = timestamp;
@@ -176,7 +195,7 @@ class InMemoryAffairSubmissionRepository implements AffairSubmissionRepository {
     }
     const timestamp = now();
     item.status = "returned";
-    item.returnReason = reason;
+    item.returnReason = reason?.trim() || null;
     item.returnedAt = timestamp;
     item.version++;
     item.updatedAt = timestamp;
