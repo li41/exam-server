@@ -36,6 +36,18 @@ const validateFieldConfiguration = (value: {
   }
 };
 
+const requireConfigurableCollection = (
+  collection: AffairCollection,
+  capability: "field bindings" | "reference data",
+): void => {
+  if (collection.type !== "form" && collection.type !== "excel") {
+    throw new DomainError(
+      "validation_error",
+      `Only form and excel collections support ${capability}.`,
+    );
+  }
+};
+
 export class AffairConfigurationService {
   constructor(private readonly repository: AffairConfigurationRepository) {}
 
@@ -118,7 +130,8 @@ export class AffairConfigurationService {
     collectionId: string,
     scope: QuestionBankScope,
   ): Promise<AffairCollectionBinding[]> {
-    await this.getCollection(collectionId, scope);
+    const collection = await this.getCollection(collectionId, scope);
+    requireConfigurableCollection(collection, "field bindings");
     return this.repository.listBindings(collectionId, scope);
   }
 
@@ -128,12 +141,7 @@ export class AffairConfigurationService {
     scope: QuestionBankScope,
   ): Promise<AffairCollectionBinding[]> {
     const collection = await this.getCollection(collectionId, scope);
-    if (collection.type !== "form" && collection.type !== "excel") {
-      throw new DomainError(
-        "validation_error",
-        "Only form and excel collections support field bindings.",
-      );
-    }
+    requireConfigurableCollection(collection, "field bindings");
     if (collection.type !== "form" && input.layout !== undefined) {
       throw new DomainError(
         "validation_error",
@@ -155,12 +163,7 @@ export class AffairConfigurationService {
     scope: QuestionBankScope,
   ): Promise<AffairReferenceDataRow[]> {
     const collection = await this.getCollection(collectionId, scope);
-    if (collection.type !== "form" && collection.type !== "excel") {
-      throw new DomainError(
-        "validation_error",
-        "Only form and excel collections support reference data.",
-      );
-    }
+    requireConfigurableCollection(collection, "reference data");
     return this.repository.listReferenceData(collectionId, scope);
   }
 
@@ -170,12 +173,7 @@ export class AffairConfigurationService {
     scope: QuestionBankScope,
   ): Promise<AffairReferenceDataRow[]> {
     const collection = await this.getCollection(collectionId, scope);
-    if (collection.type !== "form" && collection.type !== "excel") {
-      throw new DomainError(
-        "validation_error",
-        "Only form and excel collections support reference data.",
-      );
-    }
+    requireConfigurableCollection(collection, "reference data");
     return this.repository.replaceReferenceData(collectionId, input, scope);
   }
 }
