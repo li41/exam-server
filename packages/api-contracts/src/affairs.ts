@@ -16,6 +16,7 @@ export const AffairBriefingRegionSchema = z.enum([
 
 const NullableDateTimeSchema = z.string().min(1).nullable();
 const NullableTextSchema = z.string().nullable();
+const NullableJsonSchema = z.unknown().nullable();
 
 export const AffairSchema = z.object({
   id: z.string().min(1),
@@ -36,7 +37,7 @@ export const AffairSchema = z.object({
   feeTeacherMonitor3: z.number().int().nonnegative(),
   transportReceiptSchool: z.boolean(),
   transportReceiptCity: z.boolean(),
-  briefingRegions: z.json().nullable(),
+  briefingRegions: NullableJsonSchema,
   receiptYear: z.string().max(10).nullable(),
   receiptNote: z.string().max(500).nullable(),
   receiptPrintSchool: z.boolean(),
@@ -62,7 +63,7 @@ const AffairWriteFieldsBaseSchema = z.object({
   feeTeacherMonitor3: z.number().int().nonnegative(),
   transportReceiptSchool: z.boolean(),
   transportReceiptCity: z.boolean(),
-  briefingRegions: z.json().nullable(),
+  briefingRegions: NullableJsonSchema,
   receiptYear: z.string().trim().max(10).nullable(),
   receiptNote: z.string().trim().max(500).nullable(),
   receiptPrintSchool: z.boolean(),
@@ -153,7 +154,7 @@ export const AffairSchoolSchema = z.object({
   receiptCode: z.string().regex(/^\d{3}$/).nullable(),
   briefingOptions: z.array(z.string().min(1)).nullable(),
   password: z.string().min(1).max(50),
-  contacts: z.json().nullable(),
+  contacts: NullableJsonSchema,
   setupCompleted: z.array(z.enum(["SC", "SD", "SE"])).nullable(),
   status: AffairStatusSchema,
   version: z.number().int().positive(),
