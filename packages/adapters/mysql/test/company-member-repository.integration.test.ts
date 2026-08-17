@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   COMPANY_MEMBER_ADMIN_PERMISSIONS,
   COMPANY_MEMBER_NO_PERMISSIONS,
@@ -24,6 +24,8 @@ const tenantB = "00000000-0000-4000-8000-000000000056";
 const userA = "00000000-0000-4000-8000-0000000000a1";
 const userB = "00000000-0000-4000-8000-0000000000b1";
 const actorA = "00000000-0000-4000-8000-0000000000a2";
+const memberA = "00000000-0000-4000-8000-0000000000c1";
+const memberB = "00000000-0000-4000-8000-0000000000c2";
 const scopeA = { tenantId: tenantA, actorUserId: actorA };
 const scopeB = { tenantId: tenantB, actorUserId: userB };
 
@@ -45,7 +47,46 @@ const insertUser = async (id: string, email: string, tenantId: string) => {
   );
 };
 
-describe("MySqlCompanyMemberRepository", () => {
+const insertMember = async (
+  id: string,
+  userId: string,
+  tenantId: string,
+  isAdmin = false,
+) => {
+  const now = new Date();
+  const permissions = isAdmin
+    ? COMPANY_MEMBER_ADMIN_PERMISSIONS
+    : COMPANY_MEMBER_NO_PERMISSIONS;
+  await pool.execute(
+    `INSERT INTO company_members
+      (id, tenant_id, user_id, invited_email, is_admin, permissions,
+       status, review_status, reviewed_by, reviewed_at, review_note,
+       joined_at, updated_at, version)
+     VALUES (?, ?, ?, NULL, ?, ?, 1, 1, NULL, NULL, NULL, ?, ?, 1)`,
+    [
+      id,
+      tenantId,
+      userId,
+      isAdmin ? 1 : 0,
+      JSON.stringify(permissions),
+      now,
+      now,
+    ],
+  );
+};
+
+const createInput = (userId: string) => ({
+  userId,
+  invitedEmail: null,
+  isAdmin: false,
+  permissions: { ...COMPANY_MEMBER_NO_PERMISSIONS },
+  status: "active" as const,
+  reviewStatus: "approved" as const,
+  reviewedBy: null,
+  reviewNote: null,
+});
+
+describe("MySqlCompanyMemberRepository tenant isolation", () => {
   beforeAll(async () => {
     await runMigrations(pool);
     await pool.execute(
@@ -62,6 +103,13 @@ describe("MySqlCompanyMemberRepository", () => {
     await insertUser(userB, "member-b@example.invalid", tenantB);
   });
 
+  beforeEach(async () => {
+    await pool.execute(
+      "DELETE FROM company_members WHERE tenant_id IN (?, ?)",
+      [tenantA, tenantB],
+    );
+  });
+
   afterAll(async () => {
     await pool.execute(
       "DELETE FROM company_members WHERE tenant_id IN (?, ?)",
@@ -75,77 +123,92 @@ describe("MySqlCompanyMemberRepository", () => {
     await pool.end();
   });
 
-  it("keeps reads and updates tenant-scoped", async () => {
-    const member = await repository.create(
-      {
-        userId: userA,
-        invitedEmail: null,
-        isAdmin: true,
-        permissions: { ...COMPANY_MEMBER_ADMIN_PERMISSIONS },
-        status: "active",
-        reviewStatus: "approved",
-        reviewedBy: null,
-        reviewNote: null,
-      },
-      scopeA,
-    );
+  it("keeps list tenant-scoped", async () => {
+    await insertMember(memberA, userA, tenantA);
+    await insertMember(memberB, userB, tenantB);
 
-    expect(await repository.get(member.id, scopeA)).toMatchObject({
-      id: member.id,
+    const idsA = (await repository.list({}, scopeA)).map(({ id }) => id);
+    const idsB = (await repository.list({}, scopeB)).map(({ id }) => id);
+    expect(idsA).toContain(memberA);
+    expect(idsA).not.toContain(memberB);
+    expect(idsB).toContain(memberB);
+    expect(idsB).not.toContain(memberA);
+  });
+
+  it("keeps get tenant-scoped", async () => {
+    await insertMember(memberA, userA, tenantA);
+
+    expect(await repository.get(memberA, scopeA)).toMatchObject({
+      id: memberA,
       tenantId: tenantA,
     });
-    expect((await repository.list({}, scopeA)).map(({ id }) => id)).toContain(
-      member.id,
-    );
+    expect(await repository.get(memberA, scopeB)).toBeNull();
+  });
+
+  it("keeps findByUserId tenant-scoped", async () => {
+    await insertMember(memberA, userA, tenantA);
+
     expect(await repository.findByUserId(userA, scopeA)).toMatchObject({
-      id: member.id,
+      id: memberA,
+      tenantId: tenantA,
     });
     expect(await repository.findByUserId(userA, scopeB)).toBeNull();
-    expect(await repository.countActiveApprovedAdmins(scopeA)).toBeGreaterThan(
-      0,
-    );
-    expect(await repository.countActiveApprovedAdmins(scopeB)).toBe(0);
-    expect(await repository.get(member.id, scopeB)).toBeNull();
-    expect(
-      (await repository.list({}, scopeB)).map(({ id }) => id),
-    ).not.toContain(member.id);
+  });
+
+  it("keeps update tenant-scoped", async () => {
+    await insertMember(memberA, userA, tenantA);
+
     const updated = await repository.update(
-      member.id,
-      { reviewNote: "same-tenant update", version: member.version },
+      memberA,
+      { reviewNote: "same-tenant update", version: 1 },
       scopeA,
     );
-    expect(updated.reviewNote).toBe("same-tenant update");
+    expect(updated).toMatchObject({ reviewNote: "same-tenant update", version: 2 });
     await expect(
       repository.update(
-        member.id,
-        { reviewNote: "stale update", version: member.version },
-        scopeA,
-      ),
-    ).rejects.toBeInstanceOf(ConflictError);
-    await expect(
-      repository.update(
-        member.id,
+        memberA,
         { status: "disabled", version: updated.version },
         scopeB,
       ),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it("rejects a user from another tenant instead of creating a cross-tenant membership", async () => {
+  it("keeps update-failure probing tenant-scoped", async () => {
+    await insertMember(memberA, userA, tenantA);
+
     await expect(
-      repository.create(
-        {
-          userId: userB,
-          invitedEmail: null,
-          isAdmin: false,
-          permissions: { ...COMPANY_MEMBER_NO_PERMISSIONS },
-          status: "active",
-          reviewStatus: "approved",
-          reviewedBy: null,
-          reviewNote: null,
-        },
+      repository.update(
+        memberA,
+        { reviewNote: "stale update", version: 0 },
         scopeA,
       ),
-    ).rejects.toBeInstanceOf(DomainError);
+    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(
+      repository.update(
+        memberA,
+        { reviewNote: "foreign stale update", version: 0 },
+        scopeB,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("keeps active-approved-admin count tenant-scoped", async () => {
+    await insertMember(memberA, userA, tenantA, true);
+
+    expect(await repository.countActiveApprovedAdmins(scopeA)).toBe(1);
+    expect(await repository.countActiveApprovedAdmins(scopeB)).toBe(0);
+  });
+
+  it("rejects a foreign-tenant user on create", async () => {
+    await expect(repository.create(createInput(userB), scopeA)).rejects.toBeInstanceOf(
+      DomainError,
+    );
+  });
+
+  it("accepts a same-tenant user on create", async () => {
+    await expect(repository.create(createInput(userA), scopeA)).resolves.toMatchObject({
+      tenantId: tenantA,
+      userId: userA,
+    });
   });
 });
