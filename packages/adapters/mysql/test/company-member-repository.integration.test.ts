@@ -32,7 +32,15 @@ const insertUser = async (id: string, email: string, tenantId: string) => {
     `INSERT INTO users
       (id, email, password_hash, tenant_id, roles, created_at, updated_at, disabled_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-    [id, email, "integration-hash", tenantId, JSON.stringify(["user"]), now, now],
+    [
+      id,
+      email,
+      "integration-hash",
+      tenantId,
+      JSON.stringify(["user"]),
+      now,
+      now,
+    ],
   );
 };
 
@@ -92,7 +100,9 @@ describe("MySqlCompanyMemberRepository", () => {
       id: member.id,
     });
     expect(await repository.findByUserId(userA, scopeB)).toBeNull();
-    expect(await repository.countActiveApprovedAdmins(scopeA)).toBeGreaterThan(0);
+    expect(
+      await repository.countActiveApprovedAdmins(scopeA),
+    ).toBeGreaterThan(0);
     expect(await repository.countActiveApprovedAdmins(scopeB)).toBe(0);
     expect(await repository.get(member.id, scopeB)).toBeNull();
     expect((await repository.list({}, scopeB)).map(({ id }) => id)).not.toContain(
@@ -113,21 +123,24 @@ describe("MySqlCompanyMemberRepository", () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it("rejects a user from another tenant instead of creating a cross-tenant membership", async () => {
-    await expect(
-      repository.create(
-        {
-          userId: userB,
-          invitedEmail: null,
-          isAdmin: false,
-          permissions: { ...COMPANY_MEMBER_NO_PERMISSIONS },
-          status: "active",
-          reviewStatus: "approved",
-          reviewedBy: null,
-          reviewNote: null,
-        },
-        scopeA,
-      ),
-    ).rejects.toBeInstanceOf(DomainError);
-  });
+  it(
+    "rejects a user from another tenant instead of creating a cross-tenant membership",
+    async () => {
+      await expect(
+        repository.create(
+          {
+            userId: userB,
+            invitedEmail: null,
+            isAdmin: false,
+            permissions: { ...COMPANY_MEMBER_NO_PERMISSIONS },
+            status: "active",
+            reviewStatus: "approved",
+            reviewedBy: null,
+            reviewNote: null,
+          },
+          scopeA,
+        ),
+      ).rejects.toBeInstanceOf(DomainError);
+    },
+  );
 });
