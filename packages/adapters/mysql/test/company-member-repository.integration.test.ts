@@ -93,24 +93,21 @@ describe("MySqlCompanyMemberRepository", () => {
       id: member.id,
       tenantId: tenantA,
     });
-    // prettier-ignore
-    expect((await repository.list({}, scopeA)).map(({ id }) => id)).toContain(
-      member.id,
-    );
+    expect(
+      (await repository.list({}, scopeA)).map(({ id }) => id),
+    ).toContain(member.id);
     expect(await repository.findByUserId(userA, scopeA)).toMatchObject({
       id: member.id,
     });
     expect(await repository.findByUserId(userA, scopeB)).toBeNull();
-    // prettier-ignore
-    expect(await repository.countActiveApprovedAdmins(scopeA)).toBeGreaterThan(
-      0,
-    );
+    expect(
+      await repository.countActiveApprovedAdmins(scopeA),
+    ).toBeGreaterThan(0);
     expect(await repository.countActiveApprovedAdmins(scopeB)).toBe(0);
     expect(await repository.get(member.id, scopeB)).toBeNull();
-    // prettier-ignore
-    expect((await repository.list({}, scopeB)).map(({ id }) => id)).not.toContain(
-      member.id,
-    );
+    expect(
+      (await repository.list({}, scopeB)).map(({ id }) => id),
+    ).not.toContain(member.id);
     const updated = await repository.update(
       member.id,
       { reviewNote: "same-tenant update", version: member.version },
