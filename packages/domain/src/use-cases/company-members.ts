@@ -247,7 +247,11 @@ export const parseUpdateCompanyMemberInput = (
     input.reviewStatus = parseReviewStatus(record.reviewStatus);
   }
   if (record.reviewedBy !== undefined) {
-    input.reviewedBy = parseNullableString(record.reviewedBy, "reviewedBy", 191);
+    input.reviewedBy = parseNullableString(
+      record.reviewedBy,
+      "reviewedBy",
+      191,
+    );
   }
   if (record.reviewNote !== undefined) {
     input.reviewNote = parseNullableString(record.reviewNote, "reviewNote", 500);
