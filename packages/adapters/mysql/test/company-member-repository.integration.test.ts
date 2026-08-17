@@ -93,9 +93,9 @@ describe("MySqlCompanyMemberRepository", () => {
       id: member.id,
       tenantId: tenantA,
     });
-    expect(
-      (await repository.list({}, scopeA)).map(({ id }) => id),
-    ).toContain(member.id);
+    expect((await repository.list({}, scopeA)).map(({ id }) => id)).toContain(
+      member.id,
+    );
     expect(await repository.findByUserId(userA, scopeA)).toMatchObject({
       id: member.id,
     });
