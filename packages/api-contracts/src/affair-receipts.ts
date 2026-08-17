@@ -14,82 +14,97 @@ export const AffairReceiptPositionSchema = z.enum([
   "監考或資訊教師",
   "無擔任",
 ]);
-export const AffairReceiptTransportTypeSchema = z.enum(["rail", "island", "none"]);
-
-const ReceiptOwnerSchoolSchema = z
-  .object({
-    submitterType: z.literal("school"),
-    schoolId: z.string().trim().min(1),
-    cityId: z.null().optional(),
-    accountType: z.enum(["SC", "SD", "SE"]),
-  })
-  .strict();
-const ReceiptOwnerCitySchema = z
-  .object({
-    submitterType: z.literal("city"),
-    cityId: z.string().trim().min(1),
-    schoolId: z.null().optional(),
-    accountType: z.literal("EDU"),
-  })
-  .strict();
-export const AffairReceiptOwnerSchema = z.discriminatedUnion("submitterType", [
-  ReceiptOwnerSchoolSchema,
-  ReceiptOwnerCitySchema,
+export const AffairReceiptTransportTypeSchema = z.enum([
+  "rail",
+  "island",
+  "none",
+]);
+export const AffairReceiptBriefingRegionSchema = z.enum([
+  "north",
+  "central",
+  "south",
+  "east",
+  "online",
 ]);
 
-const SensitiveReceiptFieldsSchema = z
-  .object({
-    jobTitle: z.string().trim().min(1).max(50),
-    idNumber: z.string().trim().toUpperCase().regex(/^[A-Z][1289]\d{8}$/u),
-    residentCert: z.string().trim().max(20).nullable().default(null),
-    taxId: z.string().trim().max(20).nullable().default(null),
-    phoneArea: z.string().trim().min(1).max(5),
-    phoneNumber: z.string().trim().min(1).max(15),
-    phoneExt: z.string().trim().max(10).nullable().default(null),
-    mobile: z.string().trim().regex(/^09\d{8}$/u),
-    email: z.string().trim().email().max(255),
-    addrCity: z.string().trim().min(1).max(10),
-    addrDistrict: z.string().trim().min(1).max(10),
-    addrDetail: z.string().trim().min(1).max(200),
-    bankAccount: z.string().trim().min(1).max(30),
-  })
+const ReceiptWriteFieldsBaseSchema = z.object({
+  name: z.string().trim().min(1).max(50),
+  jobTitle: z.string().trim().min(1).max(50),
+  idNumber: z.string().trim().toUpperCase().regex(/^[A-Z][1289]\d{8}$/u),
+  residentCert: z.string().trim().max(20).nullable(),
+  taxId: z.string().trim().max(20).nullable(),
+  phoneArea: z.string().trim().min(1).max(5),
+  phoneNumber: z.string().trim().min(1).max(15),
+  phoneExt: z.string().trim().max(10).nullable(),
+  mobile: z.string().trim().regex(/^09\d{8}$/u),
+  email: z.string().trim().email().max(255),
+  addrCity: z.string().trim().min(1).max(10),
+  addrDistrict: z.string().trim().min(1).max(10),
+  addrDetail: z.string().trim().min(1).max(200),
+  bankId: z.string().trim().regex(/^\d{3}$/u),
+  bankSubid: z.string().trim().regex(/^\d{4}$/u),
+  bankAccount: z.string().trim().min(1).max(30),
+  bankbookFileId: z.string().trim().min(1),
+  positions: z.array(AffairReceiptPositionSchema).max(3),
+  monitorClasses: z.number().int().min(1).max(3).nullable(),
+  briefingRegion: AffairReceiptBriefingRegionSchema.nullable(),
+  transportType: AffairReceiptTransportTypeSchema.nullable(),
+  transportOriginArea: z.string().trim().max(10).nullable(),
+  transportOriginStation: z.string().trim().max(10).nullable(),
+  transportDestStation: z.string().trim().max(10).nullable(),
+  transportFee: z.number().int().nonnegative().nullable(),
+  agreed: z.boolean(),
+});
+
+const CreateReceiptWriteFieldsSchema = ReceiptWriteFieldsBaseSchema.extend({
+  residentCert: ReceiptWriteFieldsBaseSchema.shape.residentCert.default(null),
+  taxId: ReceiptWriteFieldsBaseSchema.shape.taxId.default(null),
+  phoneExt: ReceiptWriteFieldsBaseSchema.shape.phoneExt.default(null),
+  positions: ReceiptWriteFieldsBaseSchema.shape.positions.default([]),
+  monitorClasses: ReceiptWriteFieldsBaseSchema.shape.monitorClasses.default(null),
+  briefingRegion: ReceiptWriteFieldsBaseSchema.shape.briefingRegion.default(null),
+  transportType: ReceiptWriteFieldsBaseSchema.shape.transportType.default(null),
+  transportOriginArea:
+    ReceiptWriteFieldsBaseSchema.shape.transportOriginArea.default(null),
+  transportOriginStation:
+    ReceiptWriteFieldsBaseSchema.shape.transportOriginStation.default(null),
+  transportDestStation:
+    ReceiptWriteFieldsBaseSchema.shape.transportDestStation.default(null),
+  transportFee: ReceiptWriteFieldsBaseSchema.shape.transportFee.default(null),
+  agreed: ReceiptWriteFieldsBaseSchema.shape.agreed.default(false),
+});
+
+const CreateReceiptIdentityBase = {
+  affairId: z.string().trim().min(1),
+  account: z.string().trim().min(1).max(30),
+  ...CreateReceiptWriteFieldsSchema.shape,
+};
+
+export const CreateAffairReceiptSchema = z.discriminatedUnion(
+  "submitterType",
+  [
+    z
+      .object({
+        ...CreateReceiptIdentityBase,
+        submitterType: z.literal("school"),
+        schoolId: z.string().trim().min(1),
+        accountType: z.enum(["SC", "SD", "SE"]),
+      })
+      .strict(),
+    z
+      .object({
+        ...CreateReceiptIdentityBase,
+        submitterType: z.literal("city"),
+        cityId: z.string().trim().min(1),
+        accountType: z.literal("EDU"),
+      })
+      .strict(),
+  ],
+);
+
+export const UpdateAffairReceiptSchema = ReceiptWriteFieldsBaseSchema.partial()
+  .extend({ version: z.number().int().positive() })
   .strict();
-
-const ReceiptBusinessFieldsSchema = z
-  .object({
-    name: z.string().trim().min(1).max(50),
-    bankId: z.string().trim().regex(/^\d{3}$/u),
-    bankSubid: z.string().trim().regex(/^\d{4}$/u),
-    bankbookFileId: z.string().trim().min(1),
-    positions: z.array(AffairReceiptPositionSchema).max(3).default([]),
-    monitorClasses: z.number().int().min(1).max(3).nullable().default(null),
-    briefingRegion: z
-      .enum(["north", "central", "south", "east", "online"])
-      .nullable()
-      .default(null),
-    transportType: AffairReceiptTransportTypeSchema.nullable().default(null),
-    transportOriginArea: z.string().trim().max(10).nullable().default(null),
-    transportOriginStation: z.string().trim().max(10).nullable().default(null),
-    transportDestStation: z.string().trim().max(10).nullable().default(null),
-    transportFee: z.number().int().nonnegative().nullable().default(null),
-    agreed: z.boolean().default(false),
-  })
-  .strict();
-
-export const CreateAffairReceiptSchema = z
-  .intersection(
-    z.object({ affairId: z.string().trim().min(1), account: z.string().trim().min(1).max(30) }).strict(),
-    z.intersection(
-      AffairReceiptOwnerSchema,
-      SensitiveReceiptFieldsSchema.merge(ReceiptBusinessFieldsSchema),
-    ),
-  );
-
-const UpdateSensitiveReceiptFieldsSchema = SensitiveReceiptFieldsSchema.partial();
-const UpdateBusinessReceiptFieldsSchema = ReceiptBusinessFieldsSchema.partial();
-export const UpdateAffairReceiptSchema = UpdateSensitiveReceiptFieldsSchema.merge(
-  UpdateBusinessReceiptFieldsSchema,
-).extend({ version: z.number().int().positive() }).strict();
 
 export const AffairReceiptListQuerySchema = z
   .object({
@@ -114,7 +129,7 @@ export const AffairReceiptListItemSchema = z
     name: z.string().min(1).max(50),
     positions: z.array(AffairReceiptPositionSchema),
     monitorClasses: z.number().int().nullable(),
-    briefingRegion: z.string().nullable(),
+    briefingRegion: AffairReceiptBriefingRegionSchema.nullable(),
     transportType: AffairReceiptTransportTypeSchema.nullable(),
     transportFee: z.number().int().nonnegative().nullable(),
     agreed: z.boolean(),
@@ -147,18 +162,28 @@ export const AffairReceiptDetailSchema = AffairReceiptListItemSchema.extend({
 }).strict();
 
 export const AffairReceiptLookupSchema = z
-  .object({ affairId: z.string().trim().min(1), idNumber: z.string().trim().toUpperCase().min(1).max(20) })
+  .object({
+    affairId: z.string().trim().min(1),
+    idNumber: z.string().trim().toUpperCase().min(1).max(20),
+  })
   .strict();
 export const AffairReceiptSelectionSchema = z
-  .object({ affairId: z.string().trim().min(1), ids: z.array(z.string().trim().min(1)).max(1000).default([]) })
+  .object({
+    affairId: z.string().trim().min(1),
+    ids: z.array(z.string().trim().min(1)).max(1000).default([]),
+  })
   .strict();
 export const DeleteAffairReceiptQuerySchema = z
   .object({ version: z.coerce.number().int().positive() })
   .strict();
 
-export type AffairReceiptSubmitterType = z.infer<typeof AffairReceiptSubmitterTypeSchema>;
+export type AffairReceiptSubmitterType = z.infer<
+  typeof AffairReceiptSubmitterTypeSchema
+>;
 export type AffairReceiptActorType = z.infer<typeof AffairReceiptActorTypeSchema>;
-export type AffairReceiptAccessAction = z.infer<typeof AffairReceiptAccessActionSchema>;
+export type AffairReceiptAccessAction = z.infer<
+  typeof AffairReceiptAccessActionSchema
+>;
 export type AffairReceiptPosition = z.infer<typeof AffairReceiptPositionSchema>;
 export type AffairReceiptListQuery = z.infer<typeof AffairReceiptListQuerySchema>;
 export type AffairReceiptListItem = z.infer<typeof AffairReceiptListItemSchema>;
@@ -166,4 +191,6 @@ export type AffairReceiptDetail = z.infer<typeof AffairReceiptDetailSchema>;
 export type CreateAffairReceiptInput = z.infer<typeof CreateAffairReceiptSchema>;
 export type UpdateAffairReceiptInput = z.infer<typeof UpdateAffairReceiptSchema>;
 export type AffairReceiptLookupInput = z.infer<typeof AffairReceiptLookupSchema>;
-export type AffairReceiptSelectionInput = z.infer<typeof AffairReceiptSelectionSchema>;
+export type AffairReceiptSelectionInput = z.infer<
+  typeof AffairReceiptSelectionSchema
+>;
