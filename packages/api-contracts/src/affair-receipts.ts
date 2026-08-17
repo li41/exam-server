@@ -139,6 +139,7 @@ export const AffairReceiptListItemSchema = z
   })
   .strict();
 
+/** Internal domain/repository detail. bankbookFileId never has to leave the API. */
 export const AffairReceiptDetailSchema = AffairReceiptListItemSchema.extend({
   jobTitle: z.string(),
   idNumber: z.string(),
@@ -159,6 +160,11 @@ export const AffairReceiptDetailSchema = AffairReceiptListItemSchema.extend({
   transportOriginArea: z.string().nullable(),
   transportOriginStation: z.string().nullable(),
   transportDestStation: z.string().nullable(),
+}).strict();
+
+/** Public detail/offline-copy shape. The bankbook is only available via the audited download endpoint. */
+export const AffairReceiptPublicDetailSchema = AffairReceiptDetailSchema.omit({
+  bankbookFileId: true,
 }).strict();
 
 export const AffairReceiptLookupSchema = z
@@ -188,6 +194,9 @@ export type AffairReceiptPosition = z.infer<typeof AffairReceiptPositionSchema>;
 export type AffairReceiptListQuery = z.infer<typeof AffairReceiptListQuerySchema>;
 export type AffairReceiptListItem = z.infer<typeof AffairReceiptListItemSchema>;
 export type AffairReceiptDetail = z.infer<typeof AffairReceiptDetailSchema>;
+export type AffairReceiptPublicDetail = z.infer<
+  typeof AffairReceiptPublicDetailSchema
+>;
 export type CreateAffairReceiptInput = z.infer<typeof CreateAffairReceiptSchema>;
 export type UpdateAffairReceiptInput = z.infer<typeof UpdateAffairReceiptSchema>;
 export type AffairReceiptLookupInput = z.infer<typeof AffairReceiptLookupSchema>;
