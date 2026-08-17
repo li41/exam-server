@@ -112,6 +112,10 @@ export const AffairListQuerySchema = z.object({
   status: AffairStatusSchema.optional(),
 });
 
+export const DeleteAffairQuerySchema = z.object({
+  version: z.coerce.number().int().positive(),
+});
+
 export const AffairCitySchema = z.object({
   id: z.string().min(1),
   tenantId: z.string().min(1),
