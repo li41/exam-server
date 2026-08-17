@@ -53,7 +53,8 @@ const toIso = (value: Date | string | null): string | null => {
             ? value.replace(" ", "T")
             : `${value.replace(" ", "T")}Z`,
         );
-  if (Number.isNaN(date.getTime())) throw new Error("MySQL returned an invalid date.");
+  if (Number.isNaN(date.getTime()))
+    throw new Error("MySQL returned an invalid date.");
   return date.toISOString();
 };
 
@@ -67,7 +68,9 @@ const toReviewStatus = (value: number): CompanyMemberReviewStatus => {
   if (value === 0) return "pending";
   if (value === 1) return "approved";
   if (value === 2) return "rejected";
-  throw new Error(`MySQL returned invalid company member review status ${value}.`);
+  throw new Error(
+    `MySQL returned invalid company member review status ${value}.`,
+  );
 };
 
 const statusValue = (value: CompanyMemberStatus): number =>
@@ -86,7 +89,9 @@ const toPermissions = (value: unknown) => {
       return parseCompanyMemberPermissions(JSON.parse(value));
     } catch (error) {
       if (error instanceof SyntaxError) {
-        throw new Error("MySQL returned invalid company member permissions JSON.");
+        throw new Error(
+          "MySQL returned invalid company member permissions JSON.",
+        );
       }
       throw error;
     }
@@ -138,7 +143,9 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
       parameters.push(reviewStatusValue(query.reviewStatus));
     }
     if (query.search) {
-      predicates.push("(user_id LIKE ? ESCAPE '!' OR invited_email LIKE ? ESCAPE '!')");
+      predicates.push(
+        "(user_id LIKE ? ESCAPE '!' OR invited_email LIKE ? ESCAPE '!')",
+      );
       const search = `%${escapeLike(query.search)}%`;
       parameters.push(search, search);
     }
@@ -152,7 +159,10 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     return rows.map(toMember);
   }
 
-  async get(id: string, scope: CompanyMemberScope): Promise<CompanyMember | null> {
+  async get(
+    id: string,
+    scope: CompanyMemberScope,
+  ): Promise<CompanyMember | null> {
     const [rows] = await this.pool.execute<CompanyMemberRow[]>(
       `SELECT ${memberColumns}
        FROM company_members
@@ -182,7 +192,8 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     scope: CompanyMemberScope,
   ): Promise<CompanyMember> {
     await this.assertUserInTenant(input.userId, scope);
-    if (input.reviewedBy) await this.assertUserInTenant(input.reviewedBy, scope);
+    if (input.reviewedBy)
+      await this.assertUserInTenant(input.reviewedBy, scope);
     const id = randomUUID();
     const now = new Date();
     try {
@@ -215,7 +226,8 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
       throw error;
     }
     const member = await this.get(id, scope);
-    if (!member) throw new Error("MySQL member insert succeeded but could not be read.");
+    if (!member)
+      throw new Error("MySQL member insert succeeded but could not be read.");
     return member;
   }
 
@@ -224,8 +236,10 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     input: UpdateCompanyMemberInput,
     scope: CompanyMemberScope,
   ): Promise<CompanyMember> {
-    if (input.userId !== undefined) await this.assertUserInTenant(input.userId, scope);
-    if (input.reviewedBy) await this.assertUserInTenant(input.reviewedBy, scope);
+    if (input.userId !== undefined)
+      await this.assertUserInTenant(input.userId, scope);
+    if (input.reviewedBy)
+      await this.assertUserInTenant(input.reviewedBy, scope);
 
     const assignments: string[] = [];
     const parameters: Array<string | number | boolean | Date | null> = [];
