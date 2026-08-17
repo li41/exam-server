@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS affair_receipts (
   PRIMARY KEY (id),
   UNIQUE KEY uq_affair_receipt_tenant_id (tenant_id, id),
   UNIQUE KEY uq_affair_receipt_account (tenant_id, affair_id, account),
+  UNIQUE KEY uq_affair_receipt_bankbook_file (tenant_id, bankbook_file_id),
   KEY idx_affair_receipt_id_number_bidx (tenant_id, affair_id, id_number_bidx),
   KEY idx_affair_receipt_tenant_submitter (tenant_id, affair_id, submitter_type),
   KEY idx_affair_receipt_tenant_school (tenant_id, school_id),
