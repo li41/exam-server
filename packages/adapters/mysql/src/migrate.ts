@@ -44,8 +44,8 @@ export const defaultMigrations: Migration[] = [
     file: new URL("../schema/009_examinees.sql", import.meta.url),
   },
   {
-    id: "010_company_members",
-    file: new URL("../schema/010_company_members.sql", import.meta.url),
+    id: "014_company_members",
+    file: new URL("../schema/014_company_members.sql", import.meta.url),
   },
 ];
 
