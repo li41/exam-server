@@ -5,6 +5,7 @@ export * from "./fake-question-structure-repository.js";
 export * from "./fake-test-booklet-repository.js";
 export * from "./fake-examinee-repository.js";
 export * from "./fake-affair-repository.js";
+export * from "./fake-affair-deletion-repository.js";
 export * from "./fake-affair-configuration-repository.js";
 export * from "./fake-affair-submission-repository.js";
 export * from "./fake-affair-receipt-repository.js";
