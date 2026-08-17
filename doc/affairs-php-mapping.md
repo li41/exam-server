@@ -138,3 +138,144 @@ The requested widening (`OR 1=1`) and reverse (`AND 1=0`) mutation runs require 
 - Tenant widening/reverse mutations: **not executed locally**.
 
 The existing GitHub `Verify` workflow is left unchanged. It triggers on pull requests and is the first environment capable of running the complete repository verification for this branch.
+
+---
+
+# B-wave addendum — collection/form/excel configuration
+
+Issue: #59 `WO-AFFAIRS-TO-SERVER-B`
+
+B wave is stacked on `codex/57-affairs-a-wave`; it does not include or depend on the company-member branch.
+
+## PHP truth sources re-read for B wave
+
+DDL:
+
+- `config/db/exam_tw.sql` — `exam_affair_collections`
+- `config/db/exam_tw.sql` — `exam_affair_excel_fields`
+- `config/db/exam_tw.sql` — `exam_affair_excel_field_bindings`
+- `config/db/exam_tw.sql` — `exam_affair_excel_ref_data`
+- `config/db/exam_tw.sql` — `exam_affair_form_ref_data`
+
+Behavior:
+
+- `src/Models/ExamAffairCollection.php`
+- `src/Models/ExamAffairExcelField.php`
+- `src/Models/ExamAffairExcelFieldBinding.php`
+- `src/Pages/Ajax/AffairAjaxActions.php`
+- `src/Pages/Ajax/AffairFieldAjaxActions.php`
+- `src/Pages/Ajax/AffairFormAjaxActions.php`
+- `src/Pages/Manage/affairCreateView.php`
+
+## B-wave table decisions
+
+### `exam_affair_collections` -> `affair_collections`
+
+The PHP enum is preserved exactly: `form | excel | receipt`. `receipt` is a valid collection definition in this wave even though receipt records and receipt workflows remain D wave.
+
+Collections are affair-owned and company-owned in PHP. Server stores `tenant_id + affair_id` and uses a tenant-qualified FK to A-wave `affairs`. PHP DDL uses `ON DELETE CASCADE`, but PHP application deletion first checks dependent collections/submissions/receipts. Server therefore uses `ON DELETE RESTRICT` and still does **not** expose affair hard-delete.
+
+PHP create validates that the affair belongs to the current company, auto-assigns the next sort order and allows only one `receipt` collection per `(affair, target)`. Server copies those behaviors. PHP update does not change the collection type; server PATCH likewise exposes name/target/status/sort only.
+
+**Collection delete is deliberately deferred.** PHP `doAffairCollectionDelete()` blocks deletion when C-wave submissions exist and, for receipt collections, when D-wave receipts exist. Those blockers cannot yet be represented on server without inventing an incomplete rule. Binding/reference-data cleanup is supported through replacement APIs, but collection deletion itself waits for C/D.
+
+### `settings` JSON
+
+PHP `ExamAffairCollection::updateSetting()` is generic, but the actual B-wave caller only writes the form `layout`. Server therefore defines a strict named settings contract containing only optional `layout`; unknown JSON keys are rejected instead of being silently stored. Form binding replacement may update `layout`; excel/receipt collections may not define it.
+
+### `exam_affair_excel_fields` -> `affair_excel_fields`
+
+This table is tenant/company-owned reusable configuration and intentionally has no `affair_id`.
+
+PHP data types are exactly `text | number | date | time | select`. Name is required and PHP rejects duplicate names inside the same company. Server backs that behavior with a tenant-scoped unique key as well as API validation.
+
+For `select`, PHP requires at least one select option. Server models `selectOptions` as a named string-array contract rather than arbitrary JSON. Non-select fields may not carry select options.
+
+The PHP DDL and model summary are incomplete descriptions of the validation JSON. Re-reading the actual `AffairFieldAjaxActions::parseFieldValidation()` write path found these emitted keys:
+
+- `min`, `max`
+- `min_length`, `max_length`
+- `min_date`, `max_date`
+- `min_time`, `max_time`
+- `pattern`, `pattern_desc`
+
+The date/time keys were not listed in the issue summary and are also absent from the model's `defaultValidation()` helper. The Ajax write path is used as the truth source. Server uses a strict schema for exactly these keys, so an undefined validation key is detectable and rejected.
+
+PHP field deletion refuses to delete a field while any binding uses it. Server implements the same blocker and additionally uses an FK with `ON DELETE RESTRICT`. Server uses optimistic `version` on field update/delete; PHP did not have that concurrency token.
+
+### `exam_affair_excel_field_bindings` -> `affair_excel_field_bindings`
+
+PHP intentionally uses the same binding table for both form and excel collections. `batchSave()` replaces the whole ordered list and records the per-collection required override.
+
+Before saving, PHP verifies every `field_id` exists under the current company and rejects duplicate field IDs. Server does the same. The server table additionally stores `tenant_id`, and both relationships are tenant-qualified:
+
+- `(tenant_id, collection_id) -> affair_collections(tenant_id, id)`
+- `(tenant_id, field_id) -> affair_excel_fields(tenant_id, id)`
+
+This makes a cross-tenant collection/field binding invalid even if application filtering is accidentally bypassed.
+
+### `exam_affair_form_ref_data` and `exam_affair_excel_ref_data`
+
+The two PHP tables remain two server tables. They share a storage implementation path but **not** row-data semantics:
+
+- form import uses spreadsheet header names as `row_data` keys;
+- excel import uses bound `field_id` values as `row_data` keys, in binding order.
+
+Server reference rows are flat string maps. For excel reference data, keys must exactly match the current bound field IDs. Form rows accept their header-name keys. Replacement and clear operations choose the table from the collection type; receipt collections cannot use reference data.
+
+This wave implements the reference-data storage lifecycle as JSON list/replace/clear API. It does **not** add spreadsheet XLSX/ODS/CSV parsing/upload endpoints; that parser/import UI is intentionally left outside this storage-focused B-wave delivery.
+
+## B-wave API surface
+
+Both `/api` and `/api/v1` expose:
+
+- `GET /affair-collections?affairId=...`
+- `GET /affair-collections/:id`
+- `POST /affair-collections`
+- `PATCH /affair-collections/:id`
+- `GET /affair-collections/:id/bindings`
+- `PUT /affair-collections/:id/bindings`
+- `GET /affair-collections/:id/reference-data`
+- `PUT /affair-collections/:id/reference-data`
+- `DELETE /affair-collections/:id/reference-data`
+- `GET /affair-fields`
+- `GET /affair-fields/:id`
+- `POST /affair-fields`
+- `PATCH /affair-fields/:id`
+- `DELETE /affair-fields/:id?version=...`
+
+B-wave mutating routes preserve the existing authentication/idempotency completion-failure behavior. `PUT` replacement endpoints are also covered by idempotency middleware.
+
+## B-wave tenant oracles
+
+Behavior tests added:
+
+- in-memory: a tenant-A collection cannot bind a tenant-B field; a same-tenant field can bind;
+- MySQL integration: the repository rejects the cross-tenant field and a direct cross-tenant binding insert is also rejected by the tenant-qualified FK;
+- list/get paths for collections and fields do not expose another tenant;
+- API tests exercise strict validation JSON, select-options rules, form/excel shared binding behavior and distinct reference-data key semantics.
+
+The requested `OR 1=1` widening and reverse `AND 1=0` mutation executions are **not claimed** here because this agent still has no executable repository checkout/MySQL service. The MySQL integration oracle is intentionally shaped so those mutations can be run by the owner/CI environment.
+
+## B-wave intentionally not implemented / not verified here
+
+Not implemented:
+
+- affair hard-delete;
+- collection delete, because PHP deletion depends on C/D submissions/receipts;
+- receipt record/workflow behavior (D wave);
+- form/excel spreadsheet upload/parser endpoints;
+- C-wave submissions and D-wave receipts/audit.
+
+Not executed in this agent environment:
+
+- full `pnpm verify`;
+- typecheck, lint, Prettier format check, unit tests and build;
+- MySQL 8.4 integration, including the new tenant-binding oracle;
+- Redis integration;
+- N-1 migrated-schema application;
+- backup/restore rehearsal;
+- tenant widening `OR 1=1` mutation;
+- reverse `AND 1=0` mutation.
+
+None of the unexecuted checks above are claimed as PASS. No `.github/`, `deploy/`, `scripts/`, secret or deployment changes are part of B wave.
