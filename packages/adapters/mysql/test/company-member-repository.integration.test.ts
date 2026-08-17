@@ -74,7 +74,6 @@ describe("MySqlCompanyMemberRepository", () => {
     await pool.end();
   });
 
-  // prettier-ignore
   it("keeps reads and updates tenant-scoped", async () => {
     const member = await repository.create(
       {
