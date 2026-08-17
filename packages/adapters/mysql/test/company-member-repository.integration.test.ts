@@ -163,7 +163,10 @@ describe("MySqlCompanyMemberRepository tenant isolation", () => {
       { reviewNote: "same-tenant update", version: 1 },
       scopeA,
     );
-    expect(updated).toMatchObject({ reviewNote: "same-tenant update", version: 2 });
+    expect(updated).toMatchObject({
+      reviewNote: "same-tenant update",
+      version: 2,
+    });
     await expect(
       repository.update(
         memberA,
@@ -200,13 +203,15 @@ describe("MySqlCompanyMemberRepository tenant isolation", () => {
   });
 
   it("rejects a foreign-tenant user on create", async () => {
-    await expect(repository.create(createInput(userB), scopeA)).rejects.toBeInstanceOf(
-      DomainError,
-    );
+    await expect(
+      repository.create(createInput(userB), scopeA),
+    ).rejects.toBeInstanceOf(DomainError);
   });
 
   it("accepts a same-tenant user on create", async () => {
-    await expect(repository.create(createInput(userA), scopeA)).resolves.toMatchObject({
+    await expect(
+      repository.create(createInput(userA), scopeA),
+    ).resolves.toMatchObject({
       tenantId: tenantA,
       userId: userA,
     });
