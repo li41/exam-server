@@ -6,13 +6,13 @@ This change builds the company-member and permission data path inside `exam-serv
 
 ## Truth sources checked
 
-| PHP source | Behavior carried into `exam-server` |
-| --- | --- |
-| `config/db/exam_tw.sql` `company_members` | `user_id` is required; `invited_email` is nullable; `is_admin`, `permissions`, `status`, three-state `review_status`, reviewer fields, join/update timestamps are separate fields. |
-| `src/Models/CompanyMember.php` | 13 permission keys, question permission exclusivity, admin permission map, `hasPermission()` admin shortcut and review behavior. |
-| `src/Pages/Ajax/MemberActions.php` | Member-management caller restrictions: member permission required, non-admins cannot modify admins/promote to admin, self-edit is rejected, last active+approved admin cannot be demoted. |
-| `src/Pages/Ajax/Actions.php` | `getContext()` rejects a membership when `isActive()` is false before `requirePermission()` calls `hasPermission()`. |
-| `src/Models/User.php` | `getMembership()` itself only looks up company+user and does not filter `review_status`; therefore there is no hidden review gate between `getContext()` and `hasPermission()`. |
+| PHP source                                | Behavior carried into `exam-server`                                                                                                                                                       |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config/db/exam_tw.sql` `company_members` | `user_id` is required; `invited_email` is nullable; `is_admin`, `permissions`, `status`, three-state `review_status`, reviewer fields, join/update timestamps are separate fields.        |
+| `src/Models/CompanyMember.php`            | 13 permission keys, question permission exclusivity, admin permission map, `hasPermission()` admin shortcut and review behavior.                                                          |
+| `src/Pages/Ajax/MemberActions.php`        | Member-management caller restrictions: member permission required, non-admins cannot modify admins/promote to admin, self-edit is rejected, last active+approved admin cannot be demoted. |
+| `src/Pages/Ajax/Actions.php`              | `getContext()` rejects a membership when `isActive()` is false before `requirePermission()` calls `hasPermission()`.                                                                      |
+| `src/Models/User.php`                     | `getMembership()` itself only looks up company+user and does not filter `review_status`; therefore there is no hidden review gate between `getContext()` and `hasPermission()`.           |
 
 ## Corrections to the original work order
 
@@ -22,18 +22,18 @@ This change builds the company-member and permission data path inside `exam-serv
 
 ## Field mapping
 
-| PHP | `exam-server` | Notes |
-| --- | --- | --- |
-| `company_id` | `tenant_id` | Every repository read/write is narrowed by the authenticated tenant. |
-| `user_id` | `user_id` | Required. MySQL write additionally verifies the user belongs to the same tenant. |
-| `invited_email` | `invited_email` | Nullable; may coexist with a placeholder `user_id`. |
-| `is_admin` | `is_admin` | Boolean stored as `TINYINT(1)`. |
-| `permissions` | `permissions` | JSON, but runtime input/storage is validated as the exact 13-key contract. |
-| `status` | `status` | PHP `0/1` maps to `disabled/active`. Independent of review state. |
-| `review_status` | `review_status` | PHP `0/1/2` maps to `pending/approved/rejected`. |
+| PHP                                         | `exam-server`        | Notes                                                                                   |
+| ------------------------------------------- | -------------------- | --------------------------------------------------------------------------------------- |
+| `company_id`                                | `tenant_id`          | Every repository read/write is narrowed by the authenticated tenant.                    |
+| `user_id`                                   | `user_id`            | Required. MySQL write additionally verifies the user belongs to the same tenant.        |
+| `invited_email`                             | `invited_email`      | Nullable; may coexist with a placeholder `user_id`.                                     |
+| `is_admin`                                  | `is_admin`           | Boolean stored as `TINYINT(1)`.                                                         |
+| `permissions`                               | `permissions`        | JSON, but runtime input/storage is validated as the exact 13-key contract.              |
+| `status`                                    | `status`             | PHP `0/1` maps to `disabled/active`. Independent of review state.                       |
+| `review_status`                             | `review_status`      | PHP `0/1/2` maps to `pending/approved/rejected`.                                        |
 | `reviewed_by`, `reviewed_at`, `review_note` | same semantic fields | Generic review-state edits record the authenticated actor when no reviewer is supplied. |
-| `joined_at`, `updated_at` | same semantic fields | MySQL stores millisecond timestamps. |
-| n/a | `version` | Added for the repository's existing optimistic-concurrency convention. |
+| `joined_at`, `updated_at`                   | same semantic fields | MySQL stores millisecond timestamps.                                                    |
+| n/a                                         | `version`            | Added for the repository's existing optimistic-concurrency convention.                  |
 
 ## Permission contract
 
@@ -63,14 +63,14 @@ The administrator map is also copied exactly: every permission is true except `q
 
 The new member-management route intentionally separates PHP's `hasPermission()` behavior from its caller's active-membership check.
 
-| status | review | admin | `members` flag | Effective member-management access |
-| --- | --- | --- | --- | --- |
-| disabled | any | true | any | **deny** — `getContext()`-equivalent active gate wins before admin shortcut. |
-| active | pending | true | any | **allow** — PHP quirk: admin shortcut bypasses review. |
-| active | rejected | true | any | **allow** — same PHP quirk. |
-| active | pending/rejected | false | true | **deny** — non-admin `hasPermission()` requires approved review. |
-| active | approved | false | true | **allow**. |
-| active | approved | false | false | **deny**. |
+| status   | review           | admin | `members` flag | Effective member-management access                                           |
+| -------- | ---------------- | ----- | -------------- | ---------------------------------------------------------------------------- |
+| disabled | any              | true  | any            | **deny** — `getContext()`-equivalent active gate wins before admin shortcut. |
+| active   | pending          | true  | any            | **allow** — PHP quirk: admin shortcut bypasses review.                       |
+| active   | rejected         | true  | any            | **allow** — same PHP quirk.                                                  |
+| active   | pending/rejected | false | true           | **deny** — non-admin `hasPermission()` requires approved review.             |
+| active   | approved         | false | true           | **allow**.                                                                   |
+| active   | approved         | false | false          | **deny**.                                                                    |
 
 The active-admin/pending-or-rejected behavior is surprising, but it is the PHP behavior. This change records and copies it rather than silently fixing it.
 
@@ -103,15 +103,15 @@ Generic member read/write supports `invitedEmail` and the three review states so
 
 The MySQL integration test `company-member-repository.integration.test.ts` is written as a behavioral oracle, not a source-string oracle.
 
-| Guard | Widening mutation expected red | Reverse mutation expected red | Behavioral assertion |
-| --- | --- | --- | --- |
-| `list`: `tenant_id = ?` | replace tenant predicate with true | append `AND 1=0` | tenant A list must contain A member; tenant B list must not contain it. |
-| `get`: `id = ? AND tenant_id = ?` | drop/true the tenant predicate | append `AND 1=0` | same id is readable in A and `null` in B. |
-| `findByUserId`: `user_id = ? AND tenant_id = ?` | drop/true tenant predicate | append `AND 1=0` | A finds its user; B does not. |
-| `update`: `id = ? AND tenant_id = ? AND version = ?` | drop/true tenant predicate | append `AND 1=0` | same-tenant update succeeds; B update of A's id throws not-found. |
-| update-failure probe | drop/true tenant predicate | append `AND 1=0` | cross-tenant failed update remains not-found rather than leaking version existence. |
-| `countActiveApprovedAdmins`: `tenant_id = ?` | drop/true tenant predicate | append `AND 1=0` | A count is positive; B count is zero. |
-| user ownership check: `users.id = ? AND tenant_id = ?` | drop/true tenant predicate | append `AND 1=0` | a B user cannot be inserted as an A member; same-tenant user creation succeeds. |
+| Guard                                                  | Widening mutation expected red     | Reverse mutation expected red | Behavioral assertion                                                                |
+| ------------------------------------------------------ | ---------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------- |
+| `list`: `tenant_id = ?`                                | replace tenant predicate with true | append `AND 1=0`              | tenant A list must contain A member; tenant B list must not contain it.             |
+| `get`: `id = ? AND tenant_id = ?`                      | drop/true the tenant predicate     | append `AND 1=0`              | same id is readable in A and `null` in B.                                           |
+| `findByUserId`: `user_id = ? AND tenant_id = ?`        | drop/true tenant predicate         | append `AND 1=0`              | A finds its user; B does not.                                                       |
+| `update`: `id = ? AND tenant_id = ? AND version = ?`   | drop/true tenant predicate         | append `AND 1=0`              | same-tenant update succeeds; B update of A's id throws not-found.                   |
+| update-failure probe                                   | drop/true tenant predicate         | append `AND 1=0`              | cross-tenant failed update remains not-found rather than leaking version existence. |
+| `countActiveApprovedAdmins`: `tenant_id = ?`           | drop/true tenant predicate         | append `AND 1=0`              | A count is positive; B count is zero.                                               |
+| user ownership check: `users.id = ? AND tenant_id = ?` | drop/true tenant predicate         | append `AND 1=0`              | a B user cannot be inserted as an A member; same-tenant user creation succeeds.     |
 
 ### Mutation execution status in this environment
 
