@@ -100,6 +100,7 @@ describe("MySqlCompanyMemberRepository", () => {
       id: member.id,
     });
     expect(await repository.findByUserId(userA, scopeB)).toBeNull();
+    // prettier-ignore
     expect(await repository.countActiveApprovedAdmins(scopeA)).toBeGreaterThan(
       0,
     );
