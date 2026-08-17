@@ -200,6 +200,7 @@ const main = async () => {
     idempotencyStore,
     idempotencyTtlSeconds: config.idempotencyTtlSeconds,
     allowUnauthenticated: !config.production && !authenticationService,
+    logger,
   });
 
   const server = serve({
