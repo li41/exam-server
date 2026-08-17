@@ -7,3 +7,4 @@ export * from "./fake-examinee-repository.js";
 export * from "./fake-affair-repository.js";
 export * from "./fake-affair-configuration-repository.js";
 export * from "./fake-affair-submission-repository.js";
+export * from "./fake-affair-receipt-repository.js";
