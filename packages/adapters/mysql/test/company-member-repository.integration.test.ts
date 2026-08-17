@@ -100,9 +100,9 @@ describe("MySqlCompanyMemberRepository", () => {
       id: member.id,
     });
     expect(await repository.findByUserId(userA, scopeB)).toBeNull();
-    expect(
-      await repository.countActiveApprovedAdmins(scopeA),
-    ).toBeGreaterThan(0);
+    expect(await repository.countActiveApprovedAdmins(scopeA)).toBeGreaterThan(
+      0,
+    );
     expect(await repository.countActiveApprovedAdmins(scopeB)).toBe(0);
     expect(await repository.get(member.id, scopeB)).toBeNull();
     // prettier-ignore
