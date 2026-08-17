@@ -1,8 +1,8 @@
 # Affairs PHP mapping
 
-Issues: #57 `WO-AFFAIRS-TO-SERVER`, #59 `WO-AFFAIRS-TO-SERVER-B`
+Issues: #57 `WO-AFFAIRS-TO-SERVER`, #59 `WO-AFFAIRS-TO-SERVER-B`, #61 `WO-AFFAIRS-TO-SERVER-C`
 
-This document records the PHP truth-source mapping for the implemented A and B waves. C/D structures are documented for dependency planning but are not claimed as implemented.
+This document records the PHP truth-source mapping for the implemented A, B and C waves. D-wave receipt structures remain documented only for dependency planning and are not claimed as implemented.
 
 ## Scope and source coordinates
 
@@ -281,3 +281,138 @@ Not executed in this agent environment:
 - reverse `AND 1=0` mutation.
 
 None of the unexecuted checks above are claimed as PASS. No `.github/`, `deploy/`, `scripts/`, secret or deployment changes are part of B wave.
+
+---
+
+# C-wave addendum — submissions and repeated rows
+
+Issue: #61 `WO-AFFAIRS-TO-SERVER-C`
+
+C wave is stacked directly on `codex/59-affairs-b-wave`. It implements the three PHP submission tables without changing the D-wave receipt model or enabling the still-incomplete affair/collection hard-delete rules.
+
+## PHP truth sources re-read for C wave
+
+DDL:
+
+- `config/db/exam_tw.sql` — `exam_affair_submissions`
+- `config/db/exam_tw.sql` — `exam_affair_submission_data`
+- `config/db/exam_tw.sql` — `exam_affair_submission_rows`
+
+Behavior:
+
+- `src/Models/ExamAffairSubmission.php`
+- `src/Models/ExamAffairSubmissionData.php`
+- `src/Models/ExamAffairSubmissionRow.php`
+- `src/Pages/Affair/Traits/AffairSchoolActions.php`
+- `src/Pages/Affair/Traits/AffairCityActions.php`
+- `src/Pages/Ajax/AffairDataAjaxActions.php`
+
+## C-wave decisions
+
+### `exam_affair_submissions` -> `affair_submissions`
+
+PHP stores affair, collection and company ownership, `submitter_type`, nullable `school_id`/`city_id`, account type, `draft|submitted|returned`, return reason/time, submit time and timestamps. Server stores the same business state plus the existing server-side optimistic `version` field.
+
+PHP DDL itself does **not** enforce the issue's `school_id`/`city_id` XOR. The normal PHP constructors do: `getOrCreateForSchool()` writes `school_id` and leaves `city_id` null; `getOrCreateForCity()` writes `city_id` and leaves `school_id` null. C-wave server is deliberately stricter than the PHP DDL while matching every normal PHP write path: the API uses a discriminated school/city identity contract and migration `012_affair_submissions.sql` adds `chk_affair_submission_owner`, requiring exactly the owner selected by `submitter_type`.
+
+Tenant ownership is qualified at every layer. Server adds `(tenant_id,id)` uniqueness to `affair_cities` in migration 012 so city ownership can use the same composite-FK shape as affairs, collections and schools. Submission FKs use tenant + parent id. Affair, collection, school and city parent deletes are `RESTRICT`; child submission data/rows cascade only when a submission itself is deliberately deleted.
+
+PHP uniqueness is one submission per school+collection or city+collection. Server preserves that identity with tenant-qualified unique keys.
+
+### Status machine copied from PHP
+
+Reading the school and city handlers resolves the legal transitions:
+
+- `draft -> submitted`: allowed by submit;
+- `returned -> submitted`: allowed directly by submit;
+- `submitted -> returned`: allowed by return;
+- `returned -> draft`: happens only when a returned submission is saved as a draft;
+- `submitted -> draft`: not allowed; save rejects submitted data;
+- `draft -> returned`: not exposed by PHP and not exposed by server.
+
+PHP does not clear the old `return_reason` or `returned_at` when a returned submission is saved or re-submitted. Server preserves those historical fields too; only status and the new `submitted_at`/`updated_at` are changed on resubmit.
+
+The backend PHP return action accepts an empty reason and stores null. The city-facing return action requires a non-empty reason. The C-wave server API is a tenant-authenticated management API and follows the backend action's optional reason behavior; it does not replace the existing PHP city frontend or its stricter UI rule.
+
+### `exam_affair_submission_data` -> `affair_submission_data`
+
+This is the normalized form-value path: `submission + field + value`. PHP `batchSave()` upserts only field IDs present in the request and does **not** delete omitted saved values. Server preserves that behavior. On final submit, validation merges already-saved values with incoming values so an omitted-but-already-saved required field remains present, matching PHP.
+
+Every submitted field ID must be currently bound to that collection and belong to the same tenant. The domain service checks B-wave bindings, the MySQL repository repeats that check immediately before writing, and the child table uses tenant-qualified FKs to both submission and `affair_excel_fields`. A foreign-tenant field therefore fails both the behavioral oracle and direct-SQL FK oracle.
+
+### `exam_affair_submission_rows` -> `affair_submission_rows`
+
+This is the repeated/import-row path. PHP `batchSave()` deletes all existing rows for the submission and recreates them in order; C-wave server does the same. `row_data` remains JSON with field IDs as keys, but it is not treated as unrestricted JSON: request rows have a strict named wrapper and every dynamic field-ID key is checked against the collection's current bindings. Unknown/unbound keys are rejected.
+
+The issue text warns not to collapse `submission_data` and `submission_rows`. They remain separate tables and repository paths. Actual PHP save/submit handlers choose the path from collection type (`form` writes normalized field values; `excel` writes repeated rows), so the server follows that concrete behavior rather than inventing a write path that stores both for one normal collection submission. The schema still keeps both child tables independently, matching PHP storage.
+
+### Final-submit validation
+
+The C-wave service copies the actual `AffairSchoolActions::validateSingleField()` behavior from PHP:
+
+- required override comes from the collection binding;
+- number fields use numeric validation plus min/max;
+- `min_length` / `max_length` apply to every non-empty value, not only text fields;
+- date/time min/max use the same lexical comparison shape;
+- configured pattern validation is applied;
+- Excel final submit requires at least one row.
+
+PHP does **not** re-check `select_options` membership in this final-submit validator, so server deliberately does not add such a check here. B-wave field configuration still requires select fields to have configured options.
+
+## C-wave API surface
+
+Both `/api` and `/api/v1` expose:
+
+- `GET /affair-submissions?collectionId=...`
+- `GET /affair-submissions/:id`
+- `POST /affair-submissions/ensure`
+- `PUT /affair-submissions/:id/draft`
+- `POST /affair-submissions/:id/submit`
+- `POST /affair-submissions/:id/return`
+- `POST /affair-submissions/batch-return`
+- `DELETE /affair-submissions/:id?version=...`
+
+Mutating C-wave routes use the existing authentication/idempotency pattern, including the already-fixed behavior where failure to persist the idempotency completion record is logged instead of rewriting a successful mutation to HTTP 500.
+
+PHP generic `AccessLog::log()` is best-effort and swallows audit-write failures. Server return/batch-return/delete therefore write through the existing `AuditLog` capability on a best-effort basis and log audit failures without changing an already-successful business response.
+
+## C-wave tenant and behavior oracles
+
+Added tests cover:
+
+- school owner has `schoolId` only and city owner has `cityId` only;
+- the DB `CHECK` rejects dual owners, and tenant-qualified FKs reject a foreign-tenant owner;
+- a tenant-A submission cannot write a tenant-B field through the repository;
+- a direct child insert using tenant A + tenant B field is rejected by the composite FK;
+- form draft saves preserve omitted previously saved values;
+- submitted data cannot be edited as draft;
+- returned data becomes draft only when saved, and returned data may be submitted directly;
+- Excel repeated rows are replaced in order;
+- an extra wrapper property or unbound row field key is rejected;
+- final Excel submit rejects an empty row list.
+
+The requested widening (`OR 1=1`) and reverse (`AND 1=0`) mutation executions are not claimed in this agent environment. The MySQL integration test intentionally gives future CI/owner mutation runs direct tenant/field/owner behavior oracles.
+
+## C-wave intentionally not implemented / not verified here
+
+Not implemented:
+
+- affair hard-delete: D-wave receipts are still missing, so PHP's complete blockers still cannot be represented;
+- collection hard-delete for the same cross-wave reason;
+- D-wave receipt records and receipt-access audit model;
+- replacement of the existing PHP school/city frontend authentication, dashboards or UI;
+- PHP spreadsheet/report export endpoints for submission data; this wave implements submission persistence/state operations, not file export UI.
+
+Not executed in this agent environment at authoring time:
+
+- full `pnpm verify`;
+- typecheck, oxlint, Prettier `format:check`, workspace unit tests and build;
+- `apps/api/test/affair-submissions.test.ts`;
+- MySQL 8.4 integration, including `affair-submission-repository.integration.test.ts`;
+- Redis/backing-service integration;
+- N-1 migrated-schema application;
+- backup/restore rehearsal;
+- tenant widening `OR 1=1` mutation;
+- reverse `AND 1=0` mutation.
+
+None of those unexecuted checks are claimed as PASS. C wave does not modify `.github/`, `deploy/`, `scripts/`, secrets, CI gates or deployment configuration.
