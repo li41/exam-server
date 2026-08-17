@@ -55,6 +55,10 @@ export const defaultMigrations: Migration[] = [
     id: "012_affair_submissions",
     file: new URL("../schema/012_affair_submissions.sql", import.meta.url),
   },
+  {
+    id: "013_affair_receipts",
+    file: new URL("../schema/013_affair_receipts.sql", import.meta.url),
+  },
 ];
 
 const migrationLockName = "server-foundation:schema-migrations";
