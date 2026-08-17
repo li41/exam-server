@@ -334,3 +334,4 @@ export * from "./question-structures.js";
 export * from "./test-booklets.js";
 export * from "./examinees.js";
 export * from "./affairs.js";
+export * from "./affair-configurations.js";
