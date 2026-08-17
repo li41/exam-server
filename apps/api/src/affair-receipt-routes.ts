@@ -368,6 +368,7 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
         await service.createReceipt(
           context.req.valid("json"),
           scopeFor(context),
+          fileScopeFor(context),
         ),
         201,
       ),
