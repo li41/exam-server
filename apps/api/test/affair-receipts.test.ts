@@ -159,8 +159,6 @@ const setup = async () => {
       receiptCode: null,
       briefingOptions: null,
       password: "001",
-      contacts: null,
-      setupCompleted: [],
       status: "enabled",
     },
     tenant,
