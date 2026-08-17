@@ -6,6 +6,7 @@ import { Argon2PasswordHasher, AuthService } from "@server-foundation/auth";
 import {
   AesGcmExamineeCredentialProtector,
   createMySqlPool,
+  MySqlAffairConfigurationRepository,
   MySqlAffairRepository,
   MySqlAuditLog,
   MySqlExamineeRepository,
@@ -28,6 +29,7 @@ import {
   startFileCleanupJob,
 } from "@server-foundation/local-fs-storage";
 import {
+  createInMemoryAffairConfigurationRepository,
   createInMemoryAffairRepository,
   createInMemoryExamineeRepository,
   createInMemoryItemRepository,
@@ -36,6 +38,7 @@ import {
   createInMemoryQuestionStructureRepository,
   createInMemoryTestBookletRepository,
 } from "@server-foundation/testing";
+import { mountAffairConfigurationRoutes } from "./affair-configuration-routes.js";
 import { mountAffairRoutes } from "./affair-routes.js";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -97,6 +100,9 @@ const main = async () => {
   const affairRepository = pool
     ? new MySqlAffairRepository(pool)
     : createInMemoryAffairRepository();
+  const affairConfigurationRepository = pool
+    ? new MySqlAffairConfigurationRepository(pool)
+    : createInMemoryAffairConfigurationRepository(affairRepository);
   const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
@@ -203,6 +209,15 @@ const main = async () => {
     logger,
   });
 
+  mountAffairConfigurationRoutes(app, {
+    repository: affairConfigurationRepository,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
   const server = serve({
     fetch: app.fetch,
     hostname: config.host,
@@ -222,6 +237,7 @@ const main = async () => {
     testBooklets: "enabled",
     examinees: "enabled",
     affairs: "enabled",
+    affairConfigurations: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
