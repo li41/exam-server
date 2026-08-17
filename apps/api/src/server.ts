@@ -8,6 +8,7 @@ import {
   AesGcmExamineeCredentialProtector,
   createMySqlPool,
   MySqlAffairConfigurationRepository,
+  MySqlAffairDeletionRepository,
   MySqlAffairReceiptAccessLog,
   MySqlAffairReceiptRepository,
   MySqlAffairRepository,
@@ -97,7 +98,11 @@ const main = async () => {
     ? new MySqlQuestionStructureRepository(pool)
     : createInMemoryQuestionStructureRepository(questionBankRepository);
   const testBookletRepository = pool
-    ? new MySqlTestBookletRepository(pool)
+    ? new MySqlTestBookletRepository(
+        pool,
+        questionBankRepository,
+        questionStructureRepository,
+      )
     : createInMemoryTestBookletRepository(
         questionBankRepository,
         questionStructureRepository,
@@ -111,6 +116,9 @@ const main = async () => {
   const affairRepository = pool
     ? new MySqlAffairRepository(pool)
     : createInMemoryAffairRepository();
+  const affairDeletionRepository = pool
+    ? new MySqlAffairDeletionRepository(pool)
+    : undefined;
   const affairConfigurationRepository = pool
     ? new MySqlAffairConfigurationRepository(pool)
     : createInMemoryAffairConfigurationRepository(affairRepository);
@@ -222,6 +230,7 @@ const main = async () => {
 
   mountAffairRoutes(app, {
     repository: affairRepository,
+    deletionRepository: affairDeletionRepository,
     authenticationService,
     idempotencyStore,
     idempotencyTtlSeconds: config.idempotencyTtlSeconds,
@@ -285,6 +294,7 @@ const main = async () => {
     testBooklets: "enabled",
     examinees: "enabled",
     affairs: "enabled",
+    affairDeletion: affairDeletionRepository ? "enabled" : "disabled",
     affairConfigurations: "enabled",
     affairSubmissions: "enabled",
     affairReceipts: fileMetadataStore && blobStorage ? "enabled" : "disabled",
