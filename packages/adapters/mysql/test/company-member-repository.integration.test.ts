@@ -123,7 +123,6 @@ describe("MySqlCompanyMemberRepository", () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  // prettier-ignore
   it("rejects a user from another tenant instead of creating a cross-tenant membership", async () => {
     await expect(
       repository.create(
