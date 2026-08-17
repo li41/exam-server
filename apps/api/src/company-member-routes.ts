@@ -23,6 +23,7 @@ import type {
 } from "@server-foundation/domain";
 import { Hono } from "hono";
 import type { Context } from "hono";
+import type { Logger } from "./logger.js";
 
 type CompanyMemberEnv = {
   Variables: {
@@ -41,6 +42,7 @@ type Dependencies = {
   idempotencyStore?: IdempotencyStore;
   idempotencyTtlSeconds?: number;
   allowUnauthenticated?: boolean;
+  logger?: Logger;
 };
 
 const localDevelopmentIdentity: AuthIdentity = {
@@ -190,22 +192,39 @@ const createRouter = (dependencies: Dependencies) => {
       context.header("Idempotency-Key", key);
       if (context.res.status >= 200 && context.res.status < 300) {
         const response = context.res.clone();
-        await store.complete(
-          scope,
-          key,
-          fingerprint,
-          {
-            status: response.status,
-            body: await response.text(),
-            contentType: response.headers.get("content-type") ?? undefined,
-          },
-          ttlSeconds,
-        );
+        await store
+          .complete(
+            scope,
+            key,
+            fingerprint,
+            {
+              status: response.status,
+              body: await response.text(),
+              contentType: response.headers.get("content-type") ?? undefined,
+            },
+            ttlSeconds,
+          )
+          .catch((error: unknown) => {
+            dependencies.logger?.error("idempotency_commit_failed", {
+              requestId: context.get("requestId"),
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
       } else {
         await store.release(scope, key, fingerprint);
       }
     } catch (error) {
-      await store.release(scope, key, fingerprint).catch(() => undefined);
+      await store
+        .release(scope, key, fingerprint)
+        .catch((releaseError: unknown) => {
+          dependencies.logger?.warn("idempotency_release_failed", {
+            requestId: context.get("requestId"),
+            error:
+              releaseError instanceof Error
+                ? releaseError.message
+                : String(releaseError),
+          });
+        });
       throw error;
     }
   };
