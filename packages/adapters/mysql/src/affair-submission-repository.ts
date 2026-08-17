@@ -144,7 +144,6 @@ export class MySqlAffairSubmissionRepository
         cursor.id,
       );
     }
-
     const [rows] = await this.pool.execute<SubmissionDbRow[]>(
       `SELECT ${columns}
        FROM affair_submissions s
@@ -185,8 +184,10 @@ export class MySqlAffairSubmissionRepository
     );
     const row = rows[0];
     if (!row) return null;
-    const payload = await this.loadPayload(row, scope);
-    return { ...this.toSubmission(row), payload };
+    return {
+      ...this.toSubmission(row),
+      payload: await this.loadPayload(row, scope),
+    };
   }
 
   async ensureSubmission(
@@ -227,12 +228,9 @@ export class MySqlAffairSubmissionRepository
       throw error;
     }
 
-    const item = await this.getSubmission(id, scope);
-    if (!item) {
-      throw new Error("Affair submission insert succeeded but could not be read.");
-    }
-    const { payload: _payload, ...submission } = item;
-    return { created: true, item: submission };
+    const detail = await this.requireSubmission(id, scope);
+    const { payload: _payload, ...item } = detail;
+    return { created: true, item };
   }
 
   async saveDraft(
@@ -261,6 +259,31 @@ export class MySqlAffairSubmissionRepository
     return this.requireSubmission(id, scope);
   }
 
+  async stageSubmitPayload(
+    id: string,
+    input: SaveAffairSubmissionInput,
+    scope: QuestionBankScope,
+  ): Promise<AffairSubmissionDetail> {
+    await withTransaction(this.pool, async (connection) => {
+      const current = await this.lockSubmission(connection, id, scope);
+      this.assertVersion(current, input.version, "affair submission");
+      if (current.status === "submitted") {
+        throw new DomainError(
+          "validation_error",
+          "The submission was already submitted.",
+        );
+      }
+      await this.writePayload(connection, current, input, scope);
+      await connection.execute(
+        `UPDATE affair_submissions
+         SET updated_at = ?
+         WHERE id = ? AND tenant_id = ? AND version = ?`,
+        [new Date(), id, scope.tenantId, input.version],
+      );
+    });
+    return this.requireSubmission(id, scope);
+  }
+
   async submit(
     id: string,
     input: SaveAffairSubmissionInput,
@@ -279,8 +302,12 @@ export class MySqlAffairSubmissionRepository
       const timestamp = new Date();
       await connection.execute(
         `UPDATE affair_submissions
-         SET status = 'submitted', submitted_at = ?, version = version + 1,
-             updated_at = ?
+         SET status = 'submitted',
+             account_type = CASE
+               WHEN submitter_type = 'school' THEN 'SC'
+               ELSE 'EDU'
+             END,
+             submitted_at = ?, version = version + 1, updated_at = ?
          WHERE id = ? AND tenant_id = ? AND version = ?`,
         [timestamp, timestamp, id, scope.tenantId, input.version],
       );
@@ -295,12 +322,13 @@ export class MySqlAffairSubmissionRepository
     scope: QuestionBankScope,
   ): Promise<AffairSubmissionDetail> {
     const timestamp = new Date();
+    const normalizedReason = reason?.trim() || null;
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE affair_submissions
        SET status = 'returned', return_reason = ?, returned_at = ?,
            version = version + 1, updated_at = ?
        WHERE id = ? AND tenant_id = ? AND version = ? AND status = 'submitted'`,
-      [reason, timestamp, timestamp, id, scope.tenantId, version],
+      [normalizedReason, timestamp, timestamp, id, scope.tenantId, version],
     );
     if (result.affectedRows === 0) {
       const current = await this.getSubmission(id, scope);
@@ -341,7 +369,7 @@ export class MySqlAffairSubmissionRepository
     scope: QuestionBankScope,
   ): Promise<AffairSubmissionPayload> {
     if (row.collection_type === "form") {
-      const [dataRows] = await this.pool.execute<DataDbRow[]>(
+      const [rows] = await this.pool.execute<DataDbRow[]>(
         `SELECT field_id, value
          FROM affair_submission_data
          WHERE tenant_id = ? AND submission_id = ?
@@ -350,14 +378,14 @@ export class MySqlAffairSubmissionRepository
       );
       return {
         kind: "form",
-        fields: dataRows.map((item) => ({
+        fields: rows.map((item) => ({
           fieldId: item.field_id,
           value: item.value ?? "",
         })),
       };
     }
     if (row.collection_type === "excel") {
-      const [dataRows] = await this.pool.execute<RepeatedRowDbRow[]>(
+      const [rows] = await this.pool.execute<RepeatedRowDbRow[]>(
         `SELECT id, submission_id, row_data, sort_order, created_at
          FROM affair_submission_rows
          WHERE tenant_id = ? AND submission_id = ?
@@ -366,7 +394,7 @@ export class MySqlAffairSubmissionRepository
       );
       return {
         kind: "excel",
-        rows: dataRows.map((item) => this.toRepeatedRow(item)),
+        rows: rows.map((item) => this.toRepeatedRow(item)),
       };
     }
     throw new Error("Receipt collections cannot contain C-wave submissions.");
@@ -402,6 +430,7 @@ export class MySqlAffairSubmissionRepository
       if (!owners[0]) throw new NotFoundError("affair school", input.schoolId);
       return;
     }
+
     const [owners] = await this.pool.execute<RowDataPacket[]>(
       `SELECT id FROM affair_cities
        WHERE id = ? AND tenant_id = ? LIMIT 1`,
@@ -414,8 +443,10 @@ export class MySqlAffairSubmissionRepository
     input: EnsureAffairSubmissionInput,
     scope: QuestionBankScope,
   ): Promise<AffairSubmission | null> {
-    const ownerColumn = input.submitterType === "school" ? "school_id" : "city_id";
-    const ownerId = input.submitterType === "school" ? input.schoolId : input.cityId;
+    const ownerColumn =
+      input.submitterType === "school" ? "school_id" : "city_id";
+    const ownerId =
+      input.submitterType === "school" ? input.schoolId : input.cityId;
     const [rows] = await this.pool.execute<SubmissionDbRow[]>(
       `SELECT ${columns}
        FROM affair_submissions s
