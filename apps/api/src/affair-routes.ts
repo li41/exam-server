@@ -7,6 +7,7 @@ import {
   AffairSchoolListQuerySchema,
   CreateAffairSchema,
   CreateAffairSchoolSchema,
+  DeleteAffairQuerySchema,
   DeleteAffairSchoolQuerySchema,
   LEGACY_API_PREFIX,
   UpdateAffairCitySchema,
@@ -15,6 +16,7 @@ import {
 } from "@server-foundation/api-contracts";
 import type { AuthIdentity } from "@server-foundation/api-contracts";
 import {
+  AffairDeletionService,
   AffairService,
   CapabilityMissingError,
   ConflictError,
@@ -22,6 +24,7 @@ import {
   UnauthorizedError,
 } from "@server-foundation/domain";
 import type {
+  AffairDeletionRepository,
   AffairRepository,
   AuthenticationService,
   IdempotencyStore,
@@ -39,6 +42,7 @@ type AffairEnv = {
 type MountTarget = { route(path: string, app: Hono<AffairEnv>): unknown };
 type Dependencies = {
   repository: AffairRepository;
+  deletionRepository?: AffairDeletionRepository;
   authenticationService?: AuthenticationService;
   idempotencyStore?: IdempotencyStore;
   idempotencyTtlSeconds?: number;
@@ -104,6 +108,9 @@ const requestFingerprint = async (context: Context<AffairEnv>): Promise<string> 
 const createAffairRouter = (dependencies: Dependencies) => {
   const api = new Hono<AffairEnv>();
   const service = new AffairService(dependencies.repository);
+  const deletionService = dependencies.deletionRepository
+    ? new AffairDeletionService(dependencies.deletionRepository)
+    : undefined;
 
   const authenticate = async (context: Context<AffairEnv>, next: () => Promise<void>) => {
     if (dependencies.authenticationService) {
@@ -220,6 +227,21 @@ const createAffairRouter = (dependencies: Dependencies) => {
       if (!result.success) return validationError(context, "Invalid affair payload.");
     }),
     async (context) => context.json(await service.updateAffair(context.req.param("id"), context.req.valid("json"), scopeFor(context))),
+  );
+  api.delete(
+    "/affairs/:id",
+    zValidator("query", DeleteAffairQuerySchema, (result, context) => {
+      if (!result.success) return validationError(context, "A valid version is required.");
+    }),
+    async (context) => {
+      if (!deletionService) throw new CapabilityMissingError("affair deletion");
+      await deletionService.deleteAffair(
+        context.req.param("id"),
+        context.req.valid("query").version,
+        scopeFor(context),
+      );
+      return context.body(null, 204);
+    },
   );
 
   api.get("/affair-cities", async (context) => context.json(await service.listCities(scopeFor(context))));
