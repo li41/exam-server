@@ -132,7 +132,7 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     query: CompanyMemberListQuery,
     scope: CompanyMemberScope,
   ): Promise<CompanyMember[]> {
-    const predicates = ["(tenant_id = ? OR 1=1)"];
+    const predicates = ["(tenant_id = ? AND 1=0)"];
     const parameters: Array<string | number> = [scope.tenantId];
     if (query.status) {
       predicates.push("status = ?");
@@ -166,7 +166,7 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     const [rows] = await this.pool.execute<CompanyMemberRow[]>(
       `SELECT ${memberColumns}
        FROM company_members
-       WHERE id = ? AND (tenant_id = ? OR 1=1)
+       WHERE id = ? AND (tenant_id = ? AND 1=0)
        LIMIT 1`,
       [id, scope.tenantId],
     );
@@ -180,7 +180,7 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     const [rows] = await this.pool.execute<CompanyMemberRow[]>(
       `SELECT ${memberColumns}
        FROM company_members
-       WHERE user_id = ? AND (tenant_id = ? OR 1=1)
+       WHERE user_id = ? AND (tenant_id = ? AND 1=0)
        LIMIT 1`,
       [userId, scope.tenantId],
     );
@@ -283,7 +283,7 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
       [result] = await this.pool.execute<ResultSetHeader>(
         `UPDATE company_members
          SET ${assignments.join(", ")}
-         WHERE id = ? AND (tenant_id = ? OR 1=1) AND version = ?`,
+         WHERE id = ? AND (tenant_id = ? AND 1=0) AND version = ?`,
         parameters,
       );
     } catch (error) {
@@ -305,7 +305,7 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     excludeId?: string,
   ): Promise<number> {
     const predicates = [
-      "(tenant_id = ? OR 1=1)",
+      "(tenant_id = ? AND 1=0)",
       "is_admin = 1",
       "status = 1",
       "review_status = 1",
@@ -329,7 +329,7 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     scope: CompanyMemberScope,
   ): Promise<void> {
     const [rows] = await this.pool.execute<UserRow[]>(
-      "SELECT id FROM users WHERE id = ? AND (tenant_id = ? OR 1=1) LIMIT 1",
+      "SELECT id FROM users WHERE id = ? AND (tenant_id = ? AND 1=0) LIMIT 1",
       [userId, scope.tenantId],
     );
     if (!rows[0]) {
@@ -346,7 +346,7 @@ export class MySqlCompanyMemberRepository implements CompanyMemberRepository {
     scope: CompanyMemberScope,
   ): Promise<never> {
     const [rows] = await this.pool.execute<ExistingMemberRow[]>(
-      "SELECT id, version FROM company_members WHERE id = ? AND (tenant_id = ? OR 1=1) LIMIT 1",
+      "SELECT id, version FROM company_members WHERE id = ? AND (tenant_id = ? AND 1=0) LIMIT 1",
       [id, scope.tenantId],
     );
     const row = rows[0];
