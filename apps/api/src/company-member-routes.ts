@@ -63,7 +63,9 @@ const bearerToken = (context: Context<CompanyMemberEnv>): string => {
 const canonicalApiPath = (path: string): string =>
   path.replace(/^\/api\/v1(?=\/|$)/, "/api");
 
-const readJson = async (context: Context<CompanyMemberEnv>): Promise<unknown> => {
+const readJson = async (
+  context: Context<CompanyMemberEnv>,
+): Promise<unknown> => {
   try {
     return await context.req.json();
   } catch {
@@ -101,7 +103,9 @@ const createRouter = (dependencies: Dependencies) => {
     if (dependencies.authenticationService) {
       context.set(
         "identity",
-        await dependencies.authenticationService.authenticate(bearerToken(context)),
+        await dependencies.authenticationService.authenticate(
+          bearerToken(context),
+        ),
       );
     } else if (dependencies.allowUnauthenticated) {
       context.set("identity", localDevelopmentIdentity);
@@ -147,7 +151,8 @@ const createRouter = (dependencies: Dependencies) => {
       hash.update(Buffer.from(await context.req.raw.clone().arrayBuffer()));
     }
     const fingerprint = hash.digest("hex");
-    const ttlSeconds = dependencies.idempotencyTtlSeconds ?? defaultIdempotencyTtlSeconds;
+    const ttlSeconds =
+      dependencies.idempotencyTtlSeconds ?? defaultIdempotencyTtlSeconds;
     const reservation = await store.reserve(
       scope,
       key,
@@ -220,7 +225,9 @@ const createRouter = (dependencies: Dependencies) => {
   );
 
   api.get("/company-members/:id", async (context) =>
-    context.json(await service.get(context.req.param("id"), scopeFor(context))),
+    context.json(
+      await service.get(context.req.param("id"), scopeFor(context)),
+    ),
   );
 
   api.post("/company-members", async (context) =>
