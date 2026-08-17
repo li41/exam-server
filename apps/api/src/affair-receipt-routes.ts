@@ -11,7 +11,11 @@ import {
   LEGACY_API_PREFIX,
   UpdateAffairReceiptSchema,
 } from "@server-foundation/api-contracts";
-import type { AuthIdentity } from "@server-foundation/api-contracts";
+import type {
+  AffairReceiptDetail,
+  AffairReceiptPublicDetail,
+  AuthIdentity,
+} from "@server-foundation/api-contracts";
 import {
   AffairReceiptService,
   CapabilityMissingError,
@@ -71,6 +75,13 @@ const localDevelopmentIdentity: AuthIdentity = {
   email: "local-development@example.invalid",
   tenantId: "local-development-tenant",
   roles: ["developer"],
+};
+
+const publicReceipt = (
+  receipt: AffairReceiptDetail,
+): AffairReceiptPublicDetail => {
+  const { bankbookFileId: _bankbookFileId, ...publicDetail } = receipt;
+  return publicDetail;
 };
 
 const validationError = (context: RequestIdContext, message: string) =>
@@ -312,14 +323,14 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
         return validationError(context, "Invalid receipt ID-number lookup payload.");
       }
     }),
-    async (context) =>
-      context.json({
-        item: await service.lookupByIdNumber(
-          context.req.valid("json"),
-          actorFor(context),
-          scopeFor(context),
-        ),
-      }),
+    async (context) => {
+      const item = await service.lookupByIdNumber(
+        context.req.valid("json"),
+        actorFor(context),
+        scopeFor(context),
+      );
+      return context.json({ item: item ? publicReceipt(item) : null });
+    },
   );
 
   api.post(
@@ -331,11 +342,13 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
     }),
     async (context) =>
       context.json({
-        items: await service.preparePrint(
-          context.req.valid("json"),
-          actorFor(context),
-          scopeFor(context),
-        ),
+        items: (
+          await service.preparePrint(
+            context.req.valid("json"),
+            actorFor(context),
+            scopeFor(context),
+          )
+        ).map(publicReceipt),
       }),
   );
 
@@ -348,11 +361,13 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
     }),
     async (context) =>
       context.json({
-        items: await service.prepareExport(
-          context.req.valid("json"),
-          actorFor(context),
-          scopeFor(context),
-        ),
+        items: (
+          await service.prepareExport(
+            context.req.valid("json"),
+            actorFor(context),
+            scopeFor(context),
+          )
+        ).map(publicReceipt),
       }),
   );
 
@@ -365,10 +380,12 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
     }),
     async (context) =>
       context.json(
-        await service.createReceipt(
-          context.req.valid("json"),
-          scopeFor(context),
-          fileScopeFor(context),
+        publicReceipt(
+          await service.createReceipt(
+            context.req.valid("json"),
+            scopeFor(context),
+            fileScopeFor(context),
+          ),
         ),
         201,
       ),
@@ -393,10 +410,12 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
 
   api.get("/affair-receipts/:id", async (context) =>
     context.json(
-      await service.getReceipt(
-        context.req.param("id"),
-        actorFor(context),
-        scopeFor(context),
+      publicReceipt(
+        await service.getReceipt(
+          context.req.param("id"),
+          actorFor(context),
+          scopeFor(context),
+        ),
       ),
     ),
   );
@@ -410,11 +429,13 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
     }),
     async (context) =>
       context.json(
-        await service.updateReceipt(
-          context.req.param("id"),
-          context.req.valid("json"),
-          scopeFor(context),
-          fileScopeFor(context),
+        publicReceipt(
+          await service.updateReceipt(
+            context.req.param("id"),
+            context.req.valid("json"),
+            scopeFor(context),
+            fileScopeFor(context),
+          ),
         ),
       ),
   );
