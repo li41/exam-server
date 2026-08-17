@@ -162,10 +162,11 @@ export class AffairReceiptService {
   async createReceipt(
     input: CreateAffairReceiptInput,
     scope: QuestionBankScope,
+    fileScope: FileAccessScope,
   ): Promise<AffairReceiptDetail> {
     await this.requireAffair(input.affairId, scope);
     validateBusinessRules(input);
-    await this.assertBankbookReady(input.bankbookFileId, scope);
+    await this.assertBankbookReady(input.bankbookFileId, scope, fileScope);
     return this.receipts.createReceipt(input, scope);
   }
 
@@ -182,7 +183,7 @@ export class AffairReceiptService {
     const next = { ...current, ...input } as AffairReceiptDetail;
     validateBusinessRules(next);
     if (input.bankbookFileId) {
-      await this.assertBankbookReady(input.bankbookFileId, scope);
+      await this.assertBankbookReady(input.bankbookFileId, scope, fileScope);
     }
     const updated = await this.receipts.updateReceipt(id, input, scope);
     if (
@@ -256,6 +257,7 @@ export class AffairReceiptService {
   private async assertBankbookReady(
     fileId: string,
     scope: QuestionBankScope,
+    fileScope: FileAccessScope,
   ): Promise<void> {
     const metadata = await this.requireFileMetadata().get(fileId);
     if (
@@ -271,6 +273,11 @@ export class AffairReceiptService {
     if (metadata.sizeBytes > 10 * 1024 * 1024) {
       invalid("Bankbook image must not exceed 10 MiB.");
     }
+
+    // BlobStorage owns the existing owner/admin authorization and physical-file
+    // existence checks. Opening then cancelling the private stream reuses both.
+    const source = await this.requireBlobStorage().getDownload(fileId, fileScope);
+    await source.stream.cancel().catch(() => undefined);
   }
 
   private async deleteBlobIfPresent(
