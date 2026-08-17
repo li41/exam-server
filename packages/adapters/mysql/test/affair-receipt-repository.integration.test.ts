@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   AesGcmAffairReceiptProtector,
@@ -8,6 +9,13 @@ import {
   MySqlAffairRepository,
   runMigrations,
 } from "../src/index.js";
+
+type ProtectedReceiptRow = RowDataPacket & {
+  id_number: string;
+  id_number_bidx: string;
+  bank_account: string;
+};
+type ReceiptAuditRow = RowDataPacket & { receipt_id: string | null };
 
 const connectionString = process.env.MYSQL_TEST_URL;
 if (!connectionString) {
@@ -107,8 +115,14 @@ const cleanup = async (): Promise<void> => {
     "DELETE FROM affair_receipt_access_logs WHERE tenant_id IN (?, ?)",
     tenants,
   );
-  await pool.execute("DELETE FROM affair_receipts WHERE tenant_id IN (?, ?)", tenants);
-  await pool.execute("DELETE FROM affair_schools WHERE tenant_id IN (?, ?)", tenants);
+  await pool.execute(
+    "DELETE FROM affair_receipts WHERE tenant_id IN (?, ?)",
+    tenants,
+  );
+  await pool.execute(
+    "DELETE FROM affair_schools WHERE tenant_id IN (?, ?)",
+    tenants,
+  );
   await pool.execute("DELETE FROM affairs WHERE tenant_id IN (?, ?)", tenants);
 };
 
@@ -124,7 +138,10 @@ afterAll(async () => {
 describe("MySqlAffairReceiptRepository security boundaries", () => {
   it("finds the matching blind index but not a different identity and keeps ciphertext at rest", async () => {
     const affair = await affairs.createAffair(affairInput("A affair"), tenantA);
-    const school = await affairs.createSchool(schoolInput(affair.id, "A001"), tenantA);
+    const school = await affairs.createSchool(
+      schoolInput(affair.id, "A001"),
+      tenantA,
+    );
     const created = await receipts.createReceipt(
       receiptInput(affair.id, school.id, "SCA001"),
       tenantA,
@@ -137,9 +154,7 @@ describe("MySqlAffairReceiptRepository security boundaries", () => {
       receipts.lookupByIdNumber(affair.id, "B120863514", tenantA),
     ).resolves.toBeNull();
 
-    const [rows] = await pool.execute<
-      Array<{ id_number: string; id_number_bidx: string; bank_account: string }>
-    >(
+    const [rows] = await pool.execute<ProtectedReceiptRow[]>(
       "SELECT id_number, id_number_bidx, bank_account FROM affair_receipts WHERE id = ?",
       [created.id],
     );
@@ -150,9 +165,15 @@ describe("MySqlAffairReceiptRepository security boundaries", () => {
 
   it("rejects cross-tenant reads and cross-tenant school ownership at repository and FK layers", async () => {
     const affairA = await affairs.createAffair(affairInput("A affair"), tenantA);
-    const schoolA = await affairs.createSchool(schoolInput(affairA.id, "A001"), tenantA);
+    const schoolA = await affairs.createSchool(
+      schoolInput(affairA.id, "A001"),
+      tenantA,
+    );
     const affairB = await affairs.createAffair(affairInput("B affair"), tenantB);
-    const schoolB = await affairs.createSchool(schoolInput(affairB.id, "B001"), tenantB);
+    const schoolB = await affairs.createSchool(
+      schoolInput(affairB.id, "B001"),
+      tenantB,
+    );
     const created = await receipts.createReceipt(
       receiptInput(affairA.id, schoolA.id, "SCA001"),
       tenantA,
@@ -190,7 +211,10 @@ describe("MySqlAffairReceiptRepository security boundaries", () => {
 
   it("rejects invalid double-owner rows with the database XOR check", async () => {
     const affair = await affairs.createAffair(affairInput("A affair"), tenantA);
-    const school = await affairs.createSchool(schoolInput(affair.id, "A001"), tenantA);
+    const school = await affairs.createSchool(
+      schoolInput(affair.id, "A001"),
+      tenantA,
+    );
     await affairs.initializeCities(tenantA);
     const city = (await affairs.listCities(tenantA))[0];
     expect(city).toBeDefined();
@@ -223,7 +247,10 @@ describe("MySqlAffairReceiptRepository security boundaries", () => {
 
   it("keeps receipt access audit rows after the receipt is deleted", async () => {
     const affair = await affairs.createAffair(affairInput("A affair"), tenantA);
-    const school = await affairs.createSchool(schoolInput(affair.id, "A001"), tenantA);
+    const school = await affairs.createSchool(
+      schoolInput(affair.id, "A001"),
+      tenantA,
+    );
     const created = await receipts.createReceipt(
       receiptInput(affair.id, school.id, "SCA001"),
       tenantA,
@@ -241,7 +268,7 @@ describe("MySqlAffairReceiptRepository security boundaries", () => {
     });
     await receipts.deleteReceipt(created.id, created.version, tenantA);
 
-    const [rows] = await pool.execute<Array<{ receipt_id: string | null }>>(
+    const [rows] = await pool.execute<ReceiptAuditRow[]>(
       "SELECT receipt_id FROM affair_receipt_access_logs WHERE tenant_id = ? AND receipt_id = ?",
       [tenantA.tenantId, created.id],
     );
