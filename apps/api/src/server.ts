@@ -8,6 +8,7 @@ import {
   createMySqlPool,
   MySqlAffairConfigurationRepository,
   MySqlAffairRepository,
+  MySqlAffairSubmissionRepository,
   MySqlAuditLog,
   MySqlExamineeRepository,
   MySqlFileMetadataStore,
@@ -31,6 +32,7 @@ import {
 import {
   createInMemoryAffairConfigurationRepository,
   createInMemoryAffairRepository,
+  createInMemoryAffairSubmissionRepository,
   createInMemoryExamineeRepository,
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
@@ -40,6 +42,7 @@ import {
 } from "@server-foundation/testing";
 import { mountAffairConfigurationRoutes } from "./affair-configuration-routes.js";
 import { mountAffairRoutes } from "./affair-routes.js";
+import { mountAffairSubmissionRoutes } from "./affair-submission-routes.js";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { mountDeploymentIdentityRoutes } from "./deployment-identity-routes.js";
@@ -103,6 +106,9 @@ const main = async () => {
   const affairConfigurationRepository = pool
     ? new MySqlAffairConfigurationRepository(pool)
     : createInMemoryAffairConfigurationRepository(affairRepository);
+  const affairSubmissionRepository = pool
+    ? new MySqlAffairSubmissionRepository(pool)
+    : createInMemoryAffairSubmissionRepository(affairConfigurationRepository);
   const localBlobStorage = config.fileStorageRoot
     ? new LocalFileStorage(
         config.fileStorageRoot,
@@ -218,6 +224,18 @@ const main = async () => {
     logger,
   });
 
+  mountAffairSubmissionRoutes(app, {
+    repository: affairSubmissionRepository,
+    affairRepository,
+    configurationRepository: affairConfigurationRepository,
+    auditLog,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
   const server = serve({
     fetch: app.fetch,
     hostname: config.host,
@@ -238,6 +256,7 @@ const main = async () => {
     examinees: "enabled",
     affairs: "enabled",
     affairConfigurations: "enabled",
+    affairSubmissions: "enabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
