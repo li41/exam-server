@@ -98,11 +98,7 @@ const main = async () => {
     ? new MySqlQuestionStructureRepository(pool)
     : createInMemoryQuestionStructureRepository(questionBankRepository);
   const testBookletRepository = pool
-    ? new MySqlTestBookletRepository(
-        pool,
-        questionBankRepository,
-        questionStructureRepository,
-      )
+    ? new MySqlTestBookletRepository(pool)
     : createInMemoryTestBookletRepository(
         questionBankRepository,
         questionStructureRepository,
