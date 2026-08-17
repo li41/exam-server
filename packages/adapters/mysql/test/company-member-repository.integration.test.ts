@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   COMPANY_MEMBER_ADMIN_PERMISSIONS,
   COMPANY_MEMBER_NO_PERMISSIONS,
+  ConflictError,
   DomainError,
   NotFoundError,
 } from "@server-foundation/domain";
@@ -114,6 +115,13 @@ describe("MySqlCompanyMemberRepository", () => {
       scopeA,
     );
     expect(updated.reviewNote).toBe("same-tenant update");
+    await expect(
+      repository.update(
+        member.id,
+        { reviewNote: "stale update", version: member.version },
+        scopeA,
+      ),
+    ).rejects.toBeInstanceOf(ConflictError);
     await expect(
       repository.update(
         member.id,
