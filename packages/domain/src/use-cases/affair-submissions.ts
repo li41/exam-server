@@ -186,8 +186,14 @@ export class AffairSubmissionService {
     scope: QuestionBankScope,
   ): Promise<AffairSubmissionDetail> {
     const current = await this.getSubmission(id, scope);
-    if (current.status === "submitted") invalid("The submission was already submitted.");
-    await this.validatePayload(current, input.payload, scope, true);
+    if (current.status === "submitted") {
+      invalid("The submission was already submitted.");
+    }
+
+    // PHP saves the submitted payload first and only then runs final validation.
+    // A validation failure therefore keeps the new payload while status/version stay put.
+    const staged = await this.repository.stageSubmitPayload(id, input, scope);
+    await this.validatePayload(staged, input.payload, scope, true);
     return this.repository.submit(id, input, scope);
   }
 
@@ -273,7 +279,9 @@ export class AffairSubmissionService {
       current.collectionId,
       scope,
     );
-    const bindingById = new Map(bindings.map((binding) => [binding.fieldId, binding]));
+    const bindingById = new Map(
+      bindings.map((binding) => [binding.fieldId, binding]),
+    );
 
     if (payload.kind === "form") {
       const incomingIds = payload.fields.map((field) => field.fieldId);
@@ -282,7 +290,9 @@ export class AffairSubmissionService {
       }
       for (const field of payload.fields) {
         if (!bindingById.has(field.fieldId)) {
-          invalid("Submission data contains a field that is not bound to this collection.");
+          invalid(
+            "Submission data contains a field that is not bound to this collection.",
+          );
         }
       }
       if (finalSubmit) {
