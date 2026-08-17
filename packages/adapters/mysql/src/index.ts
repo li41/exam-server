@@ -4,6 +4,7 @@ export * from "./examinee-credential-protector.js";
 export * from "./examinee-repository.js";
 export * from "./affair-repository.js";
 export * from "./affair-configuration-repository.js";
+export * from "./affair-submission-repository.js";
 export * from "./file-metadata-store.js";
 export * from "./idempotency-store.js";
 export * from "./item-repository.js";
