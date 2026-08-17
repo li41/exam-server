@@ -47,10 +47,10 @@ const insertUser = async (id: string, email: string, tenantId: string) => {
 describe("MySqlCompanyMemberRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
-    await pool.execute("DELETE FROM company_members WHERE tenant_id IN (?, ?)", [
-      tenantA,
-      tenantB,
-    ]);
+    await pool.execute(
+      "DELETE FROM company_members WHERE tenant_id IN (?, ?)",
+      [tenantA, tenantB],
+    );
     await pool.execute("DELETE FROM users WHERE id IN (?, ?, ?)", [
       userA,
       userB,
@@ -62,10 +62,10 @@ describe("MySqlCompanyMemberRepository", () => {
   });
 
   afterAll(async () => {
-    await pool.execute("DELETE FROM company_members WHERE tenant_id IN (?, ?)", [
-      tenantA,
-      tenantB,
-    ]);
+    await pool.execute(
+      "DELETE FROM company_members WHERE tenant_id IN (?, ?)",
+      [tenantA, tenantB],
+    );
     await pool.execute("DELETE FROM users WHERE id IN (?, ?, ?)", [
       userA,
       userB,
@@ -105,9 +105,9 @@ describe("MySqlCompanyMemberRepository", () => {
     ).toBeGreaterThan(0);
     expect(await repository.countActiveApprovedAdmins(scopeB)).toBe(0);
     expect(await repository.get(member.id, scopeB)).toBeNull();
-    expect((await repository.list({}, scopeB)).map(({ id }) => id)).not.toContain(
-      member.id,
-    );
+    expect(
+      (await repository.list({}, scopeB)).map(({ id }) => id),
+    ).not.toContain(member.id);
     const updated = await repository.update(
       member.id,
       { reviewNote: "same-tenant update", version: member.version },
@@ -123,24 +123,21 @@ describe("MySqlCompanyMemberRepository", () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  it(
-    "rejects a user from another tenant instead of creating a cross-tenant membership",
-    async () => {
-      await expect(
-        repository.create(
-          {
-            userId: userB,
-            invitedEmail: null,
-            isAdmin: false,
-            permissions: { ...COMPANY_MEMBER_NO_PERMISSIONS },
-            status: "active",
-            reviewStatus: "approved",
-            reviewedBy: null,
-            reviewNote: null,
-          },
-          scopeA,
-        ),
-      ).rejects.toBeInstanceOf(DomainError);
-    },
-  );
+  it("rejects a user from another tenant instead of creating a cross-tenant membership", async () => {
+    await expect(
+      repository.create(
+        {
+          userId: userB,
+          invitedEmail: null,
+          isAdmin: false,
+          permissions: { ...COMPANY_MEMBER_NO_PERMISSIONS },
+          status: "active",
+          reviewStatus: "approved",
+          reviewedBy: null,
+          reviewNote: null,
+        },
+        scopeA,
+      ),
+    ).rejects.toBeInstanceOf(DomainError);
+  });
 });
