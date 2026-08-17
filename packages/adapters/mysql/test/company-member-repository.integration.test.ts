@@ -44,6 +44,7 @@ const insertUser = async (id: string, email: string, tenantId: string) => {
   );
 };
 
+// prettier-ignore
 describe("MySqlCompanyMemberRepository", () => {
   beforeAll(async () => {
     await runMigrations(pool);
