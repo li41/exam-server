@@ -111,19 +111,6 @@ export const QuestionSchema = z.object({
   deletedAt: z.string().min(1).nullable(),
 });
 
-/**
- * 題目可寫欄位的**基底：一個 `.default()` 都不能放。**
- *
- * ⚠️⚠️ 為什麼分成基底與 Create 兩層：
- * `.partial()` **不會拿掉內層的 `.default()`**。若基底帶預設值，
- * PATCH 只送 `{ stem, version }` 時，zod 仍會把 `options` 填成 `null`、
- * `tags` 填成 `[]`、`status` 填成 `enabled` …… ⇒ **使用者只想改題幹，
- * 卻把選項、標籤、狀態、媒體全部靜默重設。**
- *
- * 2026-08-15 這個缺陷真的存在過：測試看到的是「改題幹回 400
- * （選項少於兩個）」，但那只是**運氣好被驗證擋下**的那一種欄位；
- * `tags` / `status` / `points` 沒有驗證擋，會直接被清掉而且不報錯。
- */
 const QuestionWriteFieldsBaseSchema = z.object({
   code: z.string().trim().min(1).max(50),
   categoryId: z.string().trim().min(1).nullable().optional(),
@@ -140,7 +127,6 @@ const QuestionWriteFieldsBaseSchema = z.object({
   media: z.array(QuestionMediaSchema).max(200),
 });
 
-/** 建立時才套預設值。 */
 export const CreateQuestionSchema = QuestionWriteFieldsBaseSchema.extend({
   difficulty: QuestionWriteFieldsBaseSchema.shape.difficulty.default(3),
   options: QuestionWriteFieldsBaseSchema.shape.options.default(null),
@@ -152,7 +138,6 @@ export const CreateQuestionSchema = QuestionWriteFieldsBaseSchema.extend({
   media: QuestionWriteFieldsBaseSchema.shape.media.default([]),
 });
 
-/** 更新：**沒有任何預設值**，沒送的欄位就是 `undefined`，由 use case 保留原值。 */
 export const UpdateQuestionSchema =
   QuestionWriteFieldsBaseSchema.partial().extend({
     version: z.number().int().positive(),
@@ -333,3 +318,4 @@ export type AuthTokenResponse = z.infer<typeof AuthTokenResponseSchema>;
 export * from "./question-structures.js";
 export * from "./test-booklets.js";
 export * from "./examinees.js";
+export * from "./affairs.js";
