@@ -1,8 +1,8 @@
 # Affairs PHP mapping
 
-Issues: #57 `WO-AFFAIRS-TO-SERVER`, #59 `WO-AFFAIRS-TO-SERVER-B`, #61 `WO-AFFAIRS-TO-SERVER-C`
+Issues: #57 `WO-AFFAIRS-TO-SERVER`, #59 `WO-AFFAIRS-TO-SERVER-B`, #61 `WO-AFFAIRS-TO-SERVER-C`, #62 `WO-AFFAIRS-TO-SERVER-D`
 
-This document records the PHP truth-source mapping for the implemented A, B and C waves. D-wave receipt structures remain documented only for dependency planning and are not claimed as implemented.
+This document records the PHP truth-source mapping for the implemented A, B, C and D waves.
 
 ## Scope and source coordinates
 
@@ -416,3 +416,188 @@ Not executed in this agent environment at authoring time:
 - reverse `AND 1=0` mutation.
 
 None of those unexecuted checks are claimed as PASS. C wave does not modify `.github/`, `deploy/`, `scripts/`, secrets, CI gates or deployment configuration.
+
+---
+
+# D-wave addendum — receipts and access audit
+
+Issue: #62 `WO-AFFAIRS-TO-SERVER-D`
+
+D wave is stacked directly on `codex/61-affairs-c-wave`. It implements `exam_affair_receipts` and `exam_affair_receipt_access_logs` as the sensitive-data wave. It does **not** switch the existing PHP school/city frontend to this API and does **not** add affair hard-delete; the full four-blocker affair-delete rule is a separate follow-up after this wave.
+
+## PHP truth sources re-read for D wave
+
+DDL:
+
+- `config/db/exam_tw.sql` — `exam_affair_receipts`
+- `config/db/exam_tw.sql` — `exam_affair_receipt_access_logs`
+
+Behavior and security sources:
+
+- `src/Models/ExamAffairReceipt.php`
+- `src/Models/ExamAffairReceiptAccessLog.php`
+- `src/Services/Crypto.php`
+- `src/Pages/Affair/Traits/AffairReceiptActions.php`
+- `src/Pages/Ajax/AffairAjaxActions.php`
+- `src/Pages/Manage/Traits/AffairActions.php`
+- `src/Pages/Manage/Traits/AffairDataActions.php`
+
+Server facilities deliberately reused instead of replaced:
+
+- `packages/adapters/mysql/src/examinee-credential-protector.ts`
+- `packages/domain/src/ports/blob-storage.ts`
+- `packages/domain/src/ports/file-metadata.ts`
+- `packages/storage/local-fs/src/local-file-storage.ts`
+- issue #41's file-integrity pattern: use the existing private blob/metadata lifecycle rather than storing arbitrary filesystem paths in a domain row.
+
+## `exam_affair_receipts` -> `affair_receipts`
+
+PHP's business identity is one receipt per `(affair_id, account)`. Server preserves it as `(tenant_id, affair_id, account)` and adds server optimistic `version`.
+
+The PHP encrypted-field list was re-read from the actual model, not inferred from DDL comments. Server encrypts the same sensitive fields:
+
+- `job_title`
+- `id_number`
+- `resident_cert`
+- `tax_id`
+- `phone_area`, `phone_number`, `phone_ext`, `mobile`
+- `email`
+- `addr_city`, `addr_district`, `addr_detail`
+- `bank_account`
+
+PHP deliberately leaves `name`, `account`, `bank_id` and `bank_subid` plaintext for operational lookup/sorting or because they are public bank codes. Server preserves that split. The MySQL list query only selects the list-safe columns; it does not select encrypted identity/contact/bank fields and then try to redact them afterwards.
+
+### Encryption and blind-index key separation
+
+D wave does **not** introduce a second cryptographic mechanism. The existing examinee credential protector was generalized into one scoped AES-256-GCM facility. Both examinee credentials and receipts use the same master-key lifecycle and the same authenticated-encryption implementation, but each data domain derives its own scoped subkeys.
+
+For receipt data, the master key derives separate HMAC keys for:
+
+- `affair-receipt / encryption`
+- `affair-receipt / lookup`
+
+The encryption key and lookup/blind-index key are therefore distinct. Receipt and examinee scopes are also distinct, so the same plaintext does not have the same lookup digest across those two domains. No second secret or deployment file was added; the existing sensitive-data master key file is read once and used only as key-derivation input.
+
+`id_number_bidx` is a keyed HMAC-SHA256 blind index used for exact identity-number lookup without decrypting every receipt. **This is intentionally not equivalent to confidentiality.** Equal normalized identity numbers under the same receipt lookup key produce the same blind index. Anyone who can read those digests can therefore learn that two receipt rows refer to the same identity, even without knowing the plaintext. That equality leakage is the explicit tradeoff for indexed exact-match lookup. The digest is indexed but not unique, matching PHP.
+
+### School/city owner XOR and tenant qualification
+
+Like C wave, PHP DDL leaves `school_id` and `city_id` nullable and normal application paths populate the owner selected by `submitter_type`. Server keeps the C-wave decision: request contracts are discriminated by `school|city`, and the database `CHECK` requires exactly one matching owner. This is stricter than PHP DDL but matches PHP's normal writes and is explicitly intentional.
+
+Every receipt query includes `tenant_id`. Affair, school and city references are tenant-qualified. Migration 013 adds only the composite school key needed for `(tenant_id, affair_id, school_id)` and then uses `RESTRICT` parent FKs; it does not rely on cross-tenant numeric/UUID identity coincidence.
+
+## Bankbook image lifecycle
+
+Server does not store a PHP-style arbitrary relative filesystem path in the receipt. `bankbook_file_id` refers to the repo's existing private file facility.
+
+Before create or replacement, the D-wave use case requires:
+
+1. file metadata exists under the same tenant;
+2. status is `ready`;
+3. MIME type is an image and size is at most 10 MiB;
+4. the actual authenticated actor can open the private blob through the existing `BlobStorage` owner/admin access check;
+5. the physical blob can actually be opened. The validation stream is then cancelled.
+
+This means a ready metadata row with a missing physical file, or a same-tenant file that the actor is not permitted to access, cannot silently become a receipt bankbook.
+
+Replacement follows the PHP safety ordering: update the receipt to the new ready file first, then delete the old blob. If old-file cleanup fails, the update has already committed and the caller receives an error; the old file may require cleanup. This cross-DB/filesystem operation is **not claimed to be atomic**.
+
+Receipt deletion deliberately chooses a different failure tradeoff from PHP. PHP deletes the DB row first and then unlinks the image so a failed DB delete cannot remove the only image. For this server wave, the issue specifically calls out orphaned bankbook PII as a risk, so deletion is:
+
+1. persist the `delete` access audit successfully;
+2. delete the bankbook via the existing `BlobStorage` capability;
+3. delete the receipt DB row with optimistic version check.
+
+If step 2 fails, the DB row remains and deletion fails. If step 3 fails after the file was removed, the DB row remains with a visibly missing bankbook and requires repair/retry. This is an explicit, non-atomic failure window; the server prioritizes not leaving an untracked personal-data blob behind and does not pretend a filesystem + MySQL operation is one transaction.
+
+## `exam_affair_receipt_access_logs` -> `affair_receipt_access_logs`
+
+The audit table is append-only evidence for `list|view|print|export|delete`. It records tenant/affair, backend/school/city actor shape, user/account when available, receipt id when applicable, `record_count`, IP when a trustworthy source is available, and timestamp.
+
+**There is deliberately no FK from this audit table to `affair_receipts`, and no cascade.** That is not missing referential integrity: it is the reason this table can prove access to/deletion of a receipt after the business row is gone. Server also avoids an affair FK on this evidence table for the same survival property.
+
+PHP backend delete already uses fail-closed audit (`recordBackendOrFail`) before deletion. Existing PHP list/print paths generally fetch/decrypt and then use best-effort audit before rendering. #62 explicitly requires a stronger server rule, so D wave deliberately hardens all sensitive access actions:
+
+- list: obtain the safe rows/count, persist `list` audit, then return;
+- view / blind-index lookup: obtain/decrypt internally, persist `view` audit, then return;
+- bankbook download: resolve receipt, persist `view` audit, then ask BlobStorage for bytes;
+- print/export: select/decrypt internally, persist the corresponding audit including count, then return the offline-copy data;
+- delete: persist `delete` audit before either file or DB deletion starts.
+
+If the receipt-specific audit write fails, list/view/print/export data is not returned and delete does not begin. This audit port is intentionally separate from the repo's generic best-effort application `AuditLog` so a generic logging policy cannot accidentally weaken the D-wave rule.
+
+For IP, the API only accepts forwarded IP headers when the existing `TRUST_PROXY_HEADERS` setting says the deployment trusts its proxy. In the Fetch/Hono path there is no independently trusted socket IP exposed here; when proxy headers are not trusted, audit IP is stored as null rather than trusting a spoofable client header. The DDL permits null for this reason.
+
+## Public response-field decisions
+
+The API does not dump a database row.
+
+- **List** returns identity/routing and operational status only: receipt id, affair/submitter owner identifiers, account type/account, name, positions, monitor/briefing/transport summary, agreement, version and timestamps. It does **not** return identity number, contact/address fields, bank account, bankbook id or bankbook bytes. The MySQL list query does not select those fields at all.
+- **Detail / create / update / blind-index lookup** return the decrypted receipt business/PII fields required to inspect or edit one selected receipt, but do **not** return the internal `bankbook_file_id`.
+- **Print / export** return the same public detailed receipt fields because their purpose is an explicitly audited offline copy. They do not return `bankbook_file_id` or bankbook bytes.
+- **Bankbook** is a separate `GET /affair-receipts/:id/bankbook` response. It is independently audited as `view` and then goes through BlobStorage's existing tenant + owner/admin authorization.
+
+The bankbook file identifier remains an internal repository/use-case field only because it is required for cleanup and download lookup; frontends never need it.
+
+## D-wave API surface
+
+Both `/api` and `/api/v1` expose the same backend management surface when file metadata and private blob storage capabilities are configured:
+
+- `GET /affair-receipts?affairId=...`
+- `GET /affair-receipts/:id`
+- `POST /affair-receipts/lookup-id-number`
+- `POST /affair-receipts/print`
+- `POST /affair-receipts/export`
+- `POST /affair-receipts`
+- `PATCH /affair-receipts/:id`
+- `GET /affair-receipts/:id/bankbook`
+- `DELETE /affair-receipts/:id?version=...`
+
+This wave does not switch PHP school/city authentication or pages to those endpoints. The stored audit actor enum still includes backend/school/city so later cutover does not require a schema rewrite; the current server route authenticates the existing backend identity path.
+
+## D-wave security oracles written
+
+Tests added for this sensitive wave include:
+
+- encrypted identity number and bank account are not plaintext at rest;
+- the correct identity-number blind index finds the receipt and a different identity number does not;
+- receipt vs examinee lookup digests are domain-separated under the same master key;
+- AES-GCM encryption is randomized while lookup digest is deterministic;
+- a tenant-B scope cannot read or blind-index-lookup tenant-A receipt data;
+- direct cross-tenant school ownership is rejected by the composite FK;
+- school+city dual ownership is rejected by the database XOR `CHECK`;
+- receipt audit rows survive receipt deletion;
+- list output does not include identity number, bank account or bankbook id;
+- print and export each create their receipt-access audit entry with record count;
+- simulated export-audit failure returns no sensitive data;
+- simulated delete-audit failure performs neither blob deletion nor receipt deletion.
+
+The issue-requested widening (`OR 1=1`) and reverse (`AND 1=0`) mutation executions still require an executable checkout and MySQL environment. The tenant-B read/lookup and direct-FK tests are committed as behavior oracles for those mutation runs, but an unexecuted mutation is not claimed as PASS.
+
+## D-wave intentionally not implemented / not verified here
+
+Not implemented:
+
+- affair hard-delete. After D wave, the PHP blocker classes `schools / submissions / receipts / collections` are finally all represented on server, so the complete rule should be implemented once in a separate follow-up issue rather than silently added to this sensitive-data ticket;
+- collection hard-delete follow-up behavior beyond existing B/C decisions;
+- replacement of PHP school/city authentication, dashboards, receipt form UI or public-facing routes;
+- a second crypto/key lifecycle or a second bankbook filesystem implementation;
+- CI/deployment/secret changes.
+
+Not executed in this agent environment at D-wave authoring time:
+
+- full `pnpm verify`;
+- typecheck;
+- oxlint;
+- Prettier `format:check`;
+- workspace unit tests and build;
+- `apps/api/test/affair-receipts.test.ts`;
+- `packages/adapters/mysql/test/affair-receipt-protector.test.ts`;
+- MySQL 8.4 integration, including `affair-receipt-repository.integration.test.ts`;
+- Redis/backing-service integration;
+- N-1 migrated-schema application;
+- backup/restore rehearsal;
+- tenant widening `OR 1=1` mutation;
+- reverse `AND 1=0` mutation.
+
+None of those unexecuted checks are claimed as PASS. D wave does not modify `.github/`, `deploy/`, `scripts/`, CI gates, deployment configuration or secret material.
