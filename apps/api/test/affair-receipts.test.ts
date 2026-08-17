@@ -1,6 +1,5 @@
 import type {
   FileMetadata,
-  InitiateUploadRequest,
   UploadProgress,
   UploadSession,
 } from "@server-foundation/api-contracts";
@@ -82,7 +81,10 @@ class MemoryBlobStorage implements BlobStorage {
   }
 }
 
-const tenant = { tenantId: "local-development-tenant", actorUserId: "local-development-user" };
+const tenant = {
+  tenantId: "local-development-tenant",
+  actorUserId: "local-development-user",
+};
 
 const affairInput = {
   name: "D wave affair",
@@ -250,28 +252,41 @@ describe("affair D-wave receipt API", () => {
     );
     const receipt = await created.json();
 
-    const printed = await requestJson(state.app, "POST", "/api/v1/affair-receipts/print", {
-      affairId: state.affair.id,
-      ids: [receipt.id],
-    });
+    const printed = await requestJson(
+      state.app,
+      "POST",
+      "/api/v1/affair-receipts/print",
+      { affairId: state.affair.id, ids: [receipt.id] },
+    );
     expect(printed.status).toBe(200);
-    expect(state.accessLog.events.at(-1)).toMatchObject({ action: "print", recordCount: 1 });
-
-    const exported = await requestJson(state.app, "POST", "/api/v1/affair-receipts/export", {
-      affairId: state.affair.id,
-      ids: [receipt.id],
+    expect(state.accessLog.events.at(-1)).toMatchObject({
+      action: "print",
+      recordCount: 1,
     });
+
+    const exported = await requestJson(
+      state.app,
+      "POST",
+      "/api/v1/affair-receipts/export",
+      { affairId: state.affair.id, ids: [receipt.id] },
+    );
     expect(exported.status).toBe(200);
-    expect(state.accessLog.events.at(-1)).toMatchObject({ action: "export", recordCount: 1 });
+    expect(state.accessLog.events.at(-1)).toMatchObject({
+      action: "export",
+      recordCount: 1,
+    });
 
     state.accessLog.failActions.add("export");
-    const denied = await requestJson(state.app, "POST", "/api/v1/affair-receipts/export", {
-      affairId: state.affair.id,
-      ids: [receipt.id],
-    });
+    const denied = await requestJson(
+      state.app,
+      "POST",
+      "/api/v1/affair-receipts/export",
+      { affairId: state.affair.id, ids: [receipt.id] },
+    );
     expect(denied.status).toBe(500);
-    expect(await denied.text()).not.toContain("A123456789");
-    expect(await denied.text()).not.toContain("1234567890");
+    const deniedBody = await denied.text();
+    expect(deniedBody).not.toContain("A123456789");
+    expect(deniedBody).not.toContain("1234567890");
   });
 
   it("does not delete business data when the delete audit fails", async () => {
@@ -287,12 +302,17 @@ describe("affair D-wave receipt API", () => {
 
     const denied = await state.app.request(
       `/api/v1/affair-receipts/${receipt.id}?version=${receipt.version}`,
-      { method: "DELETE", headers: { "x-forwarded-for": "203.0.113.20" } },
+      {
+        method: "DELETE",
+        headers: { "x-forwarded-for": "203.0.113.20" },
+      },
     );
     expect(denied.status).toBe(500);
     expect(state.blobs.deleted).toEqual([]);
 
-    const detail = await state.app.request(`/api/v1/affair-receipts/${receipt.id}`);
+    const detail = await state.app.request(
+      `/api/v1/affair-receipts/${receipt.id}`,
+    );
     expect(detail.status).toBe(200);
   });
 });
