@@ -43,7 +43,8 @@ const assertExactKeys = (
   label: string,
 ): void => {
   for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) validationError(`${label} contains unknown key "${key}".`);
+    if (!allowed.has(key))
+      validationError(`${label} contains unknown key "${key}".`);
   }
 };
 
@@ -95,7 +96,10 @@ const parsePositiveInteger = (value: unknown, field: string): number => {
 };
 
 const parseStatus = (value: unknown): CompanyMemberStatus => {
-  if (typeof value !== "string" || !statusValues.has(value as CompanyMemberStatus)) {
+  if (
+    typeof value !== "string" ||
+    !statusValues.has(value as CompanyMemberStatus)
+  ) {
     validationError('status must be either "active" or "disabled".');
   }
   return value as CompanyMemberStatus;
@@ -119,7 +123,9 @@ export const parseCompanyMemberPermissions = (
   if (!isRecord(value)) validationError("permissions must be an object.");
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record);
-  const missing = COMPANY_MEMBER_PERMISSION_KEYS.filter((key) => !(key in record));
+  const missing = COMPANY_MEMBER_PERMISSION_KEYS.filter(
+    (key) => !(key in record),
+  );
   const extras = keys.filter((key) => !permissionKeySet.has(key));
   if (missing.length > 0 || extras.length > 0) {
     const details = [
@@ -128,7 +134,9 @@ export const parseCompanyMemberPermissions = (
     ]
       .filter(Boolean)
       .join("; ");
-    validationError(`permissions must contain exactly the 13 PHP keys (${details}).`);
+    validationError(
+      `permissions must contain exactly the 13 PHP keys (${details}).`,
+    );
   }
 
   const parsed = {} as CompanyMemberPermissions;
@@ -180,19 +188,24 @@ const listKeys = new Set(["status", "reviewStatus", "search"]);
 export const parseCreateCompanyMemberInput = (
   value: unknown,
 ): CreateCompanyMemberInput => {
-  if (!isRecord(value)) validationError("Company member payload must be an object.");
+  if (!isRecord(value))
+    validationError("Company member payload must be an object.");
   const record = value as Record<string, unknown>;
   assertExactKeys(record, createKeys, "Company member payload");
   return {
     userId: parseRequiredString(record.userId, "userId", 191),
     invitedEmail:
-      record.invitedEmail === undefined ? null : parseNullableEmail(record.invitedEmail),
-    isAdmin: record.isAdmin === undefined ? false : parseBoolean(record.isAdmin, "isAdmin"),
+      record.invitedEmail === undefined
+        ? null
+        : parseNullableEmail(record.invitedEmail),
+    isAdmin:
+      record.isAdmin === undefined ? false : parseBoolean(record.isAdmin, "isAdmin"),
     permissions:
       record.permissions === undefined
         ? { ...COMPANY_MEMBER_NO_PERMISSIONS }
         : parseCompanyMemberPermissions(record.permissions),
-    status: record.status === undefined ? "active" : parseStatus(record.status),
+    status:
+      record.status === undefined ? "active" : parseStatus(record.status),
     reviewStatus:
       record.reviewStatus === undefined
         ? "approved"
@@ -211,7 +224,8 @@ export const parseCreateCompanyMemberInput = (
 export const parseUpdateCompanyMemberInput = (
   value: unknown,
 ): UpdateCompanyMemberInput => {
-  if (!isRecord(value)) validationError("Company member payload must be an object.");
+  if (!isRecord(value))
+    validationError("Company member payload must be an object.");
   const record = value as Record<string, unknown>;
   assertExactKeys(record, updateKeys, "Company member payload");
   const version = parsePositiveInteger(record.version, "version");
@@ -222,7 +236,8 @@ export const parseUpdateCompanyMemberInput = (
   if (record.invitedEmail !== undefined) {
     input.invitedEmail = parseNullableEmail(record.invitedEmail);
   }
-  if (record.isAdmin !== undefined) input.isAdmin = parseBoolean(record.isAdmin, "isAdmin");
+  if (record.isAdmin !== undefined)
+    input.isAdmin = parseBoolean(record.isAdmin, "isAdmin");
   if (record.permissions !== undefined) {
     input.permissions = parseCompanyMemberPermissions(record.permissions);
   }
@@ -253,7 +268,8 @@ export const parseCompanyMemberListQuery = (
   }
   if (value.search !== undefined) {
     const search = value.search.trim();
-    if (search.length > 100) validationError("search must not exceed 100 characters.");
+    if (search.length > 100)
+      validationError("search must not exceed 100 characters.");
     if (search) query.search = search;
   }
   return query;
@@ -281,7 +297,9 @@ export class CompanyMemberService {
   ): Promise<CompanyMember> {
     const actor = await this.requireManager(scope);
     if (input.isAdmin && !actor.isAdmin) {
-      throw new ForbiddenError("Only an administrator can create another administrator.");
+      throw new ForbiddenError(
+        "Only an administrator can create another administrator.",
+      );
     }
     return this.repository.create(
       {
@@ -307,7 +325,9 @@ export class CompanyMemberService {
 
     const nextIsAdmin = input.isAdmin ?? current.isAdmin;
     if (!actor.isAdmin && (current.isAdmin || nextIsAdmin)) {
-      throw new ForbiddenError("Only an administrator can modify administrators.");
+      throw new ForbiddenError(
+        "Only an administrator can modify administrators.",
+      );
     }
 
     if (current.isAdmin && input.isAdmin === false) {
@@ -321,7 +341,9 @@ export class CompanyMemberService {
         current.id,
       );
       if (remainingAdmins < 1) {
-        throw new ConflictError("A tenant must keep at least one active approved administrator.");
+        throw new ConflictError(
+          "A tenant must keep at least one active approved administrator.",
+        );
       }
     }
 
@@ -340,7 +362,9 @@ export class CompanyMemberService {
     return this.repository.update(id, normalizedInput, scope);
   }
 
-  private async requireManager(scope: CompanyMemberScope): Promise<CompanyMember> {
+  private async requireManager(
+    scope: CompanyMemberScope,
+  ): Promise<CompanyMember> {
     const actor = await this.repository.findByUserId(scope.actorUserId, scope);
     if (!actor || !canUseCompanyMemberPermission(actor, "members")) {
       throw new ForbiddenError();
