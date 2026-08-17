@@ -93,6 +93,7 @@ describe("MySqlCompanyMemberRepository", () => {
       id: member.id,
       tenantId: tenantA,
     });
+    // prettier-ignore
     expect((await repository.list({}, scopeA)).map(({ id }) => id)).toContain(
       member.id,
     );
@@ -106,6 +107,7 @@ describe("MySqlCompanyMemberRepository", () => {
     );
     expect(await repository.countActiveApprovedAdmins(scopeB)).toBe(0);
     expect(await repository.get(member.id, scopeB)).toBeNull();
+    // prettier-ignore
     expect((await repository.list({}, scopeB)).map(({ id }) => id)).not.toContain(
       member.id,
     );
