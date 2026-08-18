@@ -169,6 +169,10 @@ jobs:
             sudo useradd --system --home /var/lib/server-foundation --shell /usr/sbin/nologin server-foundation
           fi
           sudo install -d -m 0750 -o root -g server-foundation /etc/server-foundation
+          umask 077
+          openssl rand -hex 32 > /tmp/examinee-credential.key
+          sudo install -m 0640 -o root -g server-foundation /tmp/examinee-credential.key /etc/server-foundation/examinee-credential.key
+          rm -f /tmp/examinee-credential.key
 
           cat > /tmp/server-foundation.env <<'EOF'
           NODE_ENV=production
@@ -177,6 +181,8 @@ jobs:
           MYSQL_URL=mysql://root:root@127.0.0.1:3306/foundation_release_test
           REDIS_URL=redis://127.0.0.1:6379
           FILE_STORAGE_ROOT=/var/lib/server-foundation/storage
+          EXAMINEE_CREDENTIAL_KEY_FILE=/etc/server-foundation/examinee-credential.key
+          DEPLOYMENT_TENANT_UUID=00000000-0000-4000-8000-000000000001
           TRUST_PROXY_HEADERS=false
           FILE_CLEANUP_INTERVAL_SECONDS=300
           IDEMPOTENCY_TTL_SECONDS=86400

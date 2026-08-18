@@ -74,8 +74,17 @@ production setup generates the key once with:
 
 ```sh
 umask 077
-openssl rand -hex 32 > /etc/server-foundation/examinee-credential.key
+openssl rand -hex 32 > /tmp/examinee-credential.key
+install -m 0640 -o root -g server-foundation \
+  /tmp/examinee-credential.key /etc/server-foundation/examinee-credential.key
+rm -f /tmp/examinee-credential.key
 ```
+
+Keep the key owned by `root` so the `server-foundation` service can read it
+through its group but cannot rewrite its own credential. Mode `0640` gives
+`server-foundation` group read access without making the key world-readable;
+`0600 root:root` would prevent the documented `User=server-foundation` /
+`Group=server-foundation` service from reading the file.
 
 The master key derives separate encryption and lookup keys. Examinee `code`
 also stores a deterministic HMAC-SHA-256 lookup digest so the database can
