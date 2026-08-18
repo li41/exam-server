@@ -171,7 +171,7 @@ jobs:
           sudo install -d -m 0750 -o root -g server-foundation /etc/server-foundation
           umask 077
           openssl rand -hex 32 > /tmp/examinee-credential.key
-          sudo install -m 0600 -o root -g root /tmp/examinee-credential.key /etc/server-foundation/examinee-credential.key
+          sudo install -m 0640 -o root -g server-foundation /tmp/examinee-credential.key /etc/server-foundation/examinee-credential.key
           rm -f /tmp/examinee-credential.key
 
           cat > /tmp/server-foundation.env <<'EOF'
