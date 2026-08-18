@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   Affair,
   AffairCity,
@@ -24,6 +23,7 @@ const cities = [
   ["21", "金門縣"], ["22", "連江縣"],
 ] as const;
 
+const randomUUID = (): string => globalThis.crypto.randomUUID();
 const now = (): string => new Date().toISOString();
 const page = <T>(items: T[], limit: number): Page<T> => ({
   items: items.slice(0, limit),
