@@ -284,10 +284,7 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
   };
   const clientIp = (context: Context<AffairReceiptEnv>): string | null => {
     if (!dependencies.trustProxyHeaders) return null;
-    const forwarded = context.req
-      .header("x-forwarded-for")
-      ?.split(",")[0]
-      ?.trim();
+    const forwarded = context.req.header("x-forwarded-for")?.split(",")[0]?.trim();
     const real = context.req.header("x-real-ip")?.trim();
     const value = forwarded || real || null;
     return value && value.length <= 45 ? value : null;
@@ -306,10 +303,7 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
     "/affair-receipts",
     zValidator("query", AffairReceiptListQuerySchema, (result, context) => {
       if (!result.success) {
-        return validationError(
-          context,
-          "Invalid affair receipt query parameters.",
-        );
+        return validationError(context, "Invalid affair receipt query parameters.");
       }
     }),
     async (context) =>
@@ -326,10 +320,7 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
     "/affair-receipts/lookup-id-number",
     zValidator("json", AffairReceiptLookupSchema, (result, context) => {
       if (!result.success) {
-        return validationError(
-          context,
-          "Invalid receipt ID-number lookup payload.",
-        );
+        return validationError(context, "Invalid receipt ID-number lookup payload.");
       }
     }),
     async (context) => {
@@ -433,10 +424,7 @@ const createAffairReceiptRouter = (dependencies: Dependencies) => {
     "/affair-receipts/:id",
     zValidator("json", UpdateAffairReceiptSchema, (result, context) => {
       if (!result.success) {
-        return validationError(
-          context,
-          "Invalid affair receipt update payload.",
-        );
+        return validationError(context, "Invalid affair receipt update payload.");
       }
     }),
     async (context) =>

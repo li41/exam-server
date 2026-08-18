@@ -109,11 +109,7 @@ const affairInput = {
   receiptPrintCity: false,
 };
 
-const receiptPayload = (
-  affairId: string,
-  schoolId: string,
-  fileId: string,
-) => ({
+const receiptPayload = (affairId: string, schoolId: string, fileId: string) => ({
   affairId,
   submitterType: "school" as const,
   schoolId,

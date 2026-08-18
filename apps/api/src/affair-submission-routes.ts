@@ -239,17 +239,15 @@ const createAffairSubmissionRouter = (dependencies: Dependencies) => {
         await store.release(scope, key, fingerprint);
       }
     } catch (error) {
-      await store
-        .release(scope, key, fingerprint)
-        .catch((releaseError: unknown) => {
-          dependencies.logger?.warn("idempotency_release_failed", {
-            requestId: context.get("requestId"),
-            error:
-              releaseError instanceof Error
-                ? releaseError.message
-                : String(releaseError),
-          });
+      await store.release(scope, key, fingerprint).catch((releaseError: unknown) => {
+        dependencies.logger?.warn("idempotency_release_failed", {
+          requestId: context.get("requestId"),
+          error:
+            releaseError instanceof Error
+              ? releaseError.message
+              : String(releaseError),
         });
+      });
       throw error;
     }
   };
@@ -342,16 +340,11 @@ const createAffairSubmissionRouter = (dependencies: Dependencies) => {
     async (context) => {
       const input = context.req.valid("json");
       const result = await service.batchReturn(input, scopeFor(context));
-      await auditBestEffort(
-        context,
-        "affair_submission_batch_return",
-        undefined,
-        {
-          requested: input.items.length,
-          returned: result.returned,
-          skipped: result.skipped,
-        },
-      );
+      await auditBestEffort(context, "affair_submission_batch_return", undefined, {
+        requested: input.items.length,
+        returned: result.returned,
+        skipped: result.skipped,
+      });
       return context.json(result);
     },
   );
@@ -400,10 +393,7 @@ const createAffairSubmissionRouter = (dependencies: Dependencies) => {
     "/affair-submissions/:id/return",
     zValidator("json", ReturnAffairSubmissionSchema, (result, context) => {
       if (!result.success) {
-        return validationError(
-          context,
-          "Invalid affair submission return payload.",
-        );
+        return validationError(context, "Invalid affair submission return payload.");
       }
     }),
     async (context) => {
@@ -414,24 +404,23 @@ const createAffairSubmissionRouter = (dependencies: Dependencies) => {
         input.reason,
         scopeFor(context),
       );
-      await auditBestEffort(context, "affair_submission_return", result.id, {
-        reasonProvided: input.reason !== null && input.reason.length > 0,
-      });
+      await auditBestEffort(
+        context,
+        "affair_submission_return",
+        result.id,
+        { reasonProvided: input.reason !== null && input.reason.length > 0 },
+      );
       return context.json(result);
     },
   );
 
   api.delete(
     "/affair-submissions/:id",
-    zValidator(
-      "query",
-      DeleteAffairSubmissionQuerySchema,
-      (result, context) => {
-        if (!result.success) {
-          return validationError(context, "A valid version is required.");
-        }
-      },
-    ),
+    zValidator("query", DeleteAffairSubmissionQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "A valid version is required.");
+      }
+    }),
     async (context) => {
       const id = context.req.param("id");
       await service.deleteSubmission(
