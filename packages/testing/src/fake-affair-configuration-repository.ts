@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   AffairCollection,
   AffairCollectionBinding,
@@ -25,6 +24,7 @@ import type {
 
 type StoredBinding = Omit<AffairCollectionBinding, "field">;
 
+const randomUUID = (): string => globalThis.crypto.randomUUID();
 const now = (): string => new Date().toISOString();
 
 export class InMemoryAffairConfigurationRepository
