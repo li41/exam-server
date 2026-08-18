@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { declareSkip } from "./verify-skip.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -111,6 +112,16 @@ const command = async (program, args = []) => {
 
 const printSkipAndExit = (reason) => {
   for (const line of formatSkipReport(reason)) console.log(line);
+  // ⚠️ 逐項印 `SKIP <check>` 已經很誠實了 —— 但它 exit 0，而 `pnpm verify` 是
+  //    一條 `&&` chain，**沒有摘要層**：跑完只看得到最後一段的輸出。
+  //    ⇒ 這一格是本機 verify 上**唯一真的會走到跳過**的閘門（開發機不是
+  //    AlmaLinux／systemd 不是 PID 1），卻和真的驗過長得一樣。
+  //    寫進帳本，鏈尾 `gates:skip-report` 會把它連同 8 項檢查名一起念出來。
+  declareSkip({
+    gate: "cold-boot acceptance (real machine)",
+    missing: reason,
+    impact: acceptanceChecks.join(", "),
+  });
 };
 
 const configValue = (config, name) => {

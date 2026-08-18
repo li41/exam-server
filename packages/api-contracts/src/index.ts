@@ -331,3 +331,10 @@ export type RefreshRequest = z.infer<typeof RefreshRequestSchema>;
 export type AuthTokenResponse = z.infer<typeof AuthTokenResponseSchema>;
 
 export * from "./question-structures.js";
+export * from "./test-booklets.js";
+export * from "./examinees.js";
+export * from "./company-members.js";
+export * from "./affairs.js";
+export * from "./affair-configurations.js";
+export * from "./affair-submissions.js";
+export * from "./affair-receipts.js";

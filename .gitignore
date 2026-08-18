@@ -1,9 +1,17 @@
 .DS_Store
-node_modules/
+# ⚠️ 不加結尾斜線：帶斜線的規則只匹配目錄，而 worktree 裡跑 verify 時
+#    node_modules 常是 symlink（gitignore 眼中不是目錄），那時 `node_modules/`
+#    擋不住它 —— 實測 2026-08-17：帶斜線 ⇒ `?? node_modules`、
+#    `git check-ignore` exit 1。曾有 repo 因此把 symlink commit 進版控，
+#    ff-merge 後覆蓋掉真目錄變成循環連結。
+node_modules
 dist/
 coverage/
 backups/
 *.tsbuildinfo
+# 跳過宣告帳本（scripts/verify-skip.mjs）。衍生診斷資料，不進版控；
+# `pnpm verify` 第一段會清空，所以「裡面有東西」永遠代表**這一次**有閘門沒真的跑。
+/verify-skips.jsonl
 .env
 .env.*
 !.env.example

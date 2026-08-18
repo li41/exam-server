@@ -9,6 +9,7 @@ export type ServerConfig = {
   redisUrl?: string;
   fileStorageRoot?: string;
   deploymentTenantUuid?: string;
+  examineeCredentialKeyFile?: string;
   fileCleanupIntervalMs: number;
   idempotencyTtlSeconds: number;
   trustProxyHeaders: boolean;
@@ -115,6 +116,8 @@ export const loadConfig = (
   const deploymentTenantUuid = parseOptionalTenantUuid(
     env.DEPLOYMENT_TENANT_UUID,
   );
+  const examineeCredentialKeyFile =
+    env.EXAMINEE_CREDENTIAL_KEY_FILE?.trim() || undefined;
   const fileCleanupIntervalSeconds = parseInteger(
     "FILE_CLEANUP_INTERVAL_SECONDS",
     env.FILE_CLEANUP_INTERVAL_SECONDS,
@@ -128,10 +131,14 @@ export const loadConfig = (
 
   if (
     production &&
-    (!mysqlUrl || !redisUrl || !fileStorageRoot || !deploymentTenantUuid)
+    (!mysqlUrl ||
+      !redisUrl ||
+      !fileStorageRoot ||
+      !deploymentTenantUuid ||
+      !examineeCredentialKeyFile)
   ) {
     throw new Error(
-      "MYSQL_URL, REDIS_URL, FILE_STORAGE_ROOT, and DEPLOYMENT_TENANT_UUID are required when NODE_ENV=production.",
+      "MYSQL_URL, REDIS_URL, FILE_STORAGE_ROOT, DEPLOYMENT_TENANT_UUID, and EXAMINEE_CREDENTIAL_KEY_FILE are required when NODE_ENV=production.",
     );
   }
   if (redisUrl && !mysqlUrl) {
@@ -151,6 +158,7 @@ export const loadConfig = (
     redisUrl,
     fileStorageRoot,
     deploymentTenantUuid,
+    examineeCredentialKeyFile,
     fileCleanupIntervalMs: fileCleanupIntervalSeconds * 1000,
     idempotencyTtlSeconds: parseInteger(
       "IDEMPOTENCY_TTL_SECONDS",

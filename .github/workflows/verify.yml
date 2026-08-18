@@ -101,6 +101,14 @@ jobs:
       FILE_STORAGE_ROOT: /tmp/server-foundation-storage
       BACKUP_ROOT: /tmp/server-foundation-backups
       BACKUP_REHEARSAL_CONFIRM: YES_I_UNDERSTAND_THIS_IS_DESTRUCTIVE
+      # ⚠️ 2026-08-16 補：`#40 WO-TENANT-UUID-ADOPT` 把 DEPLOYMENT_COMPANY_ID 改名成
+      # DEPLOYMENT_TENANT_UUID（只收 UUIDv4）並加了 DEPLOYMENT_PROJECT_ID，
+      # 但這兩支 workflow 的 env 沒跟著改 ⇒ `backup:rehearse` 從 2026-08-15 起每次都紅，
+      # 而 main 上連紅十次沒人發現（見 issue #54）。
+      # ⛔ 這是**格式合法的 CI 假值**，不是任何真實租戶；那道 fail-closed 檢查未被放寬。
+      #    反向驗過：`not-a-uuid` 與 UUIDv1 都會被拒，缺 DEPLOYMENT_PROJECT_ID 也會被拒。
+      DEPLOYMENT_TENANT_UUID: 00000000-0000-4000-8000-000000000001
+      DEPLOYMENT_PROJECT_ID: ci-verify
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
