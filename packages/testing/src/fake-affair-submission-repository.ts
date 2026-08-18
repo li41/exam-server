@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   AffairSubmission,
   AffairSubmissionDetail,
@@ -17,6 +16,7 @@ import type {
 
 type StoredSubmission = AffairSubmission & { payload: AffairSubmissionPayload };
 
+const randomUUID = (): string => globalThis.crypto.randomUUID();
 const now = (): string => new Date().toISOString();
 const copy = (item: StoredSubmission): AffairSubmissionDetail =>
   structuredClone(item) as AffairSubmissionDetail;
