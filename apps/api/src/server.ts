@@ -14,6 +14,7 @@ import {
   MySqlAffairRepository,
   MySqlAffairSubmissionRepository,
   MySqlAuditLog,
+  MySqlCompanyMemberRepository,
   MySqlExamineeRepository,
   MySqlFileMetadataStore,
   MySqlIdempotencyStore,
@@ -34,6 +35,7 @@ import {
   startFileCleanupJob,
 } from "@server-foundation/local-fs-storage";
 import {
+  createInMemoryCompanyMemberRepository,
   createInMemoryAffairConfigurationRepository,
   createInMemoryAffairReceiptRepository,
   createInMemoryAffairRepository,
@@ -51,6 +53,7 @@ import { mountAffairReceiptRoutes } from "./affair-receipt-routes.js";
 import { mountAffairRoutes } from "./affair-routes.js";
 import { mountAffairSubmissionRoutes } from "./affair-submission-routes.js";
 import { createApp } from "./app.js";
+import { mountCompanyMemberRoutes } from "./company-member-routes.js";
 import { loadConfig } from "./config.js";
 import { mountDeploymentIdentityRoutes } from "./deployment-identity-routes.js";
 import { gracefulShutdown } from "./graceful-shutdown.js";
@@ -109,6 +112,9 @@ const main = async () => {
         new AesGcmExamineeCredentialProtector(sensitiveDataMasterKey as Buffer),
       )
     : createInMemoryExamineeRepository();
+  const companyMemberRepository = pool
+    ? new MySqlCompanyMemberRepository(pool)
+    : createInMemoryCompanyMemberRepository();
   const affairRepository = pool
     ? new MySqlAffairRepository(pool)
     : createInMemoryAffairRepository();
@@ -224,6 +230,15 @@ const main = async () => {
     logger,
   });
 
+  mountCompanyMemberRoutes(app, {
+    repository: companyMemberRepository,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
   mountAffairRoutes(app, {
     repository: affairRepository,
     deletionRepository: affairDeletionRepository,
@@ -289,6 +304,7 @@ const main = async () => {
     questionStructures: "enabled",
     testBooklets: "enabled",
     examinees: "enabled",
+    companyMembers: "enabled",
     affairs: "enabled",
     affairDeletion: affairDeletionRepository ? "enabled" : "disabled",
     affairConfigurations: "enabled",
