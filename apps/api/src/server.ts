@@ -4,8 +4,15 @@ import { serve } from "@hono/node-server";
 import { createClient } from "redis";
 import { Argon2PasswordHasher, AuthService } from "@server-foundation/auth";
 import {
+  AesGcmAffairReceiptProtector,
   AesGcmExamineeCredentialProtector,
   createMySqlPool,
+  MySqlAffairConfigurationRepository,
+  MySqlAffairDeletionRepository,
+  MySqlAffairReceiptAccessLog,
+  MySqlAffairReceiptRepository,
+  MySqlAffairRepository,
+  MySqlAffairSubmissionRepository,
   MySqlAuditLog,
   MySqlCompanyMemberRepository,
   MySqlExamineeRepository,
@@ -29,13 +36,22 @@ import {
 } from "@server-foundation/local-fs-storage";
 import {
   createInMemoryCompanyMemberRepository,
+  createInMemoryAffairConfigurationRepository,
+  createInMemoryAffairReceiptRepository,
+  createInMemoryAffairRepository,
+  createInMemoryAffairSubmissionRepository,
   createInMemoryExamineeRepository,
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
   createInMemoryQuestionImportRepository,
   createInMemoryQuestionStructureRepository,
   createInMemoryTestBookletRepository,
+  InMemoryAffairReceiptAccessLog,
 } from "@server-foundation/testing";
+import { mountAffairConfigurationRoutes } from "./affair-configuration-routes.js";
+import { mountAffairReceiptRoutes } from "./affair-receipt-routes.js";
+import { mountAffairRoutes } from "./affair-routes.js";
+import { mountAffairSubmissionRoutes } from "./affair-submission-routes.js";
 import { createApp } from "./app.js";
 import { mountCompanyMemberRoutes } from "./company-member-routes.js";
 import { loadConfig } from "./config.js";
@@ -61,6 +77,20 @@ const main = async () => {
     await redisClient.connect();
   }
 
+  const sensitiveDataMasterKey = pool
+    ? parseExamineeCredentialMasterKey(
+        await readFile(
+          config.examineeCredentialKeyFile ??
+            (() => {
+              throw new Error(
+                "EXAMINEE_CREDENTIAL_KEY_FILE is required when MYSQL_URL is configured.",
+              );
+            })(),
+          "utf8",
+        ),
+      )
+    : undefined;
+
   const questionBankRepository = pool
     ? new MySqlQuestionBankRepository(pool)
     : createInMemoryQuestionBankRepository();
@@ -79,19 +109,7 @@ const main = async () => {
   const examineeRepository = pool
     ? new MySqlExamineeRepository(
         pool,
-        new AesGcmExamineeCredentialProtector(
-          parseExamineeCredentialMasterKey(
-            await readFile(
-              config.examineeCredentialKeyFile ??
-                (() => {
-                  throw new Error(
-                    "EXAMINEE_CREDENTIAL_KEY_FILE is required when MYSQL_URL is configured.",
-                  );
-                })(),
-              "utf8",
-            ),
-          ),
-        ),
+        new AesGcmExamineeCredentialProtector(sensitiveDataMasterKey as Buffer),
       )
     : createInMemoryExamineeRepository();
   const companyMemberRepository = pool
@@ -102,7 +120,30 @@ const main = async () => {
         config.fileStorageRoot,
         {},
         pool ? new MySqlFileMetadataStore(pool) : undefined,
+  const affairRepository = pool
+    ? new MySqlAffairRepository(pool)
+    : createInMemoryAffairRepository();
+  const affairDeletionRepository = pool
+    ? new MySqlAffairDeletionRepository(pool)
+    : undefined;
+  const affairConfigurationRepository = pool
+    ? new MySqlAffairConfigurationRepository(pool)
+    : createInMemoryAffairConfigurationRepository(affairRepository);
+  const affairSubmissionRepository = pool
+    ? new MySqlAffairSubmissionRepository(pool)
+    : createInMemoryAffairSubmissionRepository(affairConfigurationRepository);
+  const affairReceiptRepository = pool
+    ? new MySqlAffairReceiptRepository(
+        pool,
+        new AesGcmAffairReceiptProtector(sensitiveDataMasterKey as Buffer),
       )
+    : createInMemoryAffairReceiptRepository(affairRepository);
+  const affairReceiptAccessLog = pool
+    ? new MySqlAffairReceiptAccessLog(pool)
+    : new InMemoryAffairReceiptAccessLog();
+  const fileMetadataStore = pool ? new MySqlFileMetadataStore(pool) : undefined;
+  const localBlobStorage = config.fileStorageRoot
+    ? new LocalFileStorage(config.fileStorageRoot, {}, fileMetadataStore)
     : undefined;
   await localBlobStorage?.initialize();
   const fileCleanupJob = localBlobStorage
@@ -196,12 +237,52 @@ const main = async () => {
 
   mountCompanyMemberRoutes(app, {
     repository: companyMemberRepository,
+  mountAffairRoutes(app, {
+    repository: affairRepository,
+    deletionRepository: affairDeletionRepository,
     authenticationService,
     idempotencyStore,
     idempotencyTtlSeconds: config.idempotencyTtlSeconds,
     allowUnauthenticated: !config.production && !authenticationService,
     logger,
   });
+
+  mountAffairConfigurationRoutes(app, {
+    repository: affairConfigurationRepository,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
+  mountAffairSubmissionRoutes(app, {
+    repository: affairSubmissionRepository,
+    affairRepository,
+    configurationRepository: affairConfigurationRepository,
+    auditLog,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
+  if (fileMetadataStore && blobStorage) {
+    mountAffairReceiptRoutes(app, {
+      repository: affairReceiptRepository,
+      accessLog: affairReceiptAccessLog,
+      affairRepository,
+      fileMetadata: fileMetadataStore,
+      blobStorage,
+      authenticationService,
+      idempotencyStore,
+      idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+      allowUnauthenticated: !config.production && !authenticationService,
+      trustProxyHeaders: config.trustProxyHeaders,
+      logger,
+    });
+  }
 
   const server = serve({
     fetch: app.fetch,
@@ -222,6 +303,11 @@ const main = async () => {
     testBooklets: "enabled",
     examinees: "enabled",
     companyMembers: "enabled",
+    affairs: "enabled",
+    affairDeletion: affairDeletionRepository ? "enabled" : "disabled",
+    affairConfigurations: "enabled",
+    affairSubmissions: "enabled",
+    affairReceipts: fileMetadataStore && blobStorage ? "enabled" : "disabled",
     auditLog: auditLog ? "enabled" : "disabled",
     idempotency: idempotencyStore ? "mysql-durable" : "disabled",
     trustProxyHeaders: config.trustProxyHeaders,
