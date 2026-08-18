@@ -156,7 +156,7 @@ step "步驟 3：pnpm"
 #    ⇒ 沒有 pnpm 就無法安裝 release、也無法跑 migration。
 #    （這支腳本先前版本寫「可在別處打包所以不必裝 pnpm」——那是錯的。）
 sudo corepack enable 2>/dev/null || sudo npm i -g corepack
-corepack prepare pnpm@11.10.0 --activate >/dev/null 2>&1 || true
+corepack prepare pnpm@11.22.0 --activate >/dev/null 2>&1 || true
 corepack pnpm -v >/dev/null 2>&1 || die "pnpm 不可用"
 ok "pnpm $(corepack pnpm -v)"
 

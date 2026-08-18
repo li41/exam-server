@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "A reusable TypeScript API foundation for desktop applications.",
   "type": "module",
-  "packageManager": "pnpm@11.10.0",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "corepack pnpm --filter @server-foundation/api dev",
     "typecheck": "tsc -b && corepack pnpm --filter @server-foundation/api typecheck:test",
