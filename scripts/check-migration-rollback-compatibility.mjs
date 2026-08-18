@@ -2,6 +2,7 @@ import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { declareSkip } from "./verify-skip.mjs";
 import {
   createMySqlPool,
   defaultMigrations,
@@ -10,9 +11,17 @@ import {
 
 const baseRef = process.env.ROLLBACK_BASE_REF;
 if (!baseRef) {
-  console.log(
-    "ROLLBACK_BASE_REF is not set; skipping N-1 migration compatibility check.",
-  );
+  // ⚠️ 這裡原本只 `console.log("… skipping …")` 然後 exit 0。exit 0 在
+  //    `pnpm verify` 的 `&&` chain 裡與「真的驗過」完全分不出來 —— 而這一格
+  //    宣稱的是**release rollback 的相容性前提**（README:198、deploy/README:40）。
+  //    ⇒ 現在寫進帳本，鏈尾的 `gates:skip-report` 會把它念出來。
+  declareSkip({
+    gate: "N-1 migration rollback compatibility",
+    missing:
+      "ROLLBACK_BASE_REF (set by .github/workflows/verify.yml:145 and release.yml:93-95)",
+    impact:
+      "that the previous application revision still works against the newly migrated schema — i.e. code-only rollback remains viable",
+  });
   process.exit(0);
 }
 

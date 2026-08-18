@@ -52,7 +52,16 @@ test("讀取真的 migrate.ts 陣列並通過四項檢查", () => {
     readFileSync(migrationSourcePath, "utf8"),
     migrationSourcePath,
   );
-  assert.equal(migrations.length, 9);
+  // ⚠️ 刻意**從解析結果自身推導**筆數,⛔ 不硬編、⛔ 不掃 schema 目錄。
+  //    原本寫 `assert.equal(migrations.length, 9)`,affairs stack 進 main 後變 14 就紅了 ——
+  //    而它紅得沒有意義:沒有任何東西壞掉,只是有人正常加了 migration。
+  //    ⛔ 不改成「比對 schema/ 的 .sql 檔數」—— `check-migration-numbering.mjs` 的檔頭明寫
+  //       「真相源是 migrate.ts,不掃 schema 檔名」,那樣寫會違反該模組刻意的設計。
+  //    ⇒ 保留原本的保護意圖（解析真的抓到一份完整清單）:筆數必須等於最後一筆的編號。
+  //       解析截斷或漏抓中間任一筆,這條就紅。
+  assert.ok(migrations.length > 0, "解析不到任何 migration,這條測試在守空氣");
+  const lastNumber = Number(migrations.at(-1).id.match(/^(\d+)_/)[1]);
+  assert.equal(migrations.length, lastNumber);
   assert.deepEqual(validateMigrations(migrations), []);
 });
 
