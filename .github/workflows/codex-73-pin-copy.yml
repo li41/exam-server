@@ -6,6 +6,9 @@ on:
       - codex/73-workflow-pin-stage
     paths:
       - .github/workflows/codex-73-pin-copy.yml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
