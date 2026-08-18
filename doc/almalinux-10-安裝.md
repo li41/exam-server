@@ -152,7 +152,7 @@ command -v node    # ⚠️ 必須是 /usr/bin/node
 正常流程是 CI 打包好 release、機器上只解壓（見 `deploy/README.md`），**那條路不需要 pnpm**。
 
 ```bash
-sudo corepack enable && corepack prepare pnpm@11.10.0 --activate
+sudo corepack enable && corepack prepare pnpm@11.22.0 --activate
 ```
 
 ## 步驟 4：資料庫（原廠 MySQL 或 Percona 二擇一）
