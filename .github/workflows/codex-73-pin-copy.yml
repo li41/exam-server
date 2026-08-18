@@ -1,0 +1,43 @@
+name: Codex 73 Workflow Pin Copy
+
+on:
+  push:
+    branches:
+      - codex/73-workflow-pin-stage
+    paths:
+      - .github/workflows/codex-73-pin-copy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Create exact workflow pin copies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed 's/pnpm@11\.10\.0/pnpm@11.22.0/g' .github/workflows/verify.yml > codex-73-verify.yml.txt
+          sed 's/pnpm@11\.10\.0/pnpm@11.22.0/g' .github/workflows/release.yml > codex-73-release.yml.txt
+
+          if grep -n 'pnpm@11\.10\.0' codex-73-verify.yml.txt codex-73-release.yml.txt; then
+            echo 'stale pnpm pin remains in staged workflow copy' >&2
+            exit 1
+          fi
+
+          grep -n 'pnpm@11\.22\.0' codex-73-verify.yml.txt codex-73-release.yml.txt
+          git diff --no-index -- .github/workflows/verify.yml codex-73-verify.yml.txt || true
+          git diff --no-index -- .github/workflows/release.yml codex-73-release.yml.txt || true
+
+          git config user.name 'ChatGPT Codex Connector'
+          git config user.email 'noreply@openai.com'
+          git add codex-73-verify.yml.txt codex-73-release.yml.txt
+          git commit -m 'chore: stage workflow pin copies'
+          git push origin HEAD:codex/73-workflow-pin-stage
