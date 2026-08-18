@@ -131,7 +131,7 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
     if (dependencies.authenticationService) {
       context.set(
         "identity",
-        await dependencies.authenticationService.authenticate(
+        await dependencies.authendicationService.authenticate(
           bearerToken(context),
         ),
       );
@@ -265,10 +265,7 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
     "/affair-collections",
     zValidator("query", AffairCollectionListQuerySchema, (result, context) => {
       if (!result.success) {
-        return validationError(
-          context,
-          "Invalid affair collection query parameters.",
-        );
+        return validationError(context, "Invalid affair collection query parameters.");
       }
     }),
     async (context) =>
@@ -283,7 +280,7 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
   api.get("/affair-collections/:id", async (context) =>
     context.json(
       await service.getCollection(context.req.param("id"), scopeFor(context)),
-    ),
+   ),
   );
 
   api.post(
@@ -358,15 +355,14 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
 
   api.put(
     "/affair-collections/:id/reference-data",
-    zValidator(
-      "json",
-      ReplaceAffairReferenceDataSchema,
-      (result, context) => {
-        if (!result.success) {
-          return validationError(context, "Invalid affair reference-data payload.");
-        }
-      },
-    ),
+    zValidator("json", ReplaceAffairReferenceDataSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(
+          context,
+          "Invalid affair reference-data payload.",
+        );
+      }
+    }),
     async (context) =>
       context.json(
         await service.replaceReferenceData(
@@ -380,14 +376,14 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
   api.delete("/affair-collections/:id/reference-data", async (context) => {
     await service.replaceReferenceData(
       context.req.param("id"),
-      { rows: [] },
-      scopeFor(context),
-    );
+    { rows: [] },
+    scopeFor(context),
+     );
     return context.body(null, 204);
   });
 
   api.get("/affair-fields", async (context) =>
-    context.json(await service.listFields(scopeFor(context))),
+    context.json(await service.listFields(scopeFor(context)),
   );
 
   api.get("/affair-fields/:id", async (context) =>
@@ -405,10 +401,7 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
     }),
     async (context) =>
       context.json(
-        await service.createField(
-          context.req.valid("json"),
-          scopeFor(context),
-        ),
+        await service.createField(context.req.valid("json"), scopeFor(context)),
         201,
       ),
   );
