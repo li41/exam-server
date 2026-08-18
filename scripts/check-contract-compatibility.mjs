@@ -1,14 +1,18 @@
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { declareSkip } from "./verify-skip.mjs";
 
 const manifestPath = "contracts/api-v1.json";
 const current = JSON.parse(await readFile(manifestPath, "utf8"));
 const baseRef = process.env.CONTRACT_BASE_REF;
 
 if (!baseRef) {
-  console.log(
-    "CONTRACT_BASE_REF is not set; skipping cross-revision compatibility check.",
-  );
+  // ⚠️ 同 check-migration-rollback-compatibility：原本靜靜 exit 0。
+  declareSkip({
+    gate: "API v1 cross-revision contract compatibility",
+    missing: "CONTRACT_BASE_REF (set by CI against the PR base)",
+    impact: `whether ${manifestPath} stayed backward compatible with the base revision`,
+  });
   process.exit(0);
 }
 
@@ -33,9 +37,14 @@ const baselineResult = spawnSync(
   },
 );
 if (baselineResult.status !== 0) {
-  console.log(
-    `No ${manifestPath} exists on ${baseRef}; accepting this PR as the v1 baseline bootstrap.`,
-  );
+  // ⚠️ 第二條靜默路徑（工作單沒提到，本輪掃出來的）：base 上沒有 manifest 就
+  //    「接受為 v1 baseline」—— 那同樣是**沒有做比對**，卻也是 exit 0。
+  declareSkip({
+    gate: "API v1 cross-revision contract compatibility",
+    missing: `${manifestPath} on ${baseRef} (accepted as v1 baseline bootstrap)`,
+    impact:
+      "any backward-compatibility comparison at all — there was nothing to compare against",
+  });
   process.exit(0);
 }
 const baseline = JSON.parse(baselineResult.stdout);
