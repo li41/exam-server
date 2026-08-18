@@ -151,7 +151,7 @@ Authenticated mutation 會寫入 MySQL `audit_events`。Audit persistence 採 du
 
 ```bash
 corepack enable
-corepack prepare pnpm@11.10.0 --activate
+corepack prepare pnpm@11.22.0 --activate
 corepack pnpm install --frozen-lockfile
 corepack pnpm verify
 ```
