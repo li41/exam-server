@@ -115,11 +115,6 @@ const main = async () => {
   const companyMemberRepository = pool
     ? new MySqlCompanyMemberRepository(pool)
     : createInMemoryCompanyMemberRepository();
-  const localBlobStorage = config.fileStorageRoot
-    ? new LocalFileStorage(
-        config.fileStorageRoot,
-        {},
-        pool ? new MySqlFileMetadataStore(pool) : undefined,
   const affairRepository = pool
     ? new MySqlAffairRepository(pool)
     : createInMemoryAffairRepository();
@@ -237,6 +232,13 @@ const main = async () => {
 
   mountCompanyMemberRoutes(app, {
     repository: companyMemberRepository,
+    authenticationService,
+    idempotencyStore,
+    idempotencyTtlSeconds: config.idempotencyTtlSeconds,
+    allowUnauthenticated: !config.production && !authenticationService,
+    logger,
+  });
+
   mountAffairRoutes(app, {
     repository: affairRepository,
     deletionRepository: affairDeletionRepository,
