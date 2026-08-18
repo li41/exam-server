@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   AffairReceiptDetail,
   AffairReceiptListItem,
@@ -17,6 +16,7 @@ import type {
   QuestionBankScope,
 } from "@server-foundation/domain";
 
+const randomUUID = (): string => globalThis.crypto.randomUUID();
 const copy = <T>(value: T): T => structuredClone(value);
 const now = (): string => new Date().toISOString();
 
