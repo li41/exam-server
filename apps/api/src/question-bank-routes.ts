@@ -3,43 +3,63 @@ import { zValidator } from "@hono/zod-validator";
 import {
   API_VERSION,
   API_VERSION_PREFIX,
+  CreateExamineeGroupSchema,
+  CreateExamineeSchema,
   CreateQuestionCategorySchema,
   CreateQuestionClusterSchema,
   CreateQuestionGroupSchema,
   CreateQuestionSchema,
+  CreateTestBookletSchema,
+  DeleteExamineeGroupQuerySchema,
+  DeleteExamineeQuerySchema,
   DeleteQuestionCategoryQuerySchema,
   DeleteQuestionQuerySchema,
   DeleteQuestionStructureQuerySchema,
+  DeleteTestBookletQuerySchema,
+  ExamineeGroupListQuerySchema,
+  ExamineeListQuerySchema,
   LEGACY_API_PREFIX,
   QuestionCategoryListQuerySchema,
   QuestionClusterListQuerySchema,
   QuestionGroupListQuerySchema,
   QuestionListQuerySchema,
+  TestBookletListQuerySchema,
+  UpdateExamineeGroupSchema,
+  UpdateExamineeSchema,
   UpdateQuestionCategorySchema,
   UpdateQuestionClusterSchema,
   UpdateQuestionGroupSchema,
   UpdateQuestionSchema,
+  UpdateTestBookletSchema,
 } from "@server-foundation/api-contracts";
 import type { AuthIdentity } from "@server-foundation/api-contracts";
 import {
   CapabilityMissingError,
   ConflictError,
   DomainError,
+  ExamineeService,
   QuestionBankService,
   QuestionImportService,
   QuestionStructureService,
+  TestBookletService,
   UnauthorizedError,
 } from "@server-foundation/domain";
 import type {
   AuthenticationService,
+  ExamineeRepository,
   IdempotencyStore,
   QuestionBankRepository,
   QuestionImportRepository,
   QuestionStructureRepository,
+  TestBookletRepository,
 } from "@server-foundation/domain";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Logger } from "./logger.js";
+import {
+  examineeImportFingerprintPayload,
+  importExamineeWorkbookFromRequest,
+} from "./examinee-import-handler.js";
 import {
   importQuestionWorkbookFromRequest,
   questionImportFingerprintPayload,
@@ -62,6 +82,8 @@ type Dependencies = {
   repository: QuestionBankRepository;
   importRepository?: QuestionImportRepository;
   structureRepository?: QuestionStructureRepository;
+  bookletRepository?: TestBookletRepository;
+  examineeRepository?: ExamineeRepository;
   authenticationService?: AuthenticationService;
   idempotencyStore?: IdempotencyStore;
   idempotencyTtlSeconds?: number;
@@ -144,7 +166,10 @@ const requestFingerprint = async (
       context.req.method === "POST" &&
       canonicalPath === `${LEGACY_API_PREFIX}/question-import`
         ? await questionImportFingerprintPayload(context.req.raw.clone())
-        : null;
+        : context.req.method === "POST" &&
+            canonicalPath === `${LEGACY_API_PREFIX}/examinee-import`
+          ? await examineeImportFingerprintPayload(context.req.raw.clone())
+          : null;
     hash.update(
       importPayload ?? Buffer.from(await context.req.raw.clone().arrayBuffer()),
     );
@@ -161,6 +186,12 @@ const createQuestionRouter = (dependencies: Dependencies) => {
   const structureService = dependencies.structureRepository
     ? new QuestionStructureService(dependencies.structureRepository)
     : undefined;
+  const bookletService = dependencies.bookletRepository
+    ? new TestBookletService(dependencies.bookletRepository)
+    : undefined;
+  const examineeService = dependencies.examineeRepository
+    ? new ExamineeService(dependencies.examineeRepository)
+    : undefined;
 
   const requireImportService = (): QuestionImportService => {
     if (!importService) {
@@ -174,6 +205,20 @@ const createQuestionRouter = (dependencies: Dependencies) => {
       throw new CapabilityMissingError("question structures");
     }
     return structureService;
+  };
+
+  const requireBookletService = (): TestBookletService => {
+    if (!bookletService) {
+      throw new CapabilityMissingError("test booklets");
+    }
+    return bookletService;
+  };
+
+  const requireExamineeService = (): ExamineeService => {
+    if (!examineeService) {
+      throw new CapabilityMissingError("examinees");
+    }
+    return examineeService;
   };
 
   const authenticate = async (
@@ -308,6 +353,12 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     "/question-clusters/*",
     "/question-groups",
     "/question-groups/*",
+    "/test-booklets",
+    "/test-booklets/*",
+    "/examinee-groups",
+    "/examinee-groups/*",
+    "/examinees",
+    "/examinees/*",
   ]) {
     api.use(path, authenticate);
     api.use(path, enforceIdempotency);
@@ -650,6 +701,282 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     ),
     async (context) => {
       await requireStructureService().softDeleteGroup(
+        context.req.param("id"),
+        context.req.valid("query").version,
+        scopeFor(context),
+      );
+      return context.body(null, 204);
+    },
+  );
+
+  api.get(
+    "/test-booklets",
+    zValidator("query", TestBookletListQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(
+          context,
+          "Invalid test booklet query parameters.",
+        );
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireBookletService().listBooklets(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.get("/test-booklets/:id", async (context) =>
+    context.json(
+      await requireBookletService().getBooklet(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+    ),
+  );
+
+  api.post(
+    "/test-booklets",
+    zValidator("json", CreateTestBookletSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid test booklet payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireBookletService().createBooklet(
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+        201,
+      ),
+  );
+
+  api.patch(
+    "/test-booklets/:id",
+    zValidator("json", UpdateTestBookletSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid test booklet payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireBookletService().updateBooklet(
+          context.req.param("id"),
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.delete(
+    "/test-booklets/:id",
+    zValidator("query", DeleteTestBookletQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "A valid version is required.");
+      }
+    }),
+    async (context) => {
+      await requireBookletService().softDeleteBooklet(
+        context.req.param("id"),
+        context.req.valid("query").version,
+        scopeFor(context),
+      );
+      return context.body(null, 204);
+    },
+  );
+
+  api.post("/test-booklets/:id/duplicate", async (context) =>
+    context.json(
+      await requireBookletService().duplicateBooklet(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+      201,
+    ),
+  );
+
+  api.post(
+    "/examinee-import",
+    authenticate,
+    enforceIdempotency,
+    async (context) => {
+      const result = await importExamineeWorkbookFromRequest(
+        context.req.raw,
+        requireExamineeService(),
+        scopeFor(context),
+      );
+      return result.ok
+        ? context.json(
+            {
+              imported: result.imported,
+              updated: result.updated,
+              errors: result.errors,
+            },
+            201,
+          )
+        : context.json({ imported: 0, updated: 0, errors: result.errors }, 400);
+    },
+  );
+
+  api.get(
+    "/examinee-groups",
+    zValidator("query", ExamineeGroupListQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(
+          context,
+          "Invalid examinee group query parameters.",
+        );
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireExamineeService().listGroups(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.get("/examinee-groups/:id", async (context) =>
+    context.json(
+      await requireExamineeService().getGroup(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+    ),
+  );
+
+  api.post(
+    "/examinee-groups",
+    zValidator("json", CreateExamineeGroupSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid examinee group payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireExamineeService().createGroup(
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+        201,
+      ),
+  );
+
+  api.patch(
+    "/examinee-groups/:id",
+    zValidator("json", UpdateExamineeGroupSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid examinee group payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireExamineeService().updateGroup(
+          context.req.param("id"),
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.delete(
+    "/examinee-groups/:id",
+    zValidator("query", DeleteExamineeGroupQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "A valid version is required.");
+      }
+    }),
+    async (context) => {
+      await requireExamineeService().softDeleteGroup(
+        context.req.param("id"),
+        context.req.valid("query").version,
+        scopeFor(context),
+      );
+      return context.body(null, 204);
+    },
+  );
+
+  api.get(
+    "/examinees",
+    zValidator("query", ExamineeListQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid examinee query parameters.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireExamineeService().listExaminees(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.get("/examinees/by-identifier/:identifier", async (context) =>
+    context.json(
+      await requireExamineeService().findExamineeByIdentifier(
+        context.req.param("identifier"),
+        scopeFor(context),
+      ),
+    ),
+  );
+
+  api.get("/examinees/:id", async (context) =>
+    context.json(
+      await requireExamineeService().getExaminee(
+        context.req.param("id"),
+        scopeFor(context),
+      ),
+    ),
+  );
+
+  api.post(
+    "/examinees",
+    zValidator("json", CreateExamineeSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid examinee payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireExamineeService().createExaminee(
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+        201,
+      ),
+  );
+
+  api.patch(
+    "/examinees/:id",
+    zValidator("json", UpdateExamineeSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "Invalid examinee payload.");
+      }
+    }),
+    async (context) =>
+      context.json(
+        await requireExamineeService().updateExaminee(
+          context.req.param("id"),
+          context.req.valid("json"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  api.delete(
+    "/examinees/:id",
+    zValidator("query", DeleteExamineeQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(context, "A valid version is required.");
+      }
+    }),
+    async (context) => {
+      await requireExamineeService().softDeleteExaminee(
         context.req.param("id"),
         context.req.valid("query").version,
         scopeFor(context),
