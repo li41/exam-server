@@ -189,7 +189,11 @@ export class MySqlAffairRepository implements AffairRepository {
       const cursor = decodeItemCursor(query.cursor);
       if (!cursor) throw new InvalidCursorError();
       predicates.push("(a.updated_at < ? OR (a.updated_at = ? AND a.id < ?))");
-      params.push(new Date(cursor.updatedAt), new Date(cursor.updatedAt), cursor.id);
+      params.push(
+        new Date(cursor.updatedAt),
+        new Date(cursor.updatedAt),
+        cursor.id,
+      );
     }
     const [rows] = await this.pool.execute<AffairRow[]>(
       `SELECT ${affairColumns}
@@ -477,7 +481,11 @@ export class MySqlAffairRepository implements AffairRepository {
       const cursor = decodeItemCursor(query.cursor);
       if (!cursor) throw new InvalidCursorError();
       predicates.push("(s.updated_at < ? OR (s.updated_at = ? AND s.id < ?))");
-      params.push(new Date(cursor.updatedAt), new Date(cursor.updatedAt), cursor.id);
+      params.push(
+        new Date(cursor.updatedAt),
+        new Date(cursor.updatedAt),
+        cursor.id,
+      );
     }
     const [rows] = await this.pool.execute<SchoolRow[]>(
       `SELECT ${schoolColumns}
@@ -581,7 +589,8 @@ export class MySqlAffairRepository implements AffairRepository {
     if (input.schoolCode !== undefined) put("school_code", input.schoolCode);
     if (input.schoolName !== undefined) put("school_name", input.schoolName);
     if (input.testClasses !== undefined) put("test_classes", input.testClasses);
-    if (input.testSessions !== undefined) put("test_sessions", input.testSessions);
+    if (input.testSessions !== undefined)
+      put("test_sessions", input.testSessions);
     if (input.receiptCode !== undefined) put("receipt_code", input.receiptCode);
     if (input.briefingOptions !== undefined) {
       put("briefing_options", encodeJson(input.briefingOptions));

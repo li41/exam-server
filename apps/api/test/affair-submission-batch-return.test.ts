@@ -82,17 +82,12 @@ describe("affair C-wave batch return", () => {
         })
       ).json();
       const ensured = await (
-        await jsonRequest(
-          app,
-          "POST",
-          "/api/v1/affair-submissions/ensure",
-          {
-            affairId: affair.id,
-            collectionId: collection.id,
-            submitterType: "school",
-            schoolId: school.id,
-          },
-        )
+        await jsonRequest(app, "POST", "/api/v1/affair-submissions/ensure", {
+          affairId: affair.id,
+          collectionId: collection.id,
+          submitterType: "school",
+          schoolId: school.id,
+        })
       ).json();
       submissionItems.push({
         id: ensured.item.id,
@@ -130,7 +125,9 @@ describe("affair C-wave batch return", () => {
     expect(await batch.json()).toEqual({ returned: 2, skipped: 1 });
 
     for (const item of submissionItems.slice(0, 2)) {
-      const response = await app.request(`/api/v1/affair-submissions/${item.id}`);
+      const response = await app.request(
+        `/api/v1/affair-submissions/${item.id}`,
+      );
       expect(await response.json()).toMatchObject({
         status: "returned",
         returnReason: "統一退回",

@@ -26,9 +26,7 @@ const mysqlCode = (error: unknown): string | undefined =>
     ? String(error.code)
     : undefined;
 
-export class MySqlAffairDeletionRepository
-  implements AffairDeletionRepository
-{
+export class MySqlAffairDeletionRepository implements AffairDeletionRepository {
   constructor(private readonly pool: Pool) {}
 
   async deleteAffair(
@@ -70,7 +68,9 @@ export class MySqlAffairDeletionRepository
           [id, scope.tenantId, version],
         );
         if (result.affectedRows !== 1) {
-          throw new Error("Affair delete did not affect the locked parent row.");
+          throw new Error(
+            "Affair delete did not affect the locked parent row.",
+          );
         }
         return null;
       });

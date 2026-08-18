@@ -27,9 +27,7 @@ type StoredBinding = Omit<AffairCollectionBinding, "field">;
 const randomUUID = (): string => globalThis.crypto.randomUUID();
 const now = (): string => new Date().toISOString();
 
-export class InMemoryAffairConfigurationRepository
-  implements AffairConfigurationRepository
-{
+export class InMemoryAffairConfigurationRepository implements AffairConfigurationRepository {
   private readonly collections: AffairCollection[] = [];
   private readonly fields: AffairExcelField[] = [];
   private readonly bindings: StoredBinding[] = [];
@@ -181,8 +179,7 @@ export class InMemoryAffairConfigurationRepository
   ): Promise<AffairExcelField> {
     if (
       this.fields.some(
-        (item) =>
-          item.tenantId === scope.tenantId && item.name === input.name,
+        (item) => item.tenantId === scope.tenantId && item.name === input.name,
       )
     ) {
       throw new ConflictError(
@@ -373,8 +370,7 @@ export class InMemoryAffairConfigurationRepository
     return rows
       .filter(
         (row) =>
-          row.tenantId === scope.tenantId &&
-          row.collectionId === collectionId,
+          row.tenantId === scope.tenantId && row.collectionId === collectionId,
       )
       .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
   }
@@ -400,10 +396,7 @@ export class InMemoryAffairConfigurationRepository
       }
       for (const row of input.rows) {
         const keys = Object.keys(row);
-        if (
-          keys.length !== bound.size ||
-          keys.some((key) => !bound.has(key))
-        ) {
+        if (keys.length !== bound.size || keys.some((key) => !bound.has(key))) {
           throw new DomainError(
             "validation_error",
             "Excel reference-data keys must exactly match the bound field ids.",
@@ -414,7 +407,8 @@ export class InMemoryAffairConfigurationRepository
     for (let index = rows.length - 1; index >= 0; index--) {
       const row = rows[index];
       if (
-        row?.tenantId === scope.tenantId && row.collectionId === collectionId
+        row?.tenantId === scope.tenantId &&
+        row.collectionId === collectionId
       ) {
         rows.splice(index, 1);
       }

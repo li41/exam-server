@@ -56,7 +56,8 @@ class InMemoryAffairReceiptRepository implements AffairReceiptRepository {
         (item) =>
           item.tenantId === scope.tenantId &&
           item.affairId === query.affairId &&
-          (!query.submitterType || item.submitterType === query.submitterType) &&
+          (!query.submitterType ||
+            item.submitterType === query.submitterType) &&
           (!query.keyword ||
             item.name.includes(query.keyword) ||
             item.account.includes(query.keyword) ||
@@ -77,7 +78,8 @@ class InMemoryAffairReceiptRepository implements AffairReceiptRepository {
     scope: QuestionBankScope,
   ): Promise<AffairReceiptDetail | null> {
     const item = this.items.find(
-      (candidate) => candidate.id === id && candidate.tenantId === scope.tenantId,
+      (candidate) =>
+        candidate.id === id && candidate.tenantId === scope.tenantId,
     );
     return item ? copy(item) : null;
   }
@@ -95,7 +97,9 @@ class InMemoryAffairReceiptRepository implements AffairReceiptRepository {
           item.account === input.account,
       )
     ) {
-      throw new ConflictError("A receipt already exists for this affair account.");
+      throw new ConflictError(
+        "A receipt already exists for this affair account.",
+      );
     }
     const timestamp = now();
     const item: AffairReceiptDetail = {
@@ -148,7 +152,9 @@ class InMemoryAffairReceiptRepository implements AffairReceiptRepository {
   ): Promise<AffairReceiptDetail> {
     const item = this.require(id, scope);
     if (item.version !== input.version) {
-      throw new ConflictError("affair receipt was modified by another request.");
+      throw new ConflictError(
+        "affair receipt was modified by another request.",
+      );
     }
     const { version: _version, ...patch } = input;
     Object.assign(item, copy(patch));
@@ -198,14 +204,17 @@ class InMemoryAffairReceiptRepository implements AffairReceiptRepository {
     if (index < 0) throw new NotFoundError("affair receipt", id);
     const item = this.items[index] as AffairReceiptDetail;
     if (item.version !== version) {
-      throw new ConflictError("affair receipt was modified by another request.");
+      throw new ConflictError(
+        "affair receipt was modified by another request.",
+      );
     }
     this.items.splice(index, 1);
   }
 
   private require(id: string, scope: QuestionBankScope): AffairReceiptDetail {
     const item = this.items.find(
-      (candidate) => candidate.id === id && candidate.tenantId === scope.tenantId,
+      (candidate) =>
+        candidate.id === id && candidate.tenantId === scope.tenantId,
     );
     if (!item) throw new NotFoundError("affair receipt", id);
     return item;

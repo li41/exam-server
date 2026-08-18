@@ -71,7 +71,9 @@ const validateBusinessRules = (
       receipt.positions.includes("監考或資訊教師") &&
       (!receipt.monitorClasses || receipt.monitorClasses < 1)
     ) {
-      invalid("monitorClasses is required for monitoring/information teachers.");
+      invalid(
+        "monitorClasses is required for monitoring/information teachers.",
+      );
     }
   }
 
@@ -178,7 +180,9 @@ export class AffairReceiptService {
   ): Promise<AffairReceiptDetail> {
     const current = await this.requireReceipt(id, scope);
     if (current.version !== input.version) {
-      throw new ConflictError("affair receipt was modified by another request.");
+      throw new ConflictError(
+        "affair receipt was modified by another request.",
+      );
     }
     const next = { ...current, ...input } as AffairReceiptDetail;
     validateBusinessRules(next);
@@ -219,7 +223,10 @@ export class AffairReceiptService {
   ): Promise<DownloadSource> {
     const receipt = await this.requireReceipt(id, scope);
     await this.audit("view", receipt.affairId, receipt.id, 1, actor, scope);
-    return this.requireBlobStorage().getDownload(receipt.bankbookFileId, fileScope);
+    return this.requireBlobStorage().getDownload(
+      receipt.bankbookFileId,
+      fileScope,
+    );
   }
 
   async deleteReceipt(
@@ -231,7 +238,9 @@ export class AffairReceiptService {
   ): Promise<void> {
     const receipt = await this.requireReceipt(id, scope);
     if (receipt.version !== version) {
-      throw new ConflictError("affair receipt was modified by another request.");
+      throw new ConflictError(
+        "affair receipt was modified by another request.",
+      );
     }
 
     await this.audit("delete", receipt.affairId, receipt.id, 1, actor, scope);
@@ -276,7 +285,10 @@ export class AffairReceiptService {
 
     // BlobStorage owns the existing owner/admin authorization and physical-file
     // existence checks. Opening then cancelling the private stream reuses both.
-    const source = await this.requireBlobStorage().getDownload(fileId, fileScope);
+    const source = await this.requireBlobStorage().getDownload(
+      fileId,
+      fileScope,
+    );
     await source.stream.cancel().catch(() => undefined);
   }
 

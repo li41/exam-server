@@ -12,9 +12,7 @@ describe("affair receipt sensitive-field protector", () => {
 
     expect(first).not.toBe(second);
     expect(protector.unprotect(first)).toBe("A123456789");
-    expect(protector.digest("A123456789")).toBe(
-      protector.digest("A123456789"),
-    );
+    expect(protector.digest("A123456789")).toBe(protector.digest("A123456789"));
     expect(protector.digest("A123456789")).not.toBe(
       protector.digest("B120863514"),
     );
@@ -25,7 +23,9 @@ describe("affair receipt sensitive-field protector", () => {
     const receipt = new AesGcmAffairReceiptProtector(masterKey);
     const examinee = new AesGcmExamineeCredentialProtector(masterKey);
 
-    expect(receipt.digest("same-value")).not.toBe(examinee.digest("same-value"));
+    expect(receipt.digest("same-value")).not.toBe(
+      examinee.digest("same-value"),
+    );
     expect(receipt.protect("same-value")).not.toContain("same-value");
   });
 });

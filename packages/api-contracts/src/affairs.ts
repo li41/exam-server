@@ -73,13 +73,16 @@ const AffairWriteFieldsBaseSchema = z.object({
 export const CreateAffairSchema = AffairWriteFieldsBaseSchema.extend({
   description: AffairWriteFieldsBaseSchema.shape.description.default(null),
   status: AffairWriteFieldsBaseSchema.shape.status.default("enabled"),
-  cityLoginStart: AffairWriteFieldsBaseSchema.shape.cityLoginStart.default(null),
+  cityLoginStart:
+    AffairWriteFieldsBaseSchema.shape.cityLoginStart.default(null),
   cityLoginEnd: AffairWriteFieldsBaseSchema.shape.cityLoginEnd.default(null),
   schoolLoginStart:
     AffairWriteFieldsBaseSchema.shape.schoolLoginStart.default(null),
-  schoolLoginEnd: AffairWriteFieldsBaseSchema.shape.schoolLoginEnd.default(null),
+  schoolLoginEnd:
+    AffairWriteFieldsBaseSchema.shape.schoolLoginEnd.default(null),
   feeCityContact: AffairWriteFieldsBaseSchema.shape.feeCityContact.default(0),
-  feeSchoolContact: AffairWriteFieldsBaseSchema.shape.feeSchoolContact.default(0),
+  feeSchoolContact:
+    AffairWriteFieldsBaseSchema.shape.feeSchoolContact.default(0),
   feeTeacherSetup: AffairWriteFieldsBaseSchema.shape.feeTeacherSetup.default(0),
   feeTeacherMonitor1:
     AffairWriteFieldsBaseSchema.shape.feeTeacherMonitor1.default(0),
@@ -155,7 +158,10 @@ export const AffairSchoolSchema = z.object({
   schoolName: z.string().min(1).max(100),
   testClasses: z.union([z.literal(1), z.literal(2)]),
   testSessions: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-  receiptCode: z.string().regex(/^\d{3}$/).nullable(),
+  receiptCode: z
+    .string()
+    .regex(/^\d{3}$/)
+    .nullable(),
   briefingOptions: z.array(z.string().min(1)).nullable(),
   password: z.string().min(1).max(50),
   contacts: NullableJsonSchema,
@@ -173,22 +179,29 @@ const AffairSchoolWriteFieldsBaseSchema = z.object({
   schoolName: z.string().trim().min(1).max(100),
   testClasses: z.union([z.literal(1), z.literal(2)]),
   testSessions: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-  receiptCode: z.string().trim().regex(/^\d{3}$/).nullable(),
+  receiptCode: z
+    .string()
+    .trim()
+    .regex(/^\d{3}$/)
+    .nullable(),
   briefingOptions: z.array(z.string().trim().min(1).max(50)).max(20).nullable(),
   password: z.string().trim().max(50).nullable(),
   status: AffairStatusSchema,
 });
 
-export const CreateAffairSchoolSchema = AffairSchoolWriteFieldsBaseSchema.extend({
-  affairId: z.string().trim().min(1),
-  testClasses: AffairSchoolWriteFieldsBaseSchema.shape.testClasses.default(1),
-  testSessions: AffairSchoolWriteFieldsBaseSchema.shape.testSessions.default(1),
-  receiptCode: AffairSchoolWriteFieldsBaseSchema.shape.receiptCode.default(null),
-  briefingOptions:
-    AffairSchoolWriteFieldsBaseSchema.shape.briefingOptions.default(null),
-  password: AffairSchoolWriteFieldsBaseSchema.shape.password.default(null),
-  status: AffairSchoolWriteFieldsBaseSchema.shape.status.default("enabled"),
-});
+export const CreateAffairSchoolSchema =
+  AffairSchoolWriteFieldsBaseSchema.extend({
+    affairId: z.string().trim().min(1),
+    testClasses: AffairSchoolWriteFieldsBaseSchema.shape.testClasses.default(1),
+    testSessions:
+      AffairSchoolWriteFieldsBaseSchema.shape.testSessions.default(1),
+    receiptCode:
+      AffairSchoolWriteFieldsBaseSchema.shape.receiptCode.default(null),
+    briefingOptions:
+      AffairSchoolWriteFieldsBaseSchema.shape.briefingOptions.default(null),
+    password: AffairSchoolWriteFieldsBaseSchema.shape.password.default(null),
+    status: AffairSchoolWriteFieldsBaseSchema.shape.status.default("enabled"),
+  });
 
 export const UpdateAffairSchoolSchema =
   AffairSchoolWriteFieldsBaseSchema.partial().extend({

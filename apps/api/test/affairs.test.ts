@@ -59,7 +59,11 @@ describe("affair A-wave API", () => {
       version: 2,
     });
 
-    const initialized = await jsonPost(app, "/api/v1/affair-cities/initialize", {});
+    const initialized = await jsonPost(
+      app,
+      "/api/v1/affair-cities/initialize",
+      {},
+    );
     expect(initialized.status).toBe(201);
     const cityResult = await initialized.json();
     expect(cityResult.created).toBe(22);
@@ -71,13 +75,19 @@ describe("affair A-wave API", () => {
       password: "EDU01",
     });
 
-    const initializedAgain = await jsonPost(app, "/api/v1/affair-cities/initialize", {});
+    const initializedAgain = await jsonPost(
+      app,
+      "/api/v1/affair-cities/initialize",
+      {},
+    );
     expect((await initializedAgain.json()).created).toBe(0);
   });
 
   it("enforces PHP school validation and unique code+level inside one affair", async () => {
     const app = createTestApp();
-    const affair = await (await jsonPost(app, "/api/v1/affairs", { name: "A" })).json();
+    const affair = await (
+      await jsonPost(app, "/api/v1/affairs", { name: "A" })
+    ).json();
 
     const school = await jsonPost(app, "/api/v1/affair-schools", {
       affairId: affair.id,

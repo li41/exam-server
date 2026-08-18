@@ -1,10 +1,7 @@
 import type { QuestionBankScope } from "./question-bank-repository.js";
 
 export type AffairDeleteBlockerKind =
-  | "schools"
-  | "submissions"
-  | "receipts"
-  | "collections";
+  "schools" | "submissions" | "receipts" | "collections";
 
 export type AffairDeleteBlocker = {
   kind: AffairDeleteBlockerKind;

@@ -14,9 +14,15 @@ import type {
 import type { QuestionBankScope } from "./question-bank-repository.js";
 
 export interface AffairRepository {
-  listAffairs(query: AffairListQuery, scope: QuestionBankScope): Promise<Page<Affair>>;
+  listAffairs(
+    query: AffairListQuery,
+    scope: QuestionBankScope,
+  ): Promise<Page<Affair>>;
   getAffair(id: string, scope: QuestionBankScope): Promise<Affair | null>;
-  createAffair(input: CreateAffairInput, scope: QuestionBankScope): Promise<Affair>;
+  createAffair(
+    input: CreateAffairInput,
+    scope: QuestionBankScope,
+  ): Promise<Affair>;
   updateAffair(
     id: string,
     input: UpdateAffairInput,

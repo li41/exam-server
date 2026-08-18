@@ -113,9 +113,7 @@ const isDuplicate = (error: unknown): boolean =>
   "code" in error &&
   error.code === "ER_DUP_ENTRY";
 
-export class MySqlAffairSubmissionRepository
-  implements AffairSubmissionRepository
-{
+export class MySqlAffairSubmissionRepository implements AffairSubmissionRepository {
   constructor(private readonly pool: Pool) {}
 
   async listSubmissions(
@@ -135,9 +133,7 @@ export class MySqlAffairSubmissionRepository
     if (query.cursor) {
       const cursor = decodeItemCursor(query.cursor);
       if (!cursor) throw new InvalidCursorError();
-      predicates.push(
-        "(s.updated_at < ? OR (s.updated_at = ? AND s.id < ?))",
-      );
+      predicates.push("(s.updated_at < ? OR (s.updated_at = ? AND s.id < ?))");
       params.push(
         new Date(cursor.updatedAt),
         new Date(cursor.updatedAt),
@@ -344,7 +340,9 @@ export class MySqlAffairSubmissionRepository
           "Only submitted data can be returned.",
         );
       }
-      throw new Error("Affair submission return did not affect the expected row.");
+      throw new Error(
+        "Affair submission return did not affect the expected row.",
+      );
     }
     return this.requireSubmission(id, scope);
   }
@@ -410,12 +408,7 @@ export class MySqlAffairSubmissionRepository
        WHERE id = ? AND tenant_id = ? AND affair_id = ?
          AND target = ? AND type <> 'receipt'
        LIMIT 1`,
-      [
-        input.collectionId,
-        scope.tenantId,
-        input.affairId,
-        input.submitterType,
-      ],
+      [input.collectionId, scope.tenantId, input.affairId, input.submitterType],
     );
     if (!collections[0]) {
       throw new NotFoundError("affair collection", input.collectionId);
@@ -495,7 +488,13 @@ export class MySqlAffairSubmissionRepository
             id, tenant_id, submission_id, field_id, value
           ) VALUES (?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE value = VALUES(value)`,
-          [randomUUID(), scope.tenantId, current.id, field.fieldId, field.value],
+          [
+            randomUUID(),
+            scope.tenantId,
+            current.id,
+            field.fieldId,
+            field.value,
+          ],
         );
       }
       return;
@@ -591,7 +590,9 @@ export class MySqlAffairSubmissionRepository
         "affair submission was modified by another request.",
       );
     }
-    throw new Error("Affair submission operation did not affect the expected row.");
+    throw new Error(
+      "Affair submission operation did not affect the expected row.",
+    );
   }
 
   private async requireSubmission(

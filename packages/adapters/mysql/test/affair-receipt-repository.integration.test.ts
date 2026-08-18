@@ -164,12 +164,18 @@ describe("MySqlAffairReceiptRepository security boundaries", () => {
   });
 
   it("rejects cross-tenant reads and cross-tenant school ownership at repository and FK layers", async () => {
-    const affairA = await affairs.createAffair(affairInput("A affair"), tenantA);
+    const affairA = await affairs.createAffair(
+      affairInput("A affair"),
+      tenantA,
+    );
     const schoolA = await affairs.createSchool(
       schoolInput(affairA.id, "A001"),
       tenantA,
     );
-    const affairB = await affairs.createAffair(affairInput("B affair"), tenantB);
+    const affairB = await affairs.createAffair(
+      affairInput("B affair"),
+      tenantB,
+    );
     const schoolB = await affairs.createSchool(
       schoolInput(affairB.id, "B001"),
       tenantB,

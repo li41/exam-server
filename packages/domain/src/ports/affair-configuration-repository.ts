@@ -33,7 +33,10 @@ export interface AffairConfigurationRepository {
   ): Promise<AffairCollection>;
 
   listFields(scope: QuestionBankScope): Promise<AffairExcelField[]>;
-  getField(id: string, scope: QuestionBankScope): Promise<AffairExcelField | null>;
+  getField(
+    id: string,
+    scope: QuestionBankScope,
+  ): Promise<AffairExcelField | null>;
   createField(
     input: CreateAffairExcelFieldInput,
     scope: QuestionBankScope,

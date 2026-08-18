@@ -317,7 +317,10 @@ describe("MySqlAffairDeletionRepository", () => {
   });
 
   it("deletes the affair when no blockers exist", async () => {
-    const affair = await affairs.createAffair(affairInput("deletable"), tenantA);
+    const affair = await affairs.createAffair(
+      affairInput("deletable"),
+      tenantA,
+    );
     await expect(
       deletion.deleteAffair(affair.id, affair.version, tenantA),
     ).resolves.toBeNull();

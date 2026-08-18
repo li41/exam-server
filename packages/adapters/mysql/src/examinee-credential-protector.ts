@@ -28,7 +28,10 @@ export class AesGcmScopedProtector implements SensitiveFieldProtector {
   private readonly lookupKey: Buffer;
   private readonly aad: Buffer;
 
-  constructor(masterKey: Buffer, private readonly scope: string) {
+  constructor(
+    masterKey: Buffer,
+    private readonly scope: string,
+  ) {
     if (masterKey.length !== 32) {
       throw new Error("Sensitive-data master key must be exactly 32 bytes.");
     }

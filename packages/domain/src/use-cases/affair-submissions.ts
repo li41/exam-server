@@ -98,7 +98,8 @@ const mergedFormFields = (
 ): AffairSubmissionFieldValue[] => {
   const merged = new Map<string, string>();
   if (current.payload.kind === "form") {
-    for (const field of current.payload.fields) merged.set(field.fieldId, field.value);
+    for (const field of current.payload.fields)
+      merged.set(field.fieldId, field.value);
   }
   for (const field of incoming) merged.set(field.fieldId, field.value);
   return Array.from(merged, ([fieldId, value]) => ({ fieldId, value }));
@@ -119,7 +120,8 @@ export class AffairSubmissionService {
       query.collectionId,
       scope,
     );
-    if (!collection) throw new NotFoundError("affair collection", query.collectionId);
+    if (!collection)
+      throw new NotFoundError("affair collection", query.collectionId);
     return this.repository.listSubmissions(query, scope);
   }
 

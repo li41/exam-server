@@ -7,7 +7,11 @@ import type {
   Page,
   SaveAffairSubmissionInput,
 } from "@server-foundation/api-contracts";
-import { ConflictError, DomainError, NotFoundError } from "@server-foundation/domain";
+import {
+  ConflictError,
+  DomainError,
+  NotFoundError,
+} from "@server-foundation/domain";
 import type {
   AffairConfigurationRepository,
   AffairSubmissionRepository,
@@ -24,9 +28,7 @@ const copy = (item: StoredSubmission): AffairSubmissionDetail =>
 class InMemoryAffairSubmissionRepository implements AffairSubmissionRepository {
   private readonly items: StoredSubmission[] = [];
 
-  constructor(
-    private readonly configurations: AffairConfigurationRepository,
-  ) {}
+  constructor(private readonly configurations: AffairConfigurationRepository) {}
 
   async listSubmissions(
     query: AffairSubmissionListQuery,
@@ -83,7 +85,8 @@ class InMemoryAffairSubmissionRepository implements AffairSubmissionRepository {
       input.collectionId,
       scope,
     );
-    if (!collection) throw new NotFoundError("affair collection", input.collectionId);
+    if (!collection)
+      throw new NotFoundError("affair collection", input.collectionId);
     if (collection.type === "receipt") {
       throw new DomainError(
         "validation_error",

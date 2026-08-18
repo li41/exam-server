@@ -12,9 +12,7 @@ export type InMemoryAffairDeletionRecord = {
   version: number;
 };
 
-export class InMemoryAffairDeletionRepository
-  implements AffairDeletionRepository
-{
+export class InMemoryAffairDeletionRepository implements AffairDeletionRepository {
   private readonly affairs = new Map<string, InMemoryAffairDeletionRecord>();
   private readonly blockers = new Map<AffairDeleteBlockerKind, number>();
 

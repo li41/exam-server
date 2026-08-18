@@ -156,9 +156,7 @@ const validationError = (message: string): never => {
   throw new DomainError("validation_error", message);
 };
 
-export class MySqlAffairConfigurationRepository
-  implements AffairConfigurationRepository
-{
+export class MySqlAffairConfigurationRepository implements AffairConfigurationRepository {
   constructor(private readonly pool: Pool) {}
 
   async listCollections(
@@ -239,7 +237,9 @@ export class MySqlAffairConfigurationRepository
     );
     const collection = await this.getCollection(id, scope);
     if (!collection) {
-      throw new Error("Affair collection insert succeeded but could not be read.");
+      throw new Error(
+        "Affair collection insert succeeded but could not be read.",
+      );
     }
     return collection;
   }
@@ -470,7 +470,9 @@ export class MySqlAffairConfigurationRepository
         true,
       );
       if (collection.type !== "form" && collection.type !== "excel") {
-        validationError("Only form and excel collections support field bindings.");
+        validationError(
+          "Only form and excel collections support field bindings.",
+        );
       }
       if (collection.type !== "form" && input.layout !== undefined) {
         validationError("Only form collections may define a layout.");

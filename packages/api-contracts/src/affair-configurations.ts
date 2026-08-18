@@ -32,10 +32,26 @@ export const AffairExcelFieldValidationSchema = z
     max: z.number().nullable().optional(),
     min_length: z.number().int().nonnegative().nullable().optional(),
     max_length: z.number().int().nonnegative().nullable().optional(),
-    min_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-    max_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-    min_time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
-    max_time: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+    min_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    max_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable()
+      .optional(),
+    min_time: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
+    max_time: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/)
+      .nullable()
+      .optional(),
     pattern: z.string().max(2000).nullable().optional(),
     pattern_desc: z.string().max(500).nullable().optional(),
   })
@@ -116,38 +132,42 @@ const AffairExcelFieldWriteBaseSchema = z
   })
   .strict();
 
-export const CreateAffairExcelFieldSchema = AffairExcelFieldWriteBaseSchema.extend({
-  description: AffairExcelFieldWriteBaseSchema.shape.description.default(null),
-  dataType: AffairExcelFieldWriteBaseSchema.shape.dataType.default("text"),
-  isRequired: AffairExcelFieldWriteBaseSchema.shape.isRequired.default(false),
-  validation: AffairExcelFieldWriteBaseSchema.shape.validation.default(null),
-  selectOptions: AffairExcelFieldWriteBaseSchema.shape.selectOptions.default(null),
-  sortOrder: AffairExcelFieldWriteBaseSchema.shape.sortOrder.default(0),
-})
-  .strict()
-  .superRefine((value, context) => {
-    if (
-      value.dataType === "select" &&
-      (!value.selectOptions || value.selectOptions.length === 0)
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["selectOptions"],
-        message: "Select fields require at least one option.",
-      });
-    }
-    if (value.dataType !== "select" && value.selectOptions !== null) {
-      context.addIssue({
-        code: "custom",
-        path: ["selectOptions"],
-        message: "Only select fields may define selectOptions.",
-      });
-    }
-  });
+export const CreateAffairExcelFieldSchema =
+  AffairExcelFieldWriteBaseSchema.extend({
+    description:
+      AffairExcelFieldWriteBaseSchema.shape.description.default(null),
+    dataType: AffairExcelFieldWriteBaseSchema.shape.dataType.default("text"),
+    isRequired: AffairExcelFieldWriteBaseSchema.shape.isRequired.default(false),
+    validation: AffairExcelFieldWriteBaseSchema.shape.validation.default(null),
+    selectOptions:
+      AffairExcelFieldWriteBaseSchema.shape.selectOptions.default(null),
+    sortOrder: AffairExcelFieldWriteBaseSchema.shape.sortOrder.default(0),
+  })
+    .strict()
+    .superRefine((value, context) => {
+      if (
+        value.dataType === "select" &&
+        (!value.selectOptions || value.selectOptions.length === 0)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["selectOptions"],
+          message: "Select fields require at least one option.",
+        });
+      }
+      if (value.dataType !== "select" && value.selectOptions !== null) {
+        context.addIssue({
+          code: "custom",
+          path: ["selectOptions"],
+          message: "Only select fields may define selectOptions.",
+        });
+      }
+    });
 
-export const UpdateAffairExcelFieldSchema = AffairExcelFieldWriteBaseSchema.partial()
-  .extend({ version: z.number().int().positive() })
-  .strict();
+export const UpdateAffairExcelFieldSchema =
+  AffairExcelFieldWriteBaseSchema.partial()
+    .extend({ version: z.number().int().positive() })
+    .strict();
 
 export const DeleteAffairExcelFieldQuerySchema = z
   .object({ version: z.coerce.number().int().positive() })
@@ -202,7 +222,9 @@ export const ReplaceAffairReferenceDataSchema = z
   .strict();
 
 export type AffairCollectionType = z.infer<typeof AffairCollectionTypeSchema>;
-export type AffairCollectionTarget = z.infer<typeof AffairCollectionTargetSchema>;
+export type AffairCollectionTarget = z.infer<
+  typeof AffairCollectionTargetSchema
+>;
 export type AffairCollectionSettings = z.infer<
   typeof AffairCollectionSettingsSchema
 >;

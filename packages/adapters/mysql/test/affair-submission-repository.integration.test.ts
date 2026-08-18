@@ -107,8 +107,14 @@ const cleanup = async (): Promise<void> => {
     "DELETE FROM affair_excel_fields WHERE tenant_id IN (?, ?)",
     tenants,
   );
-  await pool.execute("DELETE FROM affair_schools WHERE tenant_id IN (?, ?)", tenants);
-  await pool.execute("DELETE FROM affair_cities WHERE tenant_id IN (?, ?)", tenants);
+  await pool.execute(
+    "DELETE FROM affair_schools WHERE tenant_id IN (?, ?)",
+    tenants,
+  );
+  await pool.execute(
+    "DELETE FROM affair_cities WHERE tenant_id IN (?, ?)",
+    tenants,
+  );
   await pool.execute("DELETE FROM affairs WHERE tenant_id IN (?, ?)", tenants);
 };
 
@@ -125,7 +131,10 @@ afterAll(async () => {
 describe("MySqlAffairSubmissionRepository tenant isolation", () => {
   it("rejects foreign-tenant fields both in repository writes and direct child inserts", async () => {
     const affair = await affairs.createAffair(affairInput("A affair"), tenantA);
-    const school = await affairs.createSchool(schoolInput(affair.id, "A001"), tenantA);
+    const school = await affairs.createSchool(
+      schoolInput(affair.id, "A001"),
+      tenantA,
+    );
     const collection = await configurations.createCollection(
       {
         affairId: affair.id,
@@ -136,8 +145,14 @@ describe("MySqlAffairSubmissionRepository tenant isolation", () => {
       },
       tenantA,
     );
-    const localField = await configurations.createField(fieldInput("A field"), tenantA);
-    const foreignField = await configurations.createField(fieldInput("B field"), tenantB);
+    const localField = await configurations.createField(
+      fieldInput("A field"),
+      tenantA,
+    );
+    const foreignField = await configurations.createField(
+      fieldInput("B field"),
+      tenantB,
+    );
     await configurations.replaceBindings(
       collection.id,
       { bindings: [{ fieldId: localField.id, isRequired: false }] },
@@ -199,13 +214,22 @@ describe("MySqlAffairSubmissionRepository tenant isolation", () => {
     ).resolves.toMatchObject({
       status: "draft",
       version: 2,
-      payload: { kind: "form", fields: [{ fieldId: localField.id, value: "local" }] },
+      payload: {
+        kind: "form",
+        fields: [{ fieldId: localField.id, value: "local" }],
+      },
     });
   });
 
   it("enforces tenant-qualified owners and the school/city XOR at the database boundary", async () => {
-    const localAffair = await affairs.createAffair(affairInput("A affair"), tenantA);
-    const foreignAffair = await affairs.createAffair(affairInput("B affair"), tenantB);
+    const localAffair = await affairs.createAffair(
+      affairInput("A affair"),
+      tenantA,
+    );
+    const foreignAffair = await affairs.createAffair(
+      affairInput("B affair"),
+      tenantB,
+    );
     const localSchool = await affairs.createSchool(
       schoolInput(localAffair.id, "A002"),
       tenantA,

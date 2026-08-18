@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  AffairReceiptPositionSchema,
-} from "@server-foundation/api-contracts";
+import { AffairReceiptPositionSchema } from "@server-foundation/api-contracts";
 import type {
   AffairReceiptDetail,
   AffairReceiptListItem,
@@ -87,8 +85,16 @@ const detailColumns = `${safeColumns},
   r.transport_dest_station`;
 
 const toIso = (value: Date | string): string => {
-  const date = value instanceof Date ? value : new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value.replace(" ", "T") : `${value.replace(" ", "T")}Z`);
-  if (Number.isNaN(date.getTime())) throw new Error("MySQL returned an invalid affair receipt date.");
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(
+          /[zZ]|[+-]\d\d:?\d\d$/.test(value)
+            ? value.replace(" ", "T")
+            : `${value.replace(" ", "T")}Z`,
+        );
+  if (Number.isNaN(date.getTime()))
+    throw new Error("MySQL returned an invalid affair receipt date.");
   return date.toISOString();
 };
 
@@ -99,7 +105,10 @@ const parsePositions = (value: unknown): AffairReceiptListItem["positions"] => {
 };
 
 const isDuplicate = (error: unknown): boolean =>
-  typeof error === "object" && error !== null && "code" in error && error.code === "ER_DUP_ENTRY";
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  error.code === "ER_DUP_ENTRY";
 
 const normalizeIdNumber = (value: string): string => value.trim().toUpperCase();
 
@@ -151,14 +160,24 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
       params.push(query.submitterType);
     }
     if (query.keyword) {
-      predicates.push("(r.name LIKE ? OR r.account LIKE ? OR r.id_number_bidx = ?)");
-      params.push(`%${query.keyword}%`, `%${query.keyword}%`, this.protector.digest(normalizeIdNumber(query.keyword)));
+      predicates.push(
+        "(r.name LIKE ? OR r.account LIKE ? OR r.id_number_bidx = ?)",
+      );
+      params.push(
+        `%${query.keyword}%`,
+        `%${query.keyword}%`,
+        this.protector.digest(normalizeIdNumber(query.keyword)),
+      );
     }
     if (query.cursor) {
       const cursor = decodeItemCursor(query.cursor);
       if (!cursor) throw new InvalidCursorError();
       predicates.push("(r.updated_at < ? OR (r.updated_at = ? AND r.id < ?))");
-      params.push(new Date(cursor.updatedAt), new Date(cursor.updatedAt), cursor.id);
+      params.push(
+        new Date(cursor.updatedAt),
+        new Date(cursor.updatedAt),
+        cursor.id,
+      );
     }
     const [rows] = await this.pool.execute<SafeReceiptRow[]>(
       `SELECT ${safeColumns}
@@ -175,13 +194,19 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
       page: {
         nextCursor:
           rows.length > query.limit && last
-            ? encodeItemCursor({ updatedAt: toIso(last.updated_at), id: last.id })
+            ? encodeItemCursor({
+                updatedAt: toIso(last.updated_at),
+                id: last.id,
+              })
             : null,
       },
     };
   }
 
-  async getReceipt(id: string, scope: QuestionBankScope): Promise<AffairReceiptDetail | null> {
+  async getReceipt(
+    id: string,
+    scope: QuestionBankScope,
+  ): Promise<AffairReceiptDetail | null> {
     const [rows] = await this.pool.execute<DetailReceiptRow[]>(
       `SELECT ${detailColumns}
        FROM affair_receipts r
@@ -256,12 +281,15 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
       );
     } catch (error) {
       if (isDuplicate(error)) {
-        throw new ConflictError("A receipt already exists for this affair account.");
+        throw new ConflictError(
+          "A receipt already exists for this affair account.",
+        );
       }
       throw error;
     }
     const created = await this.getReceipt(id, scope);
-    if (!created) throw new Error("Affair receipt insert succeeded but could not be read.");
+    if (!created)
+      throw new Error("Affair receipt insert succeeded but could not be read.");
     return created;
   }
 
@@ -272,24 +300,24 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
   ): Promise<AffairReceiptDetail> {
     const assignments: string[] = [];
     const params: SqlValue[] = [];
-    for (const [key, column] of Object.entries(encryptedUpdateColumns) as Array<[
-      keyof typeof encryptedUpdateColumns,
-      string,
-    ]>) {
+    for (const [key, column] of Object.entries(encryptedUpdateColumns) as Array<
+      [keyof typeof encryptedUpdateColumns, string]
+    >) {
       const value = input[key as keyof UpdateAffairReceiptInput];
       if (value !== undefined) {
         assignments.push(`${column} = ?`);
-        params.push(value === null ? null : this.protector.protect(String(value)));
+        params.push(
+          value === null ? null : this.protector.protect(String(value)),
+        );
         if (key === "idNumber") {
           assignments.push("id_number_bidx = ?");
           params.push(this.protector.digest(normalizeIdNumber(String(value))));
         }
       }
     }
-    for (const [key, column] of Object.entries(plainUpdateColumns) as Array<[
-      keyof typeof plainUpdateColumns,
-      string,
-    ]>) {
+    for (const [key, column] of Object.entries(plainUpdateColumns) as Array<
+      [keyof typeof plainUpdateColumns, string]
+    >) {
       const value = input[key as keyof UpdateAffairReceiptInput];
       if (value !== undefined) {
         assignments.push(`${column} = ?`);
@@ -309,7 +337,8 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
        WHERE id = ? AND tenant_id = ? AND version = ?`,
       params,
     );
-    if (result.affectedRows === 0) await this.throwVersionFailure(id, input.version, scope);
+    if (result.affectedRows === 0)
+      await this.throwVersionFailure(id, input.version, scope);
     return this.requireReceipt(id, scope);
   }
 
@@ -323,7 +352,11 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
        FROM affair_receipts r
        WHERE r.tenant_id = ? AND r.affair_id = ? AND r.id_number_bidx = ?
        ORDER BY r.created_at DESC LIMIT 1`,
-      [scope.tenantId, affairId, this.protector.digest(normalizeIdNumber(idNumber))],
+      [
+        scope.tenantId,
+        affairId,
+        this.protector.digest(normalizeIdNumber(idNumber)),
+      ],
     );
     return rows[0] ? this.toDetail(rows[0]) : null;
   }
@@ -348,15 +381,23 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
     return rows.map((row) => this.toDetail(row));
   }
 
-  async deleteReceipt(id: string, version: number, scope: QuestionBankScope): Promise<void> {
+  async deleteReceipt(
+    id: string,
+    version: number,
+    scope: QuestionBankScope,
+  ): Promise<void> {
     const [result] = await this.pool.execute<ResultSetHeader>(
       "DELETE FROM affair_receipts WHERE id = ? AND tenant_id = ? AND version = ?",
       [id, scope.tenantId, version],
     );
-    if (result.affectedRows === 0) await this.throwVersionFailure(id, version, scope);
+    if (result.affectedRows === 0)
+      await this.throwVersionFailure(id, version, scope);
   }
 
-  private async assertParents(input: CreateAffairReceiptInput, scope: QuestionBankScope): Promise<void> {
+  private async assertParents(
+    input: CreateAffairReceiptInput,
+    scope: QuestionBankScope,
+  ): Promise<void> {
     const [affairs] = await this.pool.execute<IdRow[]>(
       "SELECT id FROM affairs WHERE id = ? AND tenant_id = ? LIMIT 1",
       [input.affairId, scope.tenantId],
@@ -409,10 +450,12 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
       account: row.account,
       name: row.name,
       positions: parsePositions(row.positions),
-      monitorClasses: row.monitor_classes === null ? null : Number(row.monitor_classes),
+      monitorClasses:
+        row.monitor_classes === null ? null : Number(row.monitor_classes),
       briefingRegion: row.briefing_region,
       transportType: row.transport_type,
-      transportFee: row.transport_fee === null ? null : Number(row.transport_fee),
+      transportFee:
+        row.transport_fee === null ? null : Number(row.transport_fee),
       agreed: Boolean(row.agreed),
       version: Number(row.version),
       createdAt: toIso(row.created_at),
@@ -425,11 +468,15 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
       ...this.toListItem(row),
       jobTitle: this.protector.unprotect(row.job_title),
       idNumber: this.protector.unprotect(row.id_number),
-      residentCert: row.resident_cert === null ? null : this.protector.unprotect(row.resident_cert),
+      residentCert:
+        row.resident_cert === null
+          ? null
+          : this.protector.unprotect(row.resident_cert),
       taxId: row.tax_id === null ? null : this.protector.unprotect(row.tax_id),
       phoneArea: this.protector.unprotect(row.phone_area),
       phoneNumber: this.protector.unprotect(row.phone_number),
-      phoneExt: row.phone_ext === null ? null : this.protector.unprotect(row.phone_ext),
+      phoneExt:
+        row.phone_ext === null ? null : this.protector.unprotect(row.phone_ext),
       mobile: this.protector.unprotect(row.mobile),
       email: this.protector.unprotect(row.email),
       addrCity: this.protector.unprotect(row.addr_city),
@@ -445,22 +492,33 @@ export class MySqlAffairReceiptRepository implements AffairReceiptRepository {
     };
   }
 
-  private async requireReceipt(id: string, scope: QuestionBankScope): Promise<AffairReceiptDetail> {
+  private async requireReceipt(
+    id: string,
+    scope: QuestionBankScope,
+  ): Promise<AffairReceiptDetail> {
     const receipt = await this.getReceipt(id, scope);
     if (!receipt) throw new NotFoundError("affair receipt", id);
     return receipt;
   }
 
-  private async throwVersionFailure(id: string, version: number, scope: QuestionBankScope): Promise<never> {
+  private async throwVersionFailure(
+    id: string,
+    version: number,
+    scope: QuestionBankScope,
+  ): Promise<never> {
     const [rows] = await this.pool.execute<VersionRow[]>(
       "SELECT version FROM affair_receipts WHERE id = ? AND tenant_id = ? LIMIT 1",
       [id, scope.tenantId],
     );
     if (!rows[0]) throw new NotFoundError("affair receipt", id);
     if (Number(rows[0].version) !== version) {
-      throw new ConflictError("affair receipt was modified by another request.");
+      throw new ConflictError(
+        "affair receipt was modified by another request.",
+      );
     }
-    throw new Error("Affair receipt operation did not affect the expected row.");
+    throw new Error(
+      "Affair receipt operation did not affect the expected row.",
+    );
   }
 }
 

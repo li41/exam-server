@@ -79,7 +79,10 @@ const cleanup = async (): Promise<void> => {
     "DELETE FROM affair_excel_fields WHERE tenant_id IN (?, ?)",
     tenants,
   );
-  await pool.execute("DELETE FROM affair_schools WHERE tenant_id IN (?, ?)", tenants);
+  await pool.execute(
+    "DELETE FROM affair_schools WHERE tenant_id IN (?, ?)",
+    tenants,
+  );
   await pool.execute("DELETE FROM affairs WHERE tenant_id IN (?, ?)", tenants);
 };
 
@@ -95,7 +98,10 @@ afterAll(async () => {
 
 describe("MySqlAffairConfigurationRepository tenant isolation", () => {
   it("rejects a foreign-tenant field binding while same-tenant binding succeeds", async () => {
-    const localAffair = await affairs.createAffair(affairInput("A affair"), tenantA);
+    const localAffair = await affairs.createAffair(
+      affairInput("A affair"),
+      tenantA,
+    );
     const collection = await configurations.createCollection(
       {
         affairId: localAffair.id,
@@ -155,10 +161,17 @@ describe("MySqlAffairConfigurationRepository tenant isolation", () => {
       },
       tenantA,
     );
-    const field = await configurations.createField(fieldInput("A field"), tenantA);
+    const field = await configurations.createField(
+      fieldInput("A field"),
+      tenantA,
+    );
 
-    await expect(configurations.getCollection(collection.id, tenantB)).resolves.toBeNull();
-    await expect(configurations.getField(field.id, tenantB)).resolves.toBeNull();
+    await expect(
+      configurations.getCollection(collection.id, tenantB),
+    ).resolves.toBeNull();
+    await expect(
+      configurations.getField(field.id, tenantB),
+    ).resolves.toBeNull();
     await expect(
       configurations.listCollections({ affairId: affair.id }, tenantB),
     ).rejects.toMatchObject({ code: "not_found" });

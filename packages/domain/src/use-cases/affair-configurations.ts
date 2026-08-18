@@ -87,7 +87,10 @@ export class AffairConfigurationService {
     return this.repository.listFields(scope);
   }
 
-  async getField(id: string, scope: QuestionBankScope): Promise<AffairExcelField> {
+  async getField(
+    id: string,
+    scope: QuestionBankScope,
+  ): Promise<AffairExcelField> {
     const field = await this.repository.getField(id, scope);
     if (!field) throw new NotFoundError("affair excel field", id);
     return field;

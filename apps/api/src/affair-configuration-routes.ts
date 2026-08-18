@@ -358,15 +358,14 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
 
   api.put(
     "/affair-collections/:id/reference-data",
-    zValidator(
-      "json",
-      ReplaceAffairReferenceDataSchema,
-      (result, context) => {
-        if (!result.success) {
-          return validationError(context, "Invalid affair reference-data payload.");
-        }
-      },
-    ),
+    zValidator("json", ReplaceAffairReferenceDataSchema, (result, context) => {
+      if (!result.success) {
+        return validationError(
+          context,
+          "Invalid affair reference-data payload.",
+        );
+      }
+    }),
     async (context) =>
       context.json(
         await service.replaceReferenceData(
@@ -405,10 +404,7 @@ const createAffairConfigurationRouter = (dependencies: Dependencies) => {
     }),
     async (context) =>
       context.json(
-        await service.createField(
-          context.req.valid("json"),
-          scopeFor(context),
-        ),
+        await service.createField(context.req.valid("json"), scopeFor(context)),
         201,
       ),
   );
