@@ -34,7 +34,7 @@ if (!mysqlTestUrl) {
 }
 
 const { createMySqlPool, defaultMigrations, runMigrations } = await import(
-  "../packages/adapters/mysql/dist/index.js"
+  "../packages/adapters/mysql/dist/index.js",
 );
 
 const run = (command, args, cwd, env = process.env) =>
