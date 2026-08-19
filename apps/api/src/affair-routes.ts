@@ -1,3 +1,12 @@
+/**
+ * 這條路不會有使用者。依 exam-control#16，試務歸 CF；判準是物理連通性：
+ * exam-server 只聽 127.0.0.1／需 WireGuard 才可達，各縣市與學校端無法直接使用。
+ *
+ * 不要再為這條路補功能、補測試或修 PHP parity 缺口。
+ * 目前尚未刪除，只因 exam-control#16① 明寫「先標記，不要急著刪」；
+ * 不是因為這條路仍要使用。
+ */
+
 import { createHash } from "node:crypto";
 import { zValidator } from "@hono/zod-validator";
 import {
