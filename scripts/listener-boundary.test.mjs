@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   evaluateListenerBoundaries,
   expectationsFromConfig,
   runListenerBoundary,
 } from "./listener-boundary.mjs";
+import { readLedger } from "./verify-skip.mjs";
 
 const config = {
   HOST: "10.99.0.1",
@@ -22,6 +28,7 @@ const goodSs = [
 ].join("\n");
 
 const expectations = expectationsFromConfig(config);
+const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 
 test("accepts configured API and loopback data-store listeners", () => {
   assert.deepEqual(evaluateListenerBoundaries(goodSs, expectations), {
@@ -139,4 +146,35 @@ test("missing services use the existing skip ledger hook", async () => {
   );
   assert.ok(skips.every(({ impact }) => /listener address/u.test(impact)));
   assert.deepEqual(logs, ["PASS listener-boundary api"]);
+});
+
+test("CLI skip path really writes the existing verify ledger", () => {
+  const dir = mkdtempSync(join(tmpdir(), "listener-boundary-skip-"));
+  try {
+    const ledger = join(dir, "verify-skips.jsonl");
+    const missingEnv = join(dir, "does-not-exist.env");
+    const result = spawnSync(
+      process.execPath,
+      [resolve(SCRIPTS_DIR, "listener-boundary.mjs")],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          VERIFY_SKIP_LEDGER: ledger,
+          SERVER_FOUNDATION_ENV_FILE: missingEnv,
+        },
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /SKIPPED: listener boundary/u);
+    const entries = readLedger(ledger).entries;
+    assert.equal(entries.length, 1, `ledger: ${JSON.stringify(entries)}`);
+    assert.equal(entries[0].gate, "listener boundary");
+    assert.match(entries[0].impact, /api WireGuard listener/u);
+    assert.match(entries[0].impact, /mysql loopback listener/u);
+    assert.match(entries[0].impact, /valkey loopback listener/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
