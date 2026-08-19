@@ -98,7 +98,9 @@ export function validateLoopbackListeners(listeners, service, port) {
       );
     }
     if (!isLoopbackHost(host)) {
-      throw new Error(`${service} must bind only loopback; got ${localAddress}`);
+      throw new Error(
+        `${service} must bind only loopback; got ${localAddress}`,
+      );
     }
   }
 }

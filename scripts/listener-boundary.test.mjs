@@ -90,9 +90,7 @@ test("Valkey rejects wildcard and non-loopback listeners", () => {
   assert.throws(
     () =>
       evaluateListenerBoundaries(
-        goodSs
-          .replace("127.0.0.1:6379", "*:6379")
-          .replace("[::1]:6379", ""),
+        goodSs.replace("127.0.0.1:6379", "*:6379").replace("[::1]:6379", ""),
         expectations,
       ),
     /valkey must not use a wildcard listener/u,
@@ -129,8 +127,7 @@ test("missing services use the existing skip ledger hook", async () => {
       Object.entries(config)
         .map(([key, value]) => `${key}=${value}`)
         .join("\n"),
-    readListeners: async () =>
-      "LISTEN 0 511 10.99.0.1:18787 0.0.0.0:*\n",
+    readListeners: async () => "LISTEN 0 511 10.99.0.1:18787 0.0.0.0:*\n",
     declareSkipFn: (entry) => skips.push(entry),
     log: (line) => logs.push(line),
   });
