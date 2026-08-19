@@ -60,23 +60,23 @@ end-to-end. This document is the focused parity audit for that missing layer.
 
 ### Submission row
 
-| PHP | server | notes |
-| --- | --- | --- |
-| `id` | `id` | integer in PHP, opaque string/UUID on server |
-| `affair_id` | `affairId` | same business parent |
-| `collection_id` | `collectionId` | same collection parent |
-| `company_id` | `tenantId` | server uses opaque tenant identity instead of PHP company integer |
-| `submitter_type` | `submitterType` | `school | city` |
-| `school_id` | `schoolId` | nullable; server enforces owner XOR |
-| `city_id` | `cityId` | nullable; server enforces owner XOR |
-| `account_type` | `accountType` | PHP schema allows `SC/SD/SE/EDU`; actual fill paths use `SC` for school submissions and `EDU` for city submissions |
-| `status` | `status` | `draft | submitted | returned` |
-| `return_reason` | `returnReason` | nullable, max 500 on server |
-| `returned_at` | `returnedAt` | nullable timestamp |
-| `submitted_at` | `submittedAt` | nullable timestamp |
-| `created_at` | `createdAt` | timestamp |
-| `updated_at` | `updatedAt` | timestamp |
-| — | `version` | server-only optimistic concurrency token |
+| PHP              | server          | notes                                                                                                              |
+| ---------------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `id`             | `id`            | integer in PHP, opaque string/UUID on server                                                                       |
+| `affair_id`      | `affairId`      | same business parent                                                                                               |
+| `collection_id`  | `collectionId`  | same collection parent                                                                                             |
+| `company_id`     | `tenantId`      | server uses opaque tenant identity instead of PHP company integer                                                  |
+| `submitter_type` | `submitterType` | `school                                                                                                            | city`     |
+| `school_id`      | `schoolId`      | nullable; server enforces owner XOR                                                                                |
+| `city_id`        | `cityId`        | nullable; server enforces owner XOR                                                                                |
+| `account_type`   | `accountType`   | PHP schema allows `SC/SD/SE/EDU`; actual fill paths use `SC` for school submissions and `EDU` for city submissions |
+| `status`         | `status`        | `draft                                                                                                             | submitted | returned` |
+| `return_reason`  | `returnReason`  | nullable, max 500 on server                                                                                        |
+| `returned_at`    | `returnedAt`    | nullable timestamp                                                                                                 |
+| `submitted_at`   | `submittedAt`   | nullable timestamp                                                                                                 |
+| `created_at`     | `createdAt`     | timestamp                                                                                                          |
+| `updated_at`     | `updatedAt`     | timestamp                                                                                                          |
+| —                | `version`       | server-only optimistic concurrency token                                                                           |
 
 The apparent `SD/SE` account-type gap is **not** a defect. PHP's school
 dashboard may be entered by `SC`, `SD` or `SE`, but the actual collection,
@@ -87,12 +87,12 @@ use `SC` for school submissions and `EDU` for city submissions.
 
 ### Form values
 
-| PHP | server | notes |
-| --- | --- | --- |
-| `submission_id` | parent detail `id` | server carries the parent id outside each form field value |
-| `field_id` | `fieldId` | same bound-field identity |
-| `value` | `value` | string payload |
-| child-row `id` | not exposed for form values | internal persistence identity is not part of the server form DTO |
+| PHP             | server                      | notes                                                            |
+| --------------- | --------------------------- | ---------------------------------------------------------------- |
+| `submission_id` | parent detail `id`          | server carries the parent id outside each form field value       |
+| `field_id`      | `fieldId`                   | same bound-field identity                                        |
+| `value`         | `value`                     | string payload                                                   |
+| child-row `id`  | not exposed for form values | internal persistence identity is not part of the server form DTO |
 
 PHP `ExamAffairSubmissionData::batchSave()` upserts only the field IDs supplied
 and leaves omitted stored fields in place. Server does the same partial form
@@ -108,13 +108,13 @@ a silent drop, so it is not an A-positive data-loss defect.
 
 ### Repeated Excel rows
 
-| PHP | server | notes |
-| --- | --- | --- |
-| `submission_id` | parent detail `id` / row `submissionId` | same parent identity |
-| `row_data` JSON | `values` record | field-id -> string map |
-| `sort_order` | `sortOrder` | preserves row order |
-| `created_at` | `createdAt` | row creation timestamp |
-| row `id` | `id` | persistence identity exposed on server detail |
+| PHP             | server                                  | notes                                         |
+| --------------- | --------------------------------------- | --------------------------------------------- |
+| `submission_id` | parent detail `id` / row `submissionId` | same parent identity                          |
+| `row_data` JSON | `values` record                         | field-id -> string map                        |
+| `sort_order`    | `sortOrder`                             | preserves row order                           |
+| `created_at`    | `createdAt`                             | row creation timestamp                        |
+| row `id`        | `id`                                    | persistence identity exposed on server detail |
 
 Both implementations replace the entire repeated-row set on save: delete old
 rows, then insert the incoming rows in order. Server additionally validates
@@ -127,24 +127,24 @@ server contract silently omits?**
 
 ### Persistent business state
 
-| PHP source value | Server contract | Result |
-| --- | --- | --- |
-| `affair_id` | `affairId` | present |
-| `collection_id` | `collectionId` | present |
-| `company_id` | `tenantId` | semantic tenant equivalent present |
-| `submitter_type` | `submitterType` | present |
-| `school_id` | `schoolId` | present |
-| `city_id` | `cityId` | present |
-| `account_type` | `accountType` | present |
-| `status` | `status` | present |
-| `return_reason` | `returnReason` | present |
-| `returned_at` | `returnedAt` | present |
-| `submitted_at` | `submittedAt` | present |
-| `created_at` | `createdAt` | present |
-| `updated_at` | `updatedAt` | present |
-| form `field_id` + `value` | `fields[].fieldId` + `value` | present |
-| Excel `row_data` | `rows[].values` | present |
-| Excel `sort_order` | `rows[].sortOrder` | present on reads; order is derived from request position on writes |
+| PHP source value          | Server contract              | Result                                                             |
+| ------------------------- | ---------------------------- | ------------------------------------------------------------------ |
+| `affair_id`               | `affairId`                   | present                                                            |
+| `collection_id`           | `collectionId`               | present                                                            |
+| `company_id`              | `tenantId`                   | semantic tenant equivalent present                                 |
+| `submitter_type`          | `submitterType`              | present                                                            |
+| `school_id`               | `schoolId`                   | present                                                            |
+| `city_id`                 | `cityId`                     | present                                                            |
+| `account_type`            | `accountType`                | present                                                            |
+| `status`                  | `status`                     | present                                                            |
+| `return_reason`           | `returnReason`               | present                                                            |
+| `returned_at`             | `returnedAt`                 | present                                                            |
+| `submitted_at`            | `submittedAt`                | present                                                            |
+| `created_at`              | `createdAt`                  | present                                                            |
+| `updated_at`              | `updatedAt`                  | present                                                            |
+| form `field_id` + `value` | `fields[].fieldId` + `value` | present                                                            |
+| Excel `row_data`          | `rows[].values`              | present                                                            |
+| Excel `sort_order`        | `rows[].sortOrder`           | present on reads; order is derived from request position on writes |
 
 **Result: no silent omission was found in the persisted submission business
 state.** The server either represents the field or, for invalid/unbound dynamic
@@ -155,13 +155,13 @@ field IDs, rejects the request instead of accepting and dropping data.
 `ExamAffairSubmission::getByCollection()` also joins display metadata that is
 not embedded in `AffairSubmissionSchema`:
 
-| PHP joined field | Submission DTO | Server source | Result |
-| --- | --- | --- | --- |
-| `school_name` | absent | `AffairSchool.schoolName` | separately retrievable, not lost |
-| `school_code` | absent | `AffairSchool.schoolCode` | separately retrievable, not lost |
-| `school_city` | absent | `AffairSchool.city` | separately retrievable, not lost |
-| `school_level` | absent | `AffairSchool.schoolLevel` | separately retrievable, not lost |
-| `city_name` | absent | `AffairCity.cityName` | separately retrievable, not lost |
+| PHP joined field | Submission DTO | Server source              | Result                           |
+| ---------------- | -------------- | -------------------------- | -------------------------------- |
+| `school_name`    | absent         | `AffairSchool.schoolName`  | separately retrievable, not lost |
+| `school_code`    | absent         | `AffairSchool.schoolCode`  | separately retrievable, not lost |
+| `school_city`    | absent         | `AffairSchool.city`        | separately retrievable, not lost |
+| `school_level`   | absent         | `AffairSchool.schoolLevel` | separately retrievable, not lost |
+| `city_name`      | absent         | `AffairCity.cityName`      | separately retrievable, not lost |
 
 This is a composition/API-shape difference. PHP builds one backend table row
 with joins; server exposes normalized affair-school/city resources. It does not
@@ -178,13 +178,13 @@ PHP's management query selects `sub.*`, but
 return reason, submit/return times and bound payload values. The server
 submission DTO is broader:
 
-| Value selected by PHP | PHP management view | Server DTO | Classification |
-| --- | --- | --- | --- |
-| `company_id` | not rendered | `tenantId` returned | exposure difference; no PHP source comment marks it secret |
-| `account_type` | not rendered | `accountType` returned | exposure difference; no PHP source comment marks it secret |
-| raw `school_id` / `city_id` | label is rendered instead | ids returned | normalized API identity, not proven confidential |
-| `created_at` | not rendered | `createdAt` returned | metadata exposure difference |
-| `updated_at` | not rendered | `updatedAt` returned | metadata exposure difference |
+| Value selected by PHP       | PHP management view       | Server DTO             | Classification                                             |
+| --------------------------- | ------------------------- | ---------------------- | ---------------------------------------------------------- |
+| `company_id`                | not rendered              | `tenantId` returned    | exposure difference; no PHP source comment marks it secret |
+| `account_type`              | not rendered              | `accountType` returned | exposure difference; no PHP source comment marks it secret |
+| raw `school_id` / `city_id` | label is rendered instead | ids returned           | normalized API identity, not proven confidential           |
+| `created_at`                | not rendered              | `createdAt` returned   | metadata exposure difference                               |
+| `updated_at`                | not rendered              | `updatedAt` returned   | metadata exposure difference                               |
 
 No field-level PHP redaction rule analogous to the receipt PII whitelist was
 found for these values, so the table above is **not** classified as a secret
