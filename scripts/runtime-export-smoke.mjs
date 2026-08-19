@@ -36,11 +36,11 @@ const readManifest = (manifestPath) => {
  * Discover internal library packages under packages/**.
  *
  * Deliberately do not filter on `exports`: a package that accidentally loses
- * its root export must be imported and fail, not disappear from the candidate
- * set and turn the gate green by omission.
+ * its root export must still be handed to Node and fail, not disappear from the
+ * candidate set and turn the gate green by omission.
  *
  * @param {string} [packagesRoot]
- * @returns {{ name: string, directory: string, manifestPath: string, manifest: Record<string, unknown> }[]}
+ * @returns {{ name: string, directory: string, manifestPath: string }[]}
  */
 export function discoverInternalPackages(packagesRoot = INTERNAL_PACKAGES_ROOT) {
   if (!existsSync(packagesRoot)) {
@@ -69,7 +69,6 @@ export function discoverInternalPackages(packagesRoot = INTERNAL_PACKAGES_ROOT) 
             name: manifest.name,
             directory: child,
             manifestPath,
-            manifest,
           });
         }
       }
@@ -83,12 +82,12 @@ export function discoverInternalPackages(packagesRoot = INTERNAL_PACKAGES_ROOT) 
 }
 
 /**
- * @param {{ name: string }[]} packages
+ * @param {string[]} importedPackageNames
  * @param {number} [minimumPackageCount]
  * @returns {void}
  */
-export function assertDiscoveryFloor(
-  packages,
+export function assertRuntimeImportFloor(
+  importedPackageNames,
   minimumPackageCount = MINIMUM_INTERNAL_RUNTIME_PACKAGES,
 ) {
   if (!Number.isInteger(minimumPackageCount) || minimumPackageCount < 1) {
@@ -96,43 +95,24 @@ export function assertDiscoveryFloor(
       `runtime-export smoke minimum must be a positive integer (got ${minimumPackageCount}).`,
     );
   }
-  if (packages.length < minimumPackageCount) {
+  if (importedPackageNames.length < minimumPackageCount) {
     throw new Error(
-      `runtime-export smoke discovered ${packages.length} internal package(s); ` +
-        `expected at least ${minimumPackageCount}. Refusing a possible false green from incomplete discovery.`,
+      `runtime-export smoke imported ${importedPackageNames.length} internal package root(s); ` +
+        `expected at least ${minimumPackageCount}. Refusing a possible false green from incomplete discovery/import coverage.`,
     );
   }
 }
 
-const hasRootExport = (exportsField) => {
-  if (typeof exportsField === "string" || Array.isArray(exportsField)) return true;
-  if (!exportsField || typeof exportsField !== "object") return false;
-
-  if (Object.hasOwn(exportsField, ".")) return true;
-
-  // Node also allows a root conditional exports object directly, e.g.
-  // { "import": "./dist/index.js", "types": "./dist/index.d.ts" }.
-  const keys = Object.keys(exportsField);
-  return keys.length > 0 && keys.every((key) => !key.startsWith("."));
-};
-
 /**
  * Import one package by its bare package name from inside that package scope.
  * Node package self-reference therefore resolves the root `exports` entry and
- * its runtime `import` condition. We intentionally do not read the target path
+ * its runtime `import` condition. We intentionally do not read an export target
  * ourselves, because doing so would bypass the resolver this gate exists to test.
  *
- * @param {{ name: string, directory: string, manifestPath: string, manifest: Record<string, unknown> }} packageInfo
+ * @param {{ name: string, directory: string, manifestPath: string }} packageInfo
  * @returns {string}
  */
 export function importPackageRoot(packageInfo) {
-  if (!hasRootExport(packageInfo.manifest.exports)) {
-    throw new Error(
-      `Internal package ${packageInfo.name} has no root package export ` +
-        `(${relative(REPO_ROOT, packageInfo.manifestPath)}).`,
-    );
-  }
-
   const result = spawnSync(
     process.execPath,
     [
@@ -177,8 +157,9 @@ export function runRuntimeExportSmoke({
   minimumPackageCount = MINIMUM_INTERNAL_RUNTIME_PACKAGES,
 } = {}) {
   const packages = discoverInternalPackages(packagesRoot);
-  assertDiscoveryFloor(packages, minimumPackageCount);
-  return packages.map(importPackageRoot);
+  const imported = packages.map(importPackageRoot);
+  assertRuntimeImportFloor(imported, minimumPackageCount);
+  return imported;
 }
 
 const isMain =

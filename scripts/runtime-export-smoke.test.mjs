@@ -78,7 +78,7 @@ const writeInternalPackage = (
     "utf8",
   );
 
-  return { packageDirectory, consumer, name };
+  return { consumer, name };
 };
 
 const assertFixtureTypecheckPasses = (consumer) => {
@@ -151,7 +151,7 @@ test("broken exports.import is red even when tsc --noEmit is green", () => {
   });
 });
 
-test("discovery floor fails closed instead of accepting an incomplete scan", () => {
+test("runtime import floor fails closed instead of accepting an incomplete scan", () => {
   withFixture((root) => {
     writeInternalPackage(root);
     assert.throws(
@@ -160,7 +160,7 @@ test("discovery floor fails closed instead of accepting an incomplete scan", () 
           packagesRoot: join(root, "packages"),
           minimumPackageCount: 2,
         }),
-      /discovered 1 internal package.*expected at least 2.*false green/u,
+      /imported 1 internal package root.*expected at least 2.*false green/u,
     );
   });
 });
