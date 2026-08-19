@@ -184,10 +184,7 @@ test("rollback gate resolves the local base then records missing MySQL as a skip
     assert.equal(entries.length, 1);
     assert.equal(entries[0].gate, "N-1 migration rollback compatibility");
     assert.match(entries[0].missing, /MYSQL_TEST_URL is not set/u);
-    assert.match(
-      entries[0].missing,
-      /doc\/nminus1-migration-rollback\.md/u,
-    );
+    assert.match(entries[0].missing, /doc\/nminus1-migration-rollback\.md/u);
   } finally {
     rmSync(repo.cwd, { recursive: true, force: true });
   }
