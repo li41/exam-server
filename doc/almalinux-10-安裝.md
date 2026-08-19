@@ -12,7 +12,12 @@ bash deploy/scripts/bootstrap-almalinux10.sh
 ```
 
 可重複執行、每步做完就驗、驗不過就停；**不含任何密碼，一律互動式 `sudo`**。
-預設 `PORT=18787`（⚠️ 刻意不是 8787，理由見步驟 9）。
+預設 `PORT=18787`（⚠️ **刻意不是 8787**）。
+
+> 🔴 理由（`deploy/scripts/bootstrap-almalinux10.sh:112-113` 逐字）：**8787 在主公那台被逸策台 daemon 佔著，
+> 而那支的 `/health` 也回 200** ⇒ 沿用 8787 的話健康檢查會拿到 200，而你以為 exam-server 起來了。
+> ⚠️ 那是**假綠燈**，不是埠衝突報錯。
+> ⚠️ 舊版這裡寫「理由見步驟 9」——步驟 9 講的是 `HOST`，沒講埠，那個指路是壞的。
 
 ⇒ **這份文件仍然要讀**——腳本做了什麼、為什麼那樣做、哪裡會靜默失效，都寫在下面。
 **腳本是省打字的，不是省理解的。**
@@ -62,7 +67,7 @@ SF_ADMIN_EMAIL=you@example.com bash deploy/scripts/bootstrap-almalinux10.sh
 │        │ WireGuard（UDP 51820）                             │
 │        ▼                                                    │
 │  exam-server（院內這台）                                     │
-│        10.99.0.1:8787  Node API（綁 WG 介面 ★）             │
+│        10.99.0.1:18787  Node API（綁 WG 介面 ★）            │
 │                  ├─► MySQL  127.0.0.1:3306                 │
 │                  └─► Redis  127.0.0.1:6379                 │
 └────────────────────────────────────────────────────────────┘
@@ -75,8 +80,8 @@ SF_ADMIN_EMAIL=you@example.com bash deploy/scripts/bootstrap-almalinux10.sh
 
 ⚠️ **稽核時要這樣講，不要講「什麼都沒開」**（那句不精確、會被追問）：
 
-> **`exam-server` 的 TCP 8787 不對院內實體網卡暴露。**
-> 院內只開 **WireGuard UDP 51820**，**8787 僅可經由 WireGuard overlay 存取。**
+> **`exam-server` 的 TCP 18787 不對院內實體網卡暴露。**
+> 院內只開 **WireGuard UDP 51820**，**18787 僅可經由 WireGuard overlay 存取。**
 
 ⇒ 對照「開 443 但有做認證」：那是**有一個服務在聽、靠應用層擋**；
 這裡是**那個服務在院內網段上不存在**，要先通過裝置層的金鑰驗證才看得到它。
@@ -101,7 +106,7 @@ WireGuard 本身就在加密（ChaCha20-Poly1305）⇒ **隧道內不需要再�
 
 **API 綁在哪個位址，決定上面那些好處是真的還是假的。** 見步驟 9 的 `HOST`。
 
-⚠️ **對外只有一個 UDP 埠。** TCP 全關：8787／3306／6379 一個都不開。
+⚠️ **對外只有一個 UDP 埠。** TCP 全關：18787／3306／6379 一個都不開。
 
 ## 版本（皆取自 repo 實際設定，非推測）
 
@@ -247,24 +252,24 @@ sudo firewall-cmd --reload
 sudo firewall-cmd --list-all
 ```
 
-⚠️ **不要開 80／443／8787／3306／6379。**
+⚠️ **不要開 80／443／18787／3306／6379。**
 院內網段掃描只會看到一個 UDP 埠，而且 WireGuard **不回應未經認證的封包**。
 ⇒ **這一步就是整個架構的稽核價值所在**，開了任何一個 TCP 埠就等於白做。
 
 ⚠️ **SSH（22）怎麼辦**：這台你自己要能管。院內既有的管理途徑（跳板機／院內網段）照貴院規範走，
-**但不要為了方便把 8787 一起開**——管理通道與服務通道是兩件事。
+**但不要為了方便把 18787 一起開**——管理通道與服務通道是兩件事。
 
-### ⭐ 再加一道：**明訂 8787 只准從 wg0 進來**
+### ⭐ 再加一道：**明訂 18787 只准從 wg0 進來**
 
 上面的 `HOST=10.99.0.1` 已經讓 API 不聽實體網卡，但那**只有一道，而且會靜默失效**（見步驟 9）。
 ⇒ **防火牆再擋一次，變成兩道獨立防線**：
 
 ```bash
-# 把 wg0 劃進獨立 zone，只有它能碰 8787
+# 把 wg0 劃進獨立 zone，只有它能碰 18787
 sudo firewall-cmd --permanent --zone=trusted --add-interface=wg0
-sudo firewall-cmd --permanent --zone=trusted --add-port=8787/tcp
+sudo firewall-cmd --permanent --zone=trusted --add-port=18787/tcp
 sudo firewall-cmd --reload
-sudo firewall-cmd --zone=trusted --list-all      # 應看到 wg0 與 8787/tcp
+sudo firewall-cmd --zone=trusted --list-all      # 應看到 wg0 與 18787/tcp
 ```
 
 ⚠️ **關鍵在於 `--zone=trusted` 綁的是 `wg0` 這個介面**，不是某個 IP 範圍——
@@ -308,7 +313,7 @@ HOST = 10.99.0.1     ← wg0 介面位址 ✅
 HOST = 0.0.0.0       ← ❌ 服務照樣開在院內網段上
 ```
 
-填 `0.0.0.0` 的話，**API 會同時綁上院內網卡**——防火牆擋得住外面，但**院內任何一台機器都連得到 8787**。
+填 `0.0.0.0` 的話，**API 會同時綁上院內網卡**——防火牆擋得住外面，但**院內任何一台機器都連得到 18787**。
 
 ⇒ **那正是你選這個架構要省掉的東西。** 而且它**不會有任何錯誤訊息**：
 隧道照樣通、桌面版照樣能用、一切看起來都對，**只有稽核那一格從「沒有服務」變回「有一個沒認證的服務」**。
@@ -394,7 +399,7 @@ PersistentKeepalive = 25
 ```powershell
 # 桌面端（PowerShell）
 ping 10.99.0.1
-curl.exe -s http://10.99.0.1:8787/health
+curl.exe -s http://10.99.0.1:18787/health
 ```
 
 ```bash
@@ -469,16 +474,16 @@ sudo wg show | grep -A2 '<那組公鑰>'      # 應該查無
 ```bash
 systemctl status wg-quick@wg0 server-foundation --no-pager   # 兩個都要 active
 sudo wg show                                                  # peer 數量與預期相符
-sudo ss -ltnp | grep -E '8787|3306|6379'                      # ⚠️ 見下
+sudo ss -ltnp | grep -E '18787|3306|6379'                      # ⚠️ 見下
 sudo firewall-cmd --list-ports                                # 應該只有 51820/udp
-curl -s http://10.99.0.1:8787/health                          # 從 VPS 上打 WG 位址
+curl -s http://10.99.0.1:18787/health                          # 從 VPS 上打 WG 位址
 ```
 
 ⚠️⚠️ **第三行最重要，而且它是唯一驗得出「靜默失效」的一步**：
 
 ```
-✅ 對的樣子    10.99.0.1:8787    127.0.0.1:3306    127.0.0.1:6379
-❌ 錯的樣子    0.0.0.0:8787      ← 服務仍在院內網段上
+✅ 對的樣子    10.99.0.1:18787    127.0.0.1:3306    127.0.0.1:6379
+❌ 錯的樣子    0.0.0.0:18787      ← 服務仍在院內網段上
 ```
 
 **看到任何一個是 `0.0.0.0`，立刻修。**
@@ -510,7 +515,7 @@ unit 是 `ProtectSystem=strict` 且 `ReadWritePaths` 只列 `/var/lib/server-fou
 
 ## 這份文件裡哪些是查證過的、哪些不是
 
-**✅ 從 repo 實際檔案讀出來的**：所有版本號、`/usr/bin/node`、API 埠 `8787`、
+**✅ 從 repo 實際檔案讀出來的**：所有版本號、`/usr/bin/node`、API 埠 `18787`、
 十一個環境變數、目錄配置、備份由獨立腳本執行、`mysql2` 驅動與用到的 SQL 功能。
 
 **✅ 2026-08-14 在 AlmaLinux 10.2 實機查證（原本標「未實測」的，三處全查了、三處全錯，已更正）**：
@@ -543,7 +548,7 @@ API 綁 VPN 網段；**軟體由使用者自行安裝、不做派送**。
 2. **限院內網段的白名單** — 比 VPN 省事，但**仍要開 TCP 埠**，稽核上省不掉那一格。
 
 ⇒ **決定的關鍵不是「哪個比較安全」，是「哪個在稽核時最好交代」。** 三種都能擋住攻擊者，
-但只有 WireGuard 這版能回答「**TCP 8787 不對院內實體網卡暴露，只可經 overlay 存取**」。
+但只有 WireGuard 這版能回答「**TCP 18787 不對院內實體網卡暴露，只可經 overlay 存取**」。
 ⚠️ **不要簡化成「什麼都沒開」**——UDP 51820 是開著的，見〈為什麼是這個架構〉那節。
 
 裝完若與這份不符，**以機器上看到的為準**，並回報我來更新。
