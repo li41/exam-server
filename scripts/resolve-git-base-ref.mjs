@@ -21,7 +21,8 @@ const verifyCommit = (ref, cwd, spawnSyncFn) => {
     return { resolved: false, reason: failureDetail(result) };
   }
   const commit = result.stdout.trim();
-  if (!commit) return { resolved: false, reason: `${ref} resolved to empty output` };
+  if (!commit)
+    return { resolved: false, reason: `${ref} resolved to empty output` };
   return { resolved: true, commit };
 };
 
