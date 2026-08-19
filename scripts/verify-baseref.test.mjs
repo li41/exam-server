@@ -155,7 +155,7 @@ test("contract gate records an explicit skip when no local base can be resolved"
   }
 });
 
-test("rollback gate also resolves the local base before requiring MySQL", () => {
+test("rollback gate resolves the local base then records missing MySQL as a skip", () => {
   const repo = makeRepo();
   try {
     const ledger = join(repo.cwd, "verify-skips.jsonl");
@@ -165,7 +165,7 @@ test("rollback gate also resolves the local base before requiring MySQL", () => 
       env: gateEnv(ledger),
     });
 
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 0, result.stderr);
     assert.match(
       result.stdout,
       /ROLLBACK_BASE_REF not set; using local base from git merge-base origin\/main HEAD: [0-9a-f]+\./u,
@@ -175,10 +175,19 @@ test("rollback gate also resolves the local base before requiring MySQL", () => 
       /Checking N-1 compatibility against [0-9a-f]+\./u,
     );
     assert.match(
-      result.stderr,
-      /MYSQL_TEST_URL is required for N-1 migration compatibility/u,
+      result.stdout,
+      /SKIPPED: N-1 migration rollback compatibility/u,
     );
-    assert.doesNotMatch(result.stdout, /SKIPPED/u);
+    assert.match(result.stdout, /MYSQL_TEST_URL is not set/u);
+    assert.match(result.stdout, /doc\/nminus1-migration-rollback\.md/u);
+    const entries = readLedger(ledger).entries;
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].gate, "N-1 migration rollback compatibility");
+    assert.match(entries[0].missing, /MYSQL_TEST_URL is not set/u);
+    assert.match(
+      entries[0].missing,
+      /doc\/nminus1-migration-rollback\.md/u,
+    );
   } finally {
     rmSync(repo.cwd, { recursive: true, force: true });
   }
