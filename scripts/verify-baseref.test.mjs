@@ -13,7 +13,10 @@ import { fileURLToPath } from "node:url";
 import { readLedger } from "./verify-skip.mjs";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
-const CONTRACT_SCRIPT = resolve(SCRIPTS_DIR, "check-contract-compatibility.mjs");
+const CONTRACT_SCRIPT = resolve(
+  SCRIPTS_DIR,
+  "check-contract-compatibility.mjs",
+);
 const ROLLBACK_SCRIPT = resolve(
   SCRIPTS_DIR,
   "check-migration-rollback-compatibility.mjs",
@@ -83,79 +86,91 @@ const gateEnv = (ledger, overrides = {}) => {
   return { ...env, ...overrides };
 };
 
-test("contract gate resolves origin/main merge-base locally when env is absent", () => {
-  const repo = makeRepo();
-  try {
-    const ledger = join(repo.cwd, "verify-skips.jsonl");
-    const result = spawnSync(process.execPath, [CONTRACT_SCRIPT], {
-      cwd: repo.cwd,
-      encoding: "utf8",
-      env: gateEnv(ledger),
-    });
+test(
+  "contract gate resolves origin/main merge-base locally when env is absent",
+  () => {
+    const repo = makeRepo();
+    try {
+      const ledger = join(repo.cwd, "verify-skips.jsonl");
+      const result = spawnSync(process.execPath, [CONTRACT_SCRIPT], {
+        cwd: repo.cwd,
+        encoding: "utf8",
+        env: gateEnv(ledger),
+      });
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(
-      result.stdout,
-      /CONTRACT_BASE_REF not set; using local base from git merge-base origin\/main HEAD: [0-9a-f]+\./u,
-    );
-    assert.match(result.stdout, /No breaking v1 contract changes detected/u);
-    assert.doesNotMatch(result.stdout, /SKIPPED/u);
-  } finally {
-    rmSync(repo.cwd, { recursive: true, force: true });
-  }
-});
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(
+        result.stdout,
+        /CONTRACT_BASE_REF not set; using local base from git merge-base origin\/main HEAD: [0-9a-f]+\./u,
+      );
+      assert.match(
+        result.stdout,
+        /No breaking v1 contract changes detected/u,
+      );
+      assert.doesNotMatch(result.stdout, /SKIPPED/u);
+    } finally {
+      rmSync(repo.cwd, { recursive: true, force: true });
+    }
+  },
+);
 
-test("explicit incompatible contract base stays authoritative and turns the gate red", () => {
-  const repo = makeRepo();
-  try {
-    const ledger = join(repo.cwd, "verify-skips.jsonl");
-    const result = spawnSync(process.execPath, [CONTRACT_SCRIPT], {
-      cwd: repo.cwd,
-      encoding: "utf8",
-      env: gateEnv(ledger, { CONTRACT_BASE_REF: repo.incompatibleBase }),
-    });
+test(
+  "explicit incompatible contract base stays authoritative and turns the gate red",
+  () => {
+    const repo = makeRepo();
+    try {
+      const ledger = join(repo.cwd, "verify-skips.jsonl");
+      const result = spawnSync(process.execPath, [CONTRACT_SCRIPT], {
+        cwd: repo.cwd,
+        encoding: "utf8",
+        env: gateEnv(ledger, { CONTRACT_BASE_REF: repo.incompatibleBase }),
+      });
 
-    assert.equal(result.status, 1);
-    assert.match(
-      result.stdout,
-      new RegExp(
-        `Using CONTRACT_BASE_REF from environment: ${repo.incompatibleBase} -> ${repo.incompatibleBase}\\.`,
-        "u",
-      ),
-    );
-    assert.match(result.stderr, /endpoint removed: GET \/legacy/u);
-  } finally {
-    rmSync(repo.cwd, { recursive: true, force: true });
-  }
-});
+      assert.equal(result.status, 1);
+      assert.match(
+        result.stdout,
+        new RegExp(
+          `Using CONTRACT_BASE_REF from environment: ${repo.incompatibleBase} -> ${repo.incompatibleBase}\\.`,
+          "u",
+        ),
+      );
+      assert.match(result.stderr, /endpoint removed: GET \/legacy/u);
+    } finally {
+      rmSync(repo.cwd, { recursive: true, force: true });
+    }
+  },
+);
 
-test("contract gate records an explicit skip when no local base can be resolved", () => {
-  const repo = makeRepo();
-  try {
-    git(repo.cwd, ["update-ref", "-d", "refs/remotes/origin/main"]);
-    const ledger = join(repo.cwd, "verify-skips.jsonl");
-    const result = spawnSync(process.execPath, [CONTRACT_SCRIPT], {
-      cwd: repo.cwd,
-      encoding: "utf8",
-      env: gateEnv(ledger),
-    });
+test(
+  "contract gate records an explicit skip when no local base can be resolved",
+  () => {
+    const repo = makeRepo();
+    try {
+      git(repo.cwd, ["update-ref", "-d", "refs/remotes/origin/main"]);
+      const ledger = join(repo.cwd, "verify-skips.jsonl");
+      const result = spawnSync(process.execPath, [CONTRACT_SCRIPT], {
+        cwd: repo.cwd,
+        encoding: "utf8",
+        env: gateEnv(ledger),
+      });
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(
-      result.stdout,
-      /SKIPPED: API v1 cross-revision contract compatibility/u,
-    );
-    assert.match(result.stdout, /origin\/main is unavailable/u);
-    const entries = readLedger(ledger).entries;
-    assert.equal(entries.length, 1);
-    assert.equal(
-      entries[0].gate,
-      "API v1 cross-revision contract compatibility",
-    );
-  } finally {
-    rmSync(repo.cwd, { recursive: true, force: true });
-  }
-});
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(
+        result.stdout,
+        /SKIPPED: API v1 cross-revision contract compatibility/u,
+      );
+      assert.match(result.stdout, /origin\/main is unavailable/u);
+      const entries = readLedger(ledger).entries;
+      assert.equal(entries.length, 1);
+      assert.equal(
+        entries[0].gate,
+        "API v1 cross-revision contract compatibility",
+      );
+    } finally {
+      rmSync(repo.cwd, { recursive: true, force: true });
+    }
+  },
+);
 
 test("rollback gate also resolves the local base before requiring MySQL", () => {
   const repo = makeRepo();
@@ -172,7 +187,10 @@ test("rollback gate also resolves the local base before requiring MySQL", () => 
       result.stdout,
       /ROLLBACK_BASE_REF not set; using local base from git merge-base origin\/main HEAD: [0-9a-f]+\./u,
     );
-    assert.match(result.stdout, /Checking N-1 compatibility against [0-9a-f]+\./u);
+    assert.match(
+      result.stdout,
+      /Checking N-1 compatibility against [0-9a-f]+\./u,
+    );
     assert.match(
       result.stderr,
       /MYSQL_TEST_URL is required for N-1 migration compatibility/u,
