@@ -1,0 +1,78 @@
+# Company member PHP parity review
+
+Issue: #80
+
+Baseline:
+
+- `exam-server`: `86870ac32b1e3560b29a6586dfcd08c73d2b8d13`
+- `exam.tw`: `f615e7c05fd0d6180e55f1dd000775fd2a3e1497`
+
+This review is intentionally narrower than the older `doc/company-members-php-mapping.md`.
+The acceptance rule here is observable parity: every row states what PHP does, what
+server does, whether they agree, and—when they do not—the concrete difference a
+user or operator would observe. Implementation-shape differences with no observable
+behavior difference are not counted as defects.
+
+## Truth sources read before comparison
+
+PHP (`li41/exam.tw`):
+
+- `src/Models/CompanyMember.php`
+- `src/Pages/Ajax/MemberActions.php`
+- `src/Pages/Manage/membersView.php`
+- `config/db/exam_tw.sql`
+
+Server (`li41/exam-server`):
+
+- `apps/api/src/company-member-routes.ts`
+- `packages/domain/src/use-cases/company-members.ts`
+- `packages/domain/src/ports/company-member-repository.ts`
+- `packages/adapters/mysql/src/company-member-repository.ts`
+- `packages/api-contracts/src/company-members.ts`
+- `apps/api/test/company-members.test.ts`
+
+## Route-by-route observable comparison
+
+| Capability | PHP behavior | Server behavior | Verdict | Observable difference |
+| --- | --- | --- | --- | --- |
+| Caller gate | Member-management actions require the caller's company membership and `members`; admin has the PHP admin shortcut, disabled/non-approved ordinary members do not pass. | `CompanyMemberService.requireManager()` resolves the caller by authenticated `userId + tenant`, requires active membership, then accepts admin or approved non-admin with `members`. Existing tests also preserve the PHP pending-admin shortcut. | Consistent for the effective caller gate. | None counted. |
+| List members | `CompanyMember::getCompanyMembers()` joins users and returns member identity/display state including `name`, `email`, `avatar`, `user_status`, `last_login_at`, plus `is_pending_invite`. `membersView.php` visibly uses these fields for search, avatar/name/email display and the “已邀請，待登入” section. | `GET /company-members` returns membership records only: `userId`, `invitedEmail`, admin/permissions/status/review metadata and timestamps. The MySQL repository does not join `users`. | **Mismatch** | A UI backed only by this server endpoint cannot render the same member list: it lacks member name/avatar/last-login and does not receive PHP's explicit pending-invite flag. Searching by a person's display name also cannot behave like PHP because server search only checks `user_id` / `invited_email`. |
+| Get one member | PHP management flow loads the list and edits a selected row; there is no equivalent standalone “get one” action in the inspected PHP member flow. | `GET /company-members/:id` returns one membership record. | Different API shape, not a parity defect by itself. | No user-visible discrepancy is implied solely by having an extra endpoint. |
+| Add / invite member | `doAddMember()` accepts an **email**. `CompanyMember::inviteMember()` can invite an email that has no user yet by creating a pending placeholder user/member; the UI explicitly tells the operator to enter a Google email and says the person gets access after first Google login. PHP also checks company availability/member capacity before adding. | `POST /company-members` requires `userId`. MySQL `create()` calls `assertUserInTenant(userId)`, so the user must already exist in the same tenant. The request may also directly specify admin/permissions/status/review fields. No equivalent company-capacity check appears in this route/service/repository path. | **Mismatch** | PHP can invite `new.person@example.com` before that person has ever logged in; server cannot perform that workflow unless an internal user already exists and its ID is known. Conversely, server can directly create privileged membership state that PHP's “新增成員” action does not expose. A full company could also be rejected by PHP while the server path has no matching capacity gate here. |
+| Default privileges when adding | PHP `doAddMember()` calls `inviteMember(..., [], false)`: the normal add-member UI always creates a non-admin with no granular permissions. | Server POST permits `isAdmin` and a full permissions object; admins can create an admin directly and admin permission maps are normalized automatically. | **Mismatch** | The same conceptual “add member” operation can immediately create a privileged administrator through server, while PHP's add-member UI only creates an ordinary unprivileged invite. |
+| Update ordinary member status/admin/permissions | PHP `doUpdateMember()` updates status, admin flag and permissions; non-admin managers cannot modify admins/promote to admin, and no caller may edit self. | Server PATCH enforces self-edit denial and non-admin restrictions, normalizes admin permissions and supports status/admin/permissions. | Mostly consistent for these fields. | None counted for the shared fields. |
+| Demote last admin | PHP refuses demotion when only one admin remains. | Server checks `countActiveApprovedAdmins(..., excludeId)` before demotion and refuses if no other admin remains. | Consistent. | None counted. |
+| Admin demotion payload | PHP treats missing permission checkboxes as an empty permission array, so a valid demotion can leave the member with no permissions. | Server explicitly rejects admin demotion unless the PATCH also contains `permissions`. | **Mismatch** | With another admin present, a demotion request that only changes the admin flag can succeed in PHP but gets a validation error from server. |
+| Self edit | PHP rejects self-edit in `doUpdateMember()` with a 400 JSON response. | Server throws `ForbiddenError`, mapped to HTTP 403. | **Mismatch (small)** | The user receives a different HTTP status/error class for the same forbidden self-edit. Business outcome is still denial. |
+| Review pending member | PHP has a dedicated `doReviewMember()` command accepting only `approve` or `reject`. It first requires the target's current `review_status` to be `pending`; a second review of an already reviewed member is rejected as “already reviewed”. | Server has no dedicated review transition. Generic PATCH accepts `reviewStatus: pending|approved|rejected`, and can update it on an existing member without a current-state-is-pending guard. | **Mismatch** | Server lets a manager reopen or rewrite a review state that PHP refuses to review again. For example, an approved member can be PATCHed back to pending or rejected; PHP's review endpoint rejects that target. |
+| Review actor metadata | PHP review action chooses the authenticated reviewer and records the action through the server-side flow; the client does not choose an arbitrary reviewer identity. | Generic server PATCH accepts `reviewedBy` and `reviewNote`; if reviewStatus is supplied and reviewedBy is omitted, service defaults reviewer to the caller, but an explicit client value is accepted by the contract. | **Mismatch** | A server client can submit review attribution metadata that PHP's review action does not let the operator choose, so displayed/audited reviewer attribution can differ. |
+| Rebind membership identity | PHP ordinary member update does not expose changing the membership's `user_id` or invitation email. Invite linking is handled by its invitation/login flow. | `UpdateCompanyMemberSchema`/PATCH permits `userId` and `invitedEmail`; MySQL update can rewrite both after tenant validation. | **Mismatch** | A server manager can rebind an existing membership to another user or alter its invitation email through the generic edit endpoint, an operation unavailable from the PHP member-management flow. |
+| Permission key set / exclusive question permissions | PHP defines the same 13 permission keys and normalizes `questions_all` vs `questions_own`; admin gets the fixed admin map. | Server schema requires the same 13 keys, normalizes the exclusive pair and applies the fixed admin map. | Consistent. | None counted. |
+
+## Confirmed observable gaps
+
+The comparison above yields these substantive gaps:
+
+1. **Invitation identity/workflow gap** — server cannot perform PHP's email-first invitation for a never-seen user; it requires an existing same-tenant user ID.
+2. **List/read-model gap** — server list omits the joined user-facing identity and pending-invite state that the PHP member page renders and searches.
+3. **Privilege-shape gap on creation** — server POST can directly create admin/arbitrary permission state, while PHP's visible add-member action always creates a non-admin with no permissions.
+4. **Review-state-machine gap** — PHP only transitions a currently pending member once to approved/rejected; server generic PATCH can rewrite/reopen review state.
+5. **Mutable identity/reviewer metadata gap** — server generic PATCH exposes `userId`, `invitedEmail`, and explicit reviewer metadata changes that PHP's member-management actions do not expose.
+6. **Admin-demotion request contract gap** — server requires an explicit permissions object when demoting; PHP can demote with no selected permissions.
+
+The self-edit 400-vs-403 difference is observable but lower impact and is kept separate from the six substantive gaps.
+
+## Things deliberately not called defects
+
+- Server has a standalone GET-by-id route while PHP edits members from the list page. Extra API shape alone is not a defect.
+- Server uses opaque tenant/user IDs where PHP uses integer company/user IDs. Representation alone is not a defect.
+- Server uses optimistic `version` checks. PHP does not; the extra conflict protection is not a loss of PHP behavior.
+- Server idempotency support is extra protection and does not by itself create a PHP parity defect.
+
+## #80 scope note
+
+Per the revised product ruling, this review does **not** continue PHP parity work for
+`affair-routes.ts`, `affair-submission-routes.ts`, `affair-configuration-routes.ts`
+or `affair-receipt-routes.ts`. Those routes are candidates for removal because the
+school/city affair system lives on CF. Their server-side dependency/removal scan is
+recorded separately in issue #80 rather than extended into a parity document.
