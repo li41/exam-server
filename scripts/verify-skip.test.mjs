@@ -130,7 +130,7 @@ test("cold-boot acceptance really writes to the ledger when it skips", () => {
     const entries = readLedger(ledger).entries;
     assert.equal(entries.length, 1, `ledger: ${JSON.stringify(entries)}`);
     assert.match(entries[0].gate, /cold-boot acceptance/u);
-    // 8 項真機檢查名要逐項出現在 impact 裡，不可以只寫「跳過了」
+    // 7 項真機檢查名要逐項出現在 impact 裡，不可以只寫「跳過了」
     for (const name of ["server-autostart", "readiness", "loopback-trusted"]) {
       assert.ok(entries[0].impact.includes(name), entries[0].impact);
     }
