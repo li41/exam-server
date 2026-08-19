@@ -23,14 +23,14 @@ const goodSs = [
 
 const expectations = expectationsFromConfig(config);
 
-test("accepts API on configured WireGuard address and data stores on loopback", () => {
+test("accepts configured API and loopback data-store listeners", () => {
   assert.deepEqual(evaluateListenerBoundaries(goodSs, expectations), {
     passed: ["api", "mysql", "valkey"],
     missing: [],
   });
 });
 
-test("wrong API expectation is red, including the wildcard mutation", () => {
+test("wrong API expectations are red", () => {
   assert.throws(
     () =>
       evaluateListenerBoundaries(goodSs, {
@@ -49,7 +49,7 @@ test("wrong API expectation is red, including the wildcard mutation", () => {
   );
 });
 
-test("API config cannot encode the old loopback or wildcard hole", () => {
+test("API config rejects loopback and wildcard hosts", () => {
   assert.throws(
     () => expectationsFromConfig({ ...config, HOST: "127.0.0.1" }),
     /WireGuard-facing address, not loopback/u,
@@ -60,7 +60,7 @@ test("API config cannot encode the old loopback or wildcard hole", () => {
   );
 });
 
-test("MySQL rejects wildcard listeners on both classic and X protocol ports", () => {
+test("MySQL rejects wildcard classic and X listeners", () => {
   assert.throws(
     () =>
       evaluateListenerBoundaries(
@@ -102,7 +102,7 @@ test("Valkey rejects wildcard and non-loopback listeners", () => {
   );
 });
 
-test("missing services are explicit missing results, never silent passes", () => {
+test("missing services are explicit, never silent passes", () => {
   const onlyApi = "LISTEN 0 511 10.99.0.1:18787 0.0.0.0:*";
   assert.deepEqual(evaluateListenerBoundaries(onlyApi, expectations), {
     passed: ["api"],
@@ -113,7 +113,7 @@ test("missing services are explicit missing results, never silent passes", () =>
   });
 });
 
-test("runtime gate registers each missing service with the existing skip ledger hook", async () => {
+test("missing services use the existing skip ledger hook", async () => {
   const skips = [];
   const logs = [];
   const result = await runListenerBoundary({
@@ -128,7 +128,10 @@ test("runtime gate registers each missing service with the existing skip ledger 
     log: (line) => logs.push(line),
   });
 
-  assert.deepEqual(result, { skipped: ["mysql", "valkey"], passed: ["api"] });
+  assert.deepEqual(result, {
+    skipped: ["mysql", "valkey"],
+    passed: ["api"],
+  });
   assert.equal(skips.length, 2);
   assert.deepEqual(
     skips.map(({ gate }) => gate),
