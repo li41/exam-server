@@ -88,6 +88,7 @@ const assertFixtureTypecheckPasses = (consumer) => {
       "pnpm",
       "exec",
       "tsc",
+      "--ignoreConfig",
       "--noEmit",
       "--module",
       "ESNext",
