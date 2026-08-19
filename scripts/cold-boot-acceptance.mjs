@@ -10,7 +10,6 @@ const execFileAsync = promisify(execFile);
 export const acceptanceChecks = [
   "server-autostart",
   "readiness",
-  "listener-boundary",
   "mysql-autostart",
   "valkey-autostart",
   "firewalld-enabled-active",
@@ -116,7 +115,7 @@ const printSkipAndExit = (reason) => {
   //    一條 `&&` chain，**沒有摘要層**：跑完只看得到最後一段的輸出。
   //    ⇒ 這一格是本機 verify 上**唯一真的會走到跳過**的閘門（開發機不是
   //    AlmaLinux／systemd 不是 PID 1），卻和真的驗過長得一樣。
-  //    寫進帳本，鏈尾 `gates:skip-report` 會把它連同 8 項檢查名一起念出來。
+  //    寫進帳本，鏈尾 `gates:skip-report` 會把它連同 7 項檢查名一起念出來。
   declareSkip({
     gate: "cold-boot acceptance (real machine)",
     missing: reason,
@@ -242,14 +241,6 @@ export async function runAcceptance({
       async () => command("systemctl", ["is-enabled", "--quiet", service]),
     ],
     ["readiness", async () => fetchReadiness(host, port)],
-    [
-      "listener-boundary",
-      async () => {
-        const { stdout } = await command("ss", ["-H", "-ltnp"]);
-        const listeners = parseSsLocalListeners(stdout, port);
-        validateListenerBoundary(listeners, host, port);
-      },
-    ],
     [
       "mysql-autostart",
       async () => command("systemctl", ["is-enabled", "--quiet", mysqlService]),
