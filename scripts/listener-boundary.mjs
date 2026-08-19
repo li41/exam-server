@@ -93,7 +93,9 @@ export function validateLoopbackListeners(listeners, service, port) {
   for (const localAddress of listeners) {
     const host = listenerHost(localAddress, port);
     if (isWildcardHost(host)) {
-      throw new Error(`${service} must not use a wildcard listener: ${localAddress}`);
+      throw new Error(
+        `${service} must not use a wildcard listener: ${localAddress}`,
+      );
     }
     if (!isLoopbackHost(host)) {
       throw new Error(`${service} must bind only loopback; got ${localAddress}`);
