@@ -1,34 +1,29 @@
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import {
+  formatBaseResolution,
+  resolveGitBaseRef,
+} from "./resolve-git-base-ref.mjs";
 import { declareSkip } from "./verify-skip.mjs";
 
 const manifestPath = "contracts/api-v1.json";
 const current = JSON.parse(await readFile(manifestPath, "utf8"));
-const baseRef = process.env.CONTRACT_BASE_REF;
+const baseResolution = resolveGitBaseRef({
+  envName: "CONTRACT_BASE_REF",
+  envValue: process.env.CONTRACT_BASE_REF,
+});
 
-if (!baseRef) {
-  // ⚠️ 同 check-migration-rollback-compatibility：原本靜靜 exit 0。
+if (!baseResolution.resolved) {
   declareSkip({
     gate: "API v1 cross-revision contract compatibility",
-    missing: "CONTRACT_BASE_REF (set by CI against the PR base)",
+    missing: `CONTRACT_BASE_REF unset and local base resolution failed: ${baseResolution.reason}`,
     impact: `whether ${manifestPath} stayed backward compatible with the base revision`,
   });
   process.exit(0);
 }
 
-const verifyRef = spawnSync(
-  "git",
-  ["rev-parse", "--verify", `${baseRef}^{commit}`],
-  {
-    encoding: "utf8",
-  },
-);
-if (verifyRef.status !== 0) {
-  throw new Error(
-    `Unable to resolve contract base ref ${baseRef}: ${verifyRef.stderr.trim()}`,
-  );
-}
-
+console.log(formatBaseResolution("CONTRACT_BASE_REF", baseResolution));
+const baseRef = baseResolution.commit;
 const baselineResult = spawnSync(
   "git",
   ["show", `${baseRef}:${manifestPath}`],
@@ -37,8 +32,8 @@ const baselineResult = spawnSync(
   },
 );
 if (baselineResult.status !== 0) {
-  // ⚠️ 第二條靜默路徑（工作單沒提到，本輪掃出來的）：base 上沒有 manifest 就
-  //    「接受為 v1 baseline」—— 那同樣是**沒有做比對**，卻也是 exit 0。
+  // ⚠️ 第二條靜默路徑：base 上沒有 manifest 就「接受為 v1 baseline」。
+  //    這同樣是**沒有做比對**，所以一定寫進 skip ledger，不冒充 PASS。
   declareSkip({
     gate: "API v1 cross-revision contract compatibility",
     missing: `${manifestPath} on ${baseRef} (accepted as v1 baseline bootstrap)`,
