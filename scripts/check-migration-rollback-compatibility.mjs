@@ -1,36 +1,41 @@
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { declareSkip } from "./verify-skip.mjs";
 import {
-  createMySqlPool,
-  defaultMigrations,
-  runMigrations,
-} from "../packages/adapters/mysql/dist/index.js";
+  formatBaseResolution,
+  resolveGitBaseRef,
+} from "./resolve-git-base-ref.mjs";
+import { declareSkip } from "./verify-skip.mjs";
 
-const baseRef = process.env.ROLLBACK_BASE_REF;
-if (!baseRef) {
-  // ⚠️ 這裡原本只 `console.log("… skipping …")` 然後 exit 0。exit 0 在
-  //    `pnpm verify` 的 `&&` chain 裡與「真的驗過」完全分不出來 —— 而這一格
-  //    宣稱的是**release rollback 的相容性前提**（README:198、deploy/README:40）。
-  //    ⇒ 現在寫進帳本，鏈尾的 `gates:skip-report` 會把它念出來。
+const baseResolution = resolveGitBaseRef({
+  envName: "ROLLBACK_BASE_REF",
+  envValue: process.env.ROLLBACK_BASE_REF,
+});
+if (!baseResolution.resolved) {
   declareSkip({
     gate: "N-1 migration rollback compatibility",
-    missing:
-      "ROLLBACK_BASE_REF (set by .github/workflows/verify.yml:145 and release.yml:93-95)",
+    missing: `ROLLBACK_BASE_REF unset and local base resolution failed: ${baseResolution.reason}`,
     impact:
       "that the previous application revision still works against the newly migrated schema — i.e. code-only rollback remains viable",
   });
   process.exit(0);
 }
 
+console.log(formatBaseResolution("ROLLBACK_BASE_REF", baseResolution));
+const baseCommit = baseResolution.commit;
+console.log(`Checking N-1 compatibility against ${baseCommit}.`);
+
 const mysqlTestUrl = process.env.MYSQL_TEST_URL;
 if (!mysqlTestUrl) {
   throw new Error(
-    "MYSQL_TEST_URL is required for N-1 migration compatibility.",
+    "MYSQL_TEST_URL is required for N-1 migration compatibility. See doc/nminus1-migration-rollback.md for the dedicated scoped test account.",
   );
 }
+
+const { createMySqlPool, defaultMigrations, runMigrations } = await import(
+  "../packages/adapters/mysql/dist/index.js"
+);
 
 const run = (command, args, cwd, env = process.env) =>
   new Promise((resolve, reject) => {
@@ -49,19 +54,6 @@ const run = (command, args, cwd, env = process.env) =>
       }
     });
   });
-
-const resolvedBase = spawnSync(
-  "git",
-  ["rev-parse", "--verify", `${baseRef}^{commit}`],
-  { encoding: "utf8" },
-);
-if (resolvedBase.status !== 0) {
-  throw new Error(
-    `Unable to resolve rollback base ${baseRef}: ${resolvedBase.stderr.trim()}`,
-  );
-}
-const baseCommit = resolvedBase.stdout.trim();
-console.log(`Checking N-1 compatibility against ${baseCommit}.`);
 
 const originalUrl = new URL(mysqlTestUrl);
 const originalDatabase =
