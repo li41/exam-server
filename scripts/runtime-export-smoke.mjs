@@ -42,7 +42,9 @@ const readManifest = (manifestPath) => {
  * @param {string} [packagesRoot]
  * @returns {{ name: string, directory: string, manifestPath: string }[]}
  */
-export function discoverInternalPackages(packagesRoot = INTERNAL_PACKAGES_ROOT) {
+export function discoverInternalPackages(
+  packagesRoot = INTERNAL_PACKAGES_ROOT,
+) {
   if (!existsSync(packagesRoot)) {
     throw new Error(`Internal packages root does not exist: ${packagesRoot}`);
   }
@@ -50,8 +52,8 @@ export function discoverInternalPackages(packagesRoot = INTERNAL_PACKAGES_ROOT) 
   const packages = [];
 
   const visit = (directory) => {
-    const entries = readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
-      a.name.localeCompare(b.name),
+    const entries = readdirSync(directory, { withFileTypes: true }).sort(
+      (a, b) => a.name.localeCompare(b.name),
     );
 
     for (const entry of entries) {
