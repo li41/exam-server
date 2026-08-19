@@ -28,9 +28,14 @@ console.log(`Checking N-1 compatibility against ${baseCommit}.`);
 
 const mysqlTestUrl = process.env.MYSQL_TEST_URL;
 if (!mysqlTestUrl) {
-  throw new Error(
-    "MYSQL_TEST_URL is required for N-1 migration compatibility. See doc/nminus1-migration-rollback.md for the dedicated scoped test account.",
-  );
+  declareSkip({
+    gate: "N-1 migration rollback compatibility",
+    missing:
+      "MYSQL_TEST_URL is not set; see doc/nminus1-migration-rollback.md for the dedicated scoped test account",
+    impact:
+      "that the previous application revision still works against the newly migrated schema — i.e. code-only rollback remains viable",
+  });
+  process.exit(0);
 }
 
 const { createMySqlPool, defaultMigrations, runMigrations } =
