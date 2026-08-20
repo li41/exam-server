@@ -8,7 +8,7 @@ import {
 } from "../packages/adapters/mysql/dist/index.js";
 
 const usage =
-  "usage: node scripts/create-user.mjs --email <email> --tenant <uuid> --roles <a,b>";
+  "usage: node scripts/create-user.mjs --email <email> --tenant <uuid> --roles <a,b> [--name <\u59d3\u540d>]";
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const uuidPattern =
@@ -30,7 +30,7 @@ export const parseCreateUserArgs = (argv) => {
     values.set(key, value);
   }
 
-  const allowed = new Set(["--email", "--tenant", "--roles"]);
+  const allowed = new Set(["--email", "--tenant", "--roles", "--name"]);
   for (const key of values.keys()) {
     if (!allowed.has(key))
       throw new Error(`Unknown argument: ${key}. ${usage}`);
@@ -39,6 +39,9 @@ export const parseCreateUserArgs = (argv) => {
   const email = values.get("--email")?.trim().toLowerCase();
   const tenantId = values.get("--tenant")?.trim();
   const rawRoles = values.get("--roles")?.trim();
+  // 可選：題目「建立者」那一格要顯示的姓名（#98 A-6）。
+  // ⬛ 不採用 email 遞補：email 是個資，PHP 的 view 也不畫。
+  const displayName = values.get("--name")?.trim();
 
   if (!email || !tenantId || !rawRoles) throw new Error(usage);
   if (email.length > 254 || !emailPattern.test(email)) {
@@ -61,13 +64,18 @@ export const parseCreateUserArgs = (argv) => {
     throw new Error("--roles must not contain duplicate role names.");
   }
 
-  return { email, tenantId, roles };
+  if (displayName !== undefined && displayName.length > 100) {
+    throw new Error("--name must be 100 characters or fewer.");
+  }
+
+  return { email, tenantId, roles, displayName: displayName || null };
 };
 
 export const createUser = async ({
   email,
   tenantId,
   roles,
+  displayName = null,
   users,
   passwordHasher,
   passwordFactory = () => randomBytes(24).toString("base64url"),
@@ -85,6 +93,7 @@ export const createUser = async ({
     email,
     tenantId,
     roles,
+    displayName,
     passwordHash,
   });
 

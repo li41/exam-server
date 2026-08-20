@@ -23,6 +23,7 @@ import {
   QuestionClusterListQuerySchema,
   QuestionGroupListQuerySchema,
   QuestionListQuerySchema,
+  QuestionStatsQuerySchema,
   TestBookletListQuerySchema,
   UpdateExamineeGroupSchema,
   UpdateExamineeSchema,
@@ -403,6 +404,32 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     async (context) =>
       context.json(
         await service.listQuestions(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  /**
+   * 題庫統計卡（PHP `questionsView.php:17-41` 那張）。
+   *
+   * 🔴 **這一條必須註冊在 `/questions/:id` 之前**：Hono 依註冊順序比對，
+   * 反過來寫的話 `stats` 會被當成題目 id ⇒ 永遠回 404。
+   * ⇒ `apps/api/test/question-bank-stats.test.ts` 有一案專門釘住這個順序。
+   */
+  api.get(
+    "/questions/stats",
+    zValidator("query", QuestionStatsQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(
+          context,
+          "Invalid question stats query parameters.",
+        );
+      }
+    }),
+    async (context) =>
+      context.json(
+        await service.questionStats(
           context.req.valid("query"),
           scopeFor(context),
         ),

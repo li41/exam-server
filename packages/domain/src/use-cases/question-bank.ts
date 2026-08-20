@@ -1,11 +1,15 @@
+import { QuestionTypeSchema } from "@server-foundation/api-contracts";
 import type {
   CreateQuestionCategoryInput,
   CreateQuestionInput,
-  Page,
   Question,
+  QuestionType,
   QuestionCategory,
   QuestionCategoryListQuery,
   QuestionListQuery,
+  QuestionPage,
+  QuestionStats,
+  QuestionStatsQuery,
   UpdateQuestionCategoryInput,
   UpdateQuestionInput,
 } from "@server-foundation/api-contracts";
@@ -556,14 +560,49 @@ export const validateKnownQuestionShape = (
   }
 };
 
+/**
+ * 把 `GROUP BY type` 的計數補成**十四型齊全**（沒有題目的填 0）。
+ *
+ * 兩個 repository（MySQL 與 in-memory）共用這一支，
+ * 免得「零填在哪一層」在兩邊各寫一次而長出兩種行為。
+ *
+ * ⚠️ 誠實邊界：`questions.type` 在資料庫是 `VARCHAR(30)` 且**沒有 CHECK**，
+ * 所以理論上可能存在第十五種值（只會來自繞過契約的直接 SQL）。
+ * 那種列會**計入 `total`、不計入 `byType`** ——
+ * 寧可讓總數是對的、讓那一列在逐型分佈裡看不到，
+ * ⛔ 也不要把使用者真的擁有的題目從總數裡吞掉。
+ */
+export const questionStatsFromCounts = (
+  counts: Iterable<{ type: string; count: number }>,
+): QuestionStats => {
+  const byType = Object.fromEntries(
+    QuestionTypeSchema.options.map((type) => [type, 0]),
+  ) as Record<QuestionType, number>;
+  let total = 0;
+  for (const entry of counts) {
+    total += entry.count;
+    if (Object.prototype.hasOwnProperty.call(byType, entry.type)) {
+      byType[entry.type as QuestionType] += entry.count;
+    }
+  }
+  return { total, byType };
+};
+
 export class QuestionBankService {
   constructor(private readonly repository: QuestionBankRepository) {}
 
   listQuestions(
     query: QuestionListQuery,
     scope: QuestionBankScope,
-  ): Promise<Page<Question>> {
+  ): Promise<QuestionPage> {
     return this.repository.listQuestions(query, scope);
+  }
+
+  questionStats(
+    query: QuestionStatsQuery,
+    scope: QuestionBankScope,
+  ): Promise<QuestionStats> {
+    return this.repository.questionStats(query, scope);
   }
 
   async getQuestion(id: string, scope: QuestionBankScope): Promise<Question> {

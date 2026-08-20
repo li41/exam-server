@@ -1,4 +1,5 @@
 import type { CreateQuestionInput } from "@server-foundation/api-contracts";
+import { QuestionSchema } from "@server-foundation/api-contracts";
 import type { BlobStorage } from "@server-foundation/domain";
 import {
   createInMemoryItemRepository,
@@ -321,5 +322,31 @@ describe("question bank API", () => {
       message: expect.stringContaining("/api/v1/questions?fileId=file-guard"),
     });
     expect(deleted).toBe(false);
+  });
+
+  it("建立／單筆／列表三條路徑都帶建立者姓名這一格（查不到人時是 null）", async () => {
+    const app = createTestApp();
+
+    const created = await (
+      await app.request("/api/questions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(singleChoice({ code: "Q-CREATOR" })),
+      })
+    ).json();
+
+    // ⚠️ 這裡的 repository 是 in-memory、沒有 users 表 ⇒ 一定是 null。
+    //    這一案守的是「欄位在三條路徑上都存在」，
+    //    ⛔ 不是「JOIN 撈得到名字」——後者只有 MySQL 整合測試驗得到。
+    expect(created).toHaveProperty("createdByName", null);
+    expect(QuestionSchema.safeParse(created).success).toBe(true);
+
+    const fetched = await (
+      await app.request(`/api/questions/${created.id}`)
+    ).json();
+    expect(fetched).toHaveProperty("createdByName", null);
+
+    const listed = await (await app.request("/api/questions")).json();
+    expect(listed.items[0]).toHaveProperty("createdByName", null);
   });
 });

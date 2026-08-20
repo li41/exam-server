@@ -31,6 +31,7 @@ migration `006_question_bank.sql`：
 versioned 路徑與既有 legacy alias 都提供：
 
 - `GET /api/v1/questions`
+- `GET /api/v1/questions/stats`
 - `GET /api/v1/questions/:id`
 - `POST /api/v1/questions`
 - `PATCH /api/v1/questions/:id`
@@ -43,7 +44,27 @@ versioned 路徑與既有 legacy alias 都提供：
 
 題目列表沿用 opaque cursor，支援 PHP 現有的 `createdBy`、`type`、`categoryId`（本分類 + 直屬子分類）、`difficulty`、`status`、`search`；`search` 對 stem / code / tags 做 substring match。
 
+### 統計（`#98` A-5，2026-08-21 補）
+
+PHP 題庫清單頁上方有一張統計卡：左邊一個總數、右邊逐題型的數量（`exam.tw/src/Pages/Manage/questionsView.php:17-41`）。對應到院內側是兩件事：
+
+- **清單的 `page.total`**：套完全部篩選、**不套分頁**的筆數，對應 PHP `paginateForCompany()` 回的 `total`（`exam.tw/src/Models/Question.php:891-895`），也就是 PHP 拿去畫「總題數」的那個數（`questionsView.php:7,25`）。⚠️ 這是**共用 `PageInfo` 之外**多出來的一格，只有題目列表有。
+- **`GET /api/v1/questions/stats`**：`{ total, byType }`。對應 PHP `Question::getTypeStats()`（`exam.tw/src/Models/Question.php:926-935`）。查詢條件**只有 `createdBy`**，⛔ 不吃題型／難度／狀態／關鍵字——照 PHP：統計卡本身就是逐題型分佈，再套題型篩選會讓其他題型全變 0。`byType` **十四種題型一律齊全、沒有的填 0**，對應 PHP 逐 `$available_types` 畫、缺鍵補零（`questionsView.php:30-31`）。
+
+刻意的偏離：PHP 那張卡在 `questions_own` 模式下會跟著收窄（`$onlyMine`），院內側今天沒有那個模式——原因見下一段與 `doc/question-bank-authz-gap-audit.md`。列表與統計吃的是**同一個 `QuestionBankScope`**，所以哪一天補上收窄，兩邊會一起收窄，⛔ 不會出現「只看得到 3 題但統計說 500 題」。
+
+### 建立者姓名（`#98` A-6，2026-08-21 補）
+
+`Question.createdByName`：可選、可為 null 的顯示姓名，來源是 `users.display_name`（migration `015_user_display_name.sql`），查詢時 `LEFT JOIN users`。與 PHP 同形（`exam.tw/src/Models/Question.php:899-906`），且與 PHP 一樣**不用 email 遞補**——PHP 的單筆查詢雖然撈了 `creator_email`（`Question.php:970`），全 repo 沒有任何 view 消費它。
+
+- 沒填姓名 ⇒ `null` ⇒ 呼叫端顯示 `—`（PHP 那側是 `?? '-'`，`questionViewView.php:67`）。
+- 姓名怎麼填：`node scripts/create-user.mjs --email … --tenant … --roles … --name 王小明`。既有帳號沒有姓名，需要重建或另行補寫。
+- ⚠️ 刻意**不放進 `AuthIdentity`**：它不是授權資訊。
+- ⚠️ 誠實邊界：`LEFT JOIN` 這條只有 MySQL 整合測試碰得到，本輪環境沒有 `MYSQL_TEST_URL` ⇒ **未執行**。API 測試用的 in-memory repository 沒有 users 表，只驗得到「欄位存在且為 null」。
+
 mutation 使用既有 AuthenticationService 與 IdempotencyStore；request ID、DomainError error contract、HTTP structured log 與既有 app middleware 共用。同公司使用者可看到彼此題目；`createdBy` 是建立者稽核欄位，不是私人資料隔離鍵。
+
+> ⚠️ 上面這一句是**登記過的刻意偏離**，`#98` 已依工單的保險條款停手回報，未實作擁有者收窄。PHP 那側逐筆守門的完整座標、為什麼 CF 的形狀在院內接不起來、以及若裁定要做時的正確下刀處，都在 `doc/question-bank-authz-gap-audit.md`。
 
 ## 14 種題型與驗證
 

@@ -65,6 +65,12 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/questions/stats",
+      "authenticated": true,
+      "idempotent": false
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/questions/:id",
       "authenticated": true,
       "idempotent": false
@@ -560,6 +566,7 @@
       "code": { "type": "string", "required": true },
       "categoryId": { "type": "nullable-string", "required": true },
       "createdBy": { "type": "string", "required": true },
+      "createdByName": { "type": "nullable-string", "required": false },
       "type": { "type": "QuestionType", "required": true },
       "difficulty": { "type": "integer-1-5", "required": true },
       "stem": { "type": "string", "required": true },
@@ -576,6 +583,10 @@
       "createdAt": { "type": "iso-string", "required": true },
       "updatedAt": { "type": "iso-string", "required": true },
       "deletedAt": { "type": "nullable-iso-string", "required": true }
+    },
+    "QuestionStats": {
+      "total": { "type": "nonnegative-integer", "required": true },
+      "byType": { "type": "question-type-count-map", "required": true }
     },
     "QuestionCategory": {
       "id": { "type": "string", "required": true },
