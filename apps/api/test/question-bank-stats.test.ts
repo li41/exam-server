@@ -5,6 +5,7 @@ import {
   QuestionTypeSchema,
 } from "@server-foundation/api-contracts";
 import type { QuestionBankScope } from "@server-foundation/domain";
+import { questionStatsFromCounts } from "@server-foundation/domain";
 import {
   createInMemoryItemRepository,
   createInMemoryQuestionBankRepository,
@@ -180,6 +181,34 @@ describe("題庫統計端點", () => {
 
     expect(body.total).toBe(2);
     expect(body.byType.true_false).toBe(1);
+  });
+});
+
+describe("questionStatsFromCounts（兩個 repository 共用的零填）", () => {
+  it("十四型齊全，缺的填 0", () => {
+    const stats = questionStatsFromCounts([
+      { type: "matching", count: 2 },
+      { type: "sorting", count: 1 },
+    ]);
+    expect(Object.keys(stats.byType).sort()).toEqual(
+      [...QuestionTypeSchema.options].sort(),
+    );
+    expect(stats.byType.matching).toBe(2);
+    expect(stats.byType.single_choice).toBe(0);
+    expect(stats.total).toBe(3);
+  });
+
+  it("繞過契約寫進去的未知題型：計入 total、不計入 byType", () => {
+    // ⚠️ 這是**刻意**的取捨，不是漏寫：`questions.type` 是 VARCHAR 沒有 CHECK，
+    //    寧可讓總數是對的、那一列在逐型分佈裡看不到，
+    //    ⛔ 也不要把使用者真的擁有的題目從總數裡吞掉。
+    const stats = questionStatsFromCounts([
+      { type: "single_choice", count: 1 },
+      { type: "not_a_real_type", count: 5 },
+    ]);
+    expect(stats.total).toBe(6);
+    expect(stats.byType.single_choice).toBe(1);
+    expect(Object.keys(stats.byType)).not.toContain("not_a_real_type");
   });
 });
 
