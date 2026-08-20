@@ -51,6 +51,13 @@ export class QuestionAwareBlobStorage implements BlobStorage {
     const questionScope = {
       tenantId: scope.tenantId,
       actorUserId: scope.userId,
+      // 🔴 這裡**故意**傳 `null`（＝不收窄），⛔ 不要改成
+      //    `visibleQuestionOwnerIdFor(...)`：這一條問的是「還有題目在引用這個檔案嗎」。
+      //    收窄的話，「只看自己」的使用者會得到 `false`
+      //    ⇒ 刪掉別人題目正在用的檔案，把別人的題目弄壞。
+      //    ⇒ 收窄可見範圍是為了少看到東西，不是為了多刪得掉東西。
+      //    判準與 port 的 `isFileReferenced` 註解同一條。
+      visibleQuestionOwnerId: null,
     };
     if (await this.questions.isFileReferenced(fileId, questionScope)) {
       throw new ConflictError(

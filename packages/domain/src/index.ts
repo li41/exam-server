@@ -18,6 +18,7 @@ export * from "./ports/affair-receipt-repository.js";
 export * from "./ports/provider-capabilities.js";
 export * from "./use-cases/items.js";
 export * from "./use-cases/question-bank.js";
+export * from "./use-cases/question-visibility.js";
 export * from "./use-cases/question-import.js";
 export * from "./use-cases/question-structures.js";
 export * from "./use-cases/test-booklets.js";

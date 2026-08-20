@@ -20,10 +20,12 @@ import {
   InvalidCursorError,
   NotFoundError,
   questionStatsFromCounts,
+  unnarrowedQuestionScope,
 } from "@server-foundation/domain";
 import type {
   QuestionBankRepository,
   QuestionBankScope,
+  QuestionOwnerScope,
 } from "@server-foundation/domain";
 import type {
   Pool,
@@ -245,6 +247,26 @@ const mediaMapFor = async (
 /** mysql2 佔位參數接受的純量。 */
 type SqlParam = string | number | boolean | Date | null;
 
+/**
+ * 擁有者收窄（`QuestionOwnerScope.visibleQuestionOwnerId`）的 SQL 形狀。
+ *
+ * 與 `exam-control/src/db/question-clusters.ts:215` 同形：條件永遠加上去，
+ * `null` 時靠 `? IS NULL` 讓整條為真 ⇒ ⛔ 不必在每個呼叫點寫兩條 SQL。
+ * ⚠️ 兩個 `?` 要餵**同一個值**，所以搭配 `ownerParameters()` 一起用。
+ *
+ * ⛔ 不要改寫成「`null` 時就不 push 這個 predicate」：那會讓「看全部」與「只看自己」
+ * 走兩條不同的 SQL，其中一條沒被測到時是靜默的。
+ */
+const ownerPredicate = (column: string): string =>
+  `(? IS NULL OR ${column} = ?)`;
+
+const ownerParameters = (
+  scope: QuestionOwnerScope,
+): [string | null, string | null] => [
+  scope.visibleQuestionOwnerId,
+  scope.visibleQuestionOwnerId,
+];
+
 export class MySqlQuestionBankRepository implements QuestionBankRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -257,10 +279,19 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
    */
   private questionFilterPredicates(
     query: QuestionListQuery,
-    scope: QuestionBankScope,
-  ): { predicates: string[]; parameters: Array<string | number> } {
-    const predicates = ["q.tenant_id = ?", "q.deleted_at IS NULL"];
-    const parameters: Array<string | number> = [scope.tenantId];
+    scope: QuestionOwnerScope,
+  ): { predicates: string[]; parameters: Array<string | number | null> } {
+    const predicates = [
+      "q.tenant_id = ?",
+      "q.deleted_at IS NULL",
+      // 擁有者收窄與 tenant 一樣，是**基礎條件**而不是選用篩選 ⇒ 放在最前面，
+      // 而且因為它在 `questionFilterPredicates()` 裡，列表與 `COUNT(*)` 一定同時吃到。
+      ownerPredicate("q.created_by"),
+    ];
+    const parameters: Array<string | number | null> = [
+      scope.tenantId,
+      ...ownerParameters(scope),
+    ];
     const search = query.search?.trim();
 
     if (query.createdBy) {
@@ -309,7 +340,7 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
 
   async listQuestions(
     query: QuestionListQuery,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<QuestionPage> {
     const limit = Math.min(Math.max(Math.trunc(query.limit), 1), 100);
     const { predicates: filterPredicates, parameters: filterParameters } =
@@ -371,10 +402,20 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
 
   async questionStats(
     query: QuestionStatsQuery,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<QuestionStats> {
-    const predicates = ["tenant_id = ?", "deleted_at IS NULL"];
-    const parameters: Array<string | number> = [scope.tenantId];
+    // ⚠️ 統計必須套**同一個**收窄：「我只看得到 3 題但統計說 500 題」
+    //    比沒有統計更糟。對照 PHP `Question::getTypeStats()`
+    //    （`exam.tw/src/Models/Question.php:926-936` 的 `$onlyMine`）。
+    const predicates = [
+      "tenant_id = ?",
+      "deleted_at IS NULL",
+      ownerPredicate("created_by"),
+    ];
+    const parameters: Array<string | number | null> = [
+      scope.tenantId,
+      ...ownerParameters(scope),
+    ];
     if (query.createdBy) {
       predicates.push("created_by = ?");
       parameters.push(query.createdBy);
@@ -393,7 +434,7 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
 
   async getQuestion(
     id: string,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<Question | null> {
     return this.getQuestionWith(this.pool, id, scope);
   }
@@ -444,7 +485,10 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
       }
       throw error;
     }
-    const question = await this.getQuestion(id, scope);
+    // ⛔ 刻意不收窄：這是**建立後的 read-back**，那一列的 `created_by`
+    //    就是 `scope.actorUserId` 自己 ⇒ 收窄在這裡只可能造成
+    //    「建立成功卻讀不回來」。
+    const question = await this.getQuestion(id, unnarrowedQuestionScope(scope));
     if (!question)
       throw new Error("Question insert succeeded but could not be read.");
     return question;
@@ -453,7 +497,7 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
   async updateQuestion(
     id: string,
     input: UpdateQuestionInput,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<Question> {
     const updates: string[] = [];
     // ⚠️ 不能用 `unknown[]` —— mysql2 的 `execute(sql, values)` overload 不接受它，
@@ -498,10 +542,20 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
           await this.assertMediaFiles(connection, input.media, scope);
         }
         const [result] = await connection.execute<ResultSetHeader>(
+          // 寫入端自己也帶收窄，⛔ 不倚賴 service 先呼叫過 `getQuestion()`：
+          // repository 是公開的 port，整合測試與未來的呼叫端會直接打這一支。
           `UPDATE questions
            SET ${updates.length > 0 ? `${updates.join(", ")}, ` : ""}version = version + 1, updated_at = ?
-           WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND version = ?`,
-          [...values, now, id, scope.tenantId, input.version],
+           WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND version = ?
+             AND ${ownerPredicate("created_by")}`,
+          [
+            ...values,
+            now,
+            id,
+            scope.tenantId,
+            input.version,
+            ...ownerParameters(scope),
+          ],
         );
         if (result.affectedRows === 0) {
           await this.throwQuestionUpdateFailure(
@@ -529,14 +583,15 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
   async softDeleteQuestion(
     id: string,
     version: number,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<void> {
     const now = new Date();
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE questions
        SET version = version + 1, updated_at = ?, deleted_at = ?
-       WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND version = ?`,
-      [now, now, id, scope.tenantId, version],
+       WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND version = ?
+         AND ${ownerPredicate("created_by")}`,
+      [now, now, id, scope.tenantId, version, ...ownerParameters(scope)],
     );
     if (result.affectedRows === 0) {
       await this.throwQuestionUpdateFailure(this.pool, id, version, scope);
@@ -668,6 +723,9 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
   ): Promise<void> {
     const now = new Date();
     await withTransaction(this.pool, async (connection) => {
+      // 🔴 這個「還有題目在用嗎」⛔ 刻意不吃 `visibleQuestionOwnerId`：
+      //    收窄的話，「只看自己」的人會刪掉別人題目正在用的分類。
+      //    ⇒ 與 `isFileReferenced()` 同一個判準（見 port 的註解）。
       const [references] = await connection.execute<CountRow[]>(
         `SELECT COUNT(*) AS count FROM questions
          WHERE tenant_id = ? AND category_id = ? AND deleted_at IS NULL`,
@@ -702,6 +760,7 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     fileId: string,
     scope: QuestionBankScope,
   ): Promise<boolean> {
+    // ⛔ 這一條刻意不加 `ownerPredicate` —— 理由寫在 port 的 `isFileReferenced` 註解。
     const [rows] = await this.pool.execute<CountRow[]>(
       `SELECT COUNT(*) AS count
        FROM question_files qf
@@ -716,15 +775,19 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
   private async getQuestionWith(
     executor: Executor,
     id: string,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<Question | null> {
     const [rawRows] = await executor.execute(
+      // 物件級守門：帶著別人的 id 直接讀，這一條要回 `null`
+      // ⇒ service 轉成 `NotFoundError` ⇒ 404，⛔ 不是 200、也⛔不是 403
+      //   （403 會洩漏「這個 id 存在」）。
       `SELECT ${questionColumns}
        FROM questions q
        ${questionCreatorJoin}
        WHERE q.id = ? AND q.tenant_id = ? AND q.deleted_at IS NULL
+         AND ${ownerPredicate("q.created_by")}
        LIMIT 1`,
-      [id, scope.tenantId],
+      [id, scope.tenantId, ...ownerParameters(scope)],
     );
     const rows = rawRows as QuestionRow[];
     const row = rows[0];
@@ -838,12 +901,17 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     executor: Executor,
     id: string,
     version: number,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<never> {
+    // 🔴 這一支是「改／刪影響 0 列」時判斷要回 404 還是 409 的地方 ⇒
+    //    **它也必須帶收窄**。否則「只看自己」的人拿別人的 id ＋ 隨便一個 version
+    //    會得到 409「版本不符」——那等於承認「這個 id 存在」，
+    //    ⇒ 是個可以逐一試出他人題目 id 的洩漏。收窄之後一律是 404。
     const [rawRows] = await executor.execute(
       `SELECT id, version, deleted_at FROM questions
-       WHERE id = ? AND tenant_id = ? LIMIT 1`,
-      [id, scope.tenantId],
+       WHERE id = ? AND tenant_id = ? AND ${ownerPredicate("created_by")}
+       LIMIT 1`,
+      [id, scope.tenantId, ...ownerParameters(scope)],
     );
     const rows = rawRows as ExistingRow[];
     const row = rows[0];

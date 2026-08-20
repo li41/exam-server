@@ -15,13 +15,25 @@ if (!connectionString) {
 const pool = createMySqlPool(connectionString);
 const questions = new MySqlQuestionBankRepository(pool);
 const structures = new MySqlQuestionStructureRepository(pool);
+/**
+ * ⚠️ `visibleQuestionOwnerId: null` ＝ 不收窄。這一支測試會把 `scope` 直接餵給
+ * `questions.softDeleteQuestion()`（見下方「orphaned question」那一案）
+ * ⇒ 少了這一格會在 mysql2 炸「Bind parameters must not contain undefined」，
+ * 而**這個 package 的測試檔不過型別檢查**（`tsconfig.json` 只 include `src`）
+ * ⇒ 編譯期不會有人提醒你。
+ *
+ * ⛔ 題組／題本這一族本身今天還沒有擁有者收窄（登記在
+ * `doc/question-bank-owner-scope.md`），所以這裡是 `null` 而不是 `actorUserId`。
+ */
 const scope = {
   tenantId: "37000000-0000-4000-8000-000000000001",
   actorUserId: "37000000-0000-4000-8000-000000000002",
+  visibleQuestionOwnerId: null,
 };
 const otherScope = {
   tenantId: "37000000-0000-4000-8000-000000000099",
   actorUserId: "37000000-0000-4000-8000-000000000098",
+  visibleQuestionOwnerId: null,
 };
 const foreignFileId = "37000000-0000-4000-8000-000000000050";
 

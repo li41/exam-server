@@ -17,6 +17,7 @@ import { DomainError, NotFoundError } from "../errors.js";
 import type {
   QuestionBankRepository,
   QuestionBankScope,
+  QuestionOwnerScope,
 } from "../ports/question-bank-repository.js";
 
 type JsonObject = Record<string, unknown>;
@@ -593,19 +594,19 @@ export class QuestionBankService {
 
   listQuestions(
     query: QuestionListQuery,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<QuestionPage> {
     return this.repository.listQuestions(query, scope);
   }
 
   questionStats(
     query: QuestionStatsQuery,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<QuestionStats> {
     return this.repository.questionStats(query, scope);
   }
 
-  async getQuestion(id: string, scope: QuestionBankScope): Promise<Question> {
+  async getQuestion(id: string, scope: QuestionOwnerScope): Promise<Question> {
     const question = await this.repository.getQuestion(id, scope);
     if (!question) throw new NotFoundError("question", id);
     return question;
@@ -627,7 +628,7 @@ export class QuestionBankService {
   async updateQuestion(
     id: string,
     input: UpdateQuestionInput,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<Question> {
     const current = await this.getQuestion(id, scope);
     validateKnownQuestionShape({
@@ -642,7 +643,7 @@ export class QuestionBankService {
   async softDeleteQuestion(
     id: string,
     version: number,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<void> {
     await this.getQuestion(id, scope);
     await this.repository.softDeleteQuestion(id, version, scope);

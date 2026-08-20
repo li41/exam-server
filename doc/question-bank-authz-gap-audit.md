@@ -1,5 +1,15 @@
 # 院內題庫的擁有者權限缺口：稽核與停手回報
 
+> 🔴 **本文件的「結論」已於 2026-08-21 被主公裁示取代（走丙：權限由院內自管）**，
+> 實作與現行行為見 **`doc/question-bank-owner-scope.md`**（Issue `#101`）。
+> ⛔ 不要再照這份文件的第 6、7 節去推「要不要做」——那已經裁完了。
+>
+> 仍然可用的部分：**第 4 節 PHP 那側的逐筆守門座標**（真相源沒動）、
+> 第 2 節「題庫路由不查權限表」那條界線（新做法走 `AuthIdentity.roles`，
+> ⛔ 沒有去查 `company_members`，所以沒有違反它）、
+> 以及第 5 節「一台一組時收窄反而互相藏題」那個風險（見下方就地更正）。
+> 逐句哪裡變假，下面各節都有 `2026-08-21 更正` 就地標註。
+
 Issue：`#98 WO-SERVER-QBANK-AUTHZ-AND-STATS` 的 ①（A-7）
 
 日期：2026-08-21　　基準：`origin/main` = `f1eb42c`
@@ -53,6 +63,11 @@ Issue：`#98 WO-SERVER-QBANK-AUTHZ-AND-STATS` 的 ①（A-7）
 rg 'questions_all|questions_own' --glob '!dist' --glob '!*.md' .   ⇒ 零命中
 ```
 
+> ⚠️ **2026-08-21 更正**：上面這條指令的結果**只對 `f1eb42c`／`24e8891` 成立**。
+> `#101` 之後同一條指令會命中
+> `packages/domain/src/use-cases/question-visibility.ts`（那兩個角色名的常數）。
+> ⛔ 不要拿這一格當「現況查核」。
+
 `packages/api-contracts/src/company-members.ts`、`packages/domain/src/use-cases/company-members.ts`、
 `apps/api/src/company-member-routes.ts` 皆已不存在。刪除的依據是
 `doc/company-member-routes-usage-audit.md:9` 的「決策：甲——刪，不修六條 gap」，
@@ -60,6 +75,11 @@ rg 'questions_all|questions_own' --glob '!dist' --glob '!*.md' .   ⇒ 零命中
 
 ⇒ 今天要在院內側做 `questions_own`，**必須先把一個昨天才依裁示刪掉的權限模型重新建回來**。
 那顯然不是一張實作單能自己決定的事。
+
+> 🔴 **2026-08-21 更正：這個先決條件被繞過了，不是被滿足。**
+> `#101` 走的是第三條路——**用既有的 `AuthIdentity.roles`**（`users.roles`，`002_auth.sql:11`），
+> ⛔ 沒有重建 company-member 權限模型、⛔ 沒有讓 CF 簽發憑證、⛔ 沒有新 migration。
+> 判準見 `doc/question-bank-owner-scope.md` 第 2 節。
 
 ## 4. 誠實邊界：PHP 那側確實有守門，而且是逐筆的
 
@@ -87,18 +107,28 @@ rg 'questions_all|questions_own' --glob '!dist' --glob '!*.md' .   ⇒ 零命中
 | 呼叫端是誰                           | 只有桌面版一個                                                                                  | 桌面 `src/api/exam-server-client.ts:359-368`；`exam.tw` / `exam-runtime` / `exam-control` 均零命中 |
 | 用什麼身分                           | 使用者在 App 內**另外輸入的一組 exam-server 帳密**，與 CF／Google 登入那個人**無任何對應**      | 桌面 `src/ui/ExamServerQuestionBankSession.tsx:190-243`（表單不預填 CF email）                     |
 | 身分裡有權限嗎                       | `AuthIdentity` 只有 `userId/email/tenantId/roles`；`roles` 是任意字串，實際部署一律 `developer` | `packages/auth/src/service.ts:29-34`、`deploy/scripts/bootstrap-almalinux10.sh:56`                 |
-| `roles` 有被拿來授權嗎               | **零**：全 repo 沒有 `requireRole`／`hasRole`／`roles.includes`                                 | 只出現在 login 回應與 audit log                                                                    |
+| `roles` 有被拿來授權嗎               | ⚠️ **2026-08-21 起為假**。當時：**零**，全 repo 沒有 `requireRole`／`hasRole`／`roles.includes` | 今天：`packages/domain/src/use-cases/question-visibility.ts` 有兩行 `roles.includes(...)`          |
 | CF 的 `questions_all/own` 傳得過來嗎 | **傳不過來**，桌面沒有任何欄位送出它                                                            | 桌面 client 送出的只有 query filter                                                                |
 
 🔴 也就是說：**院內側今天沒有「這個呼叫方屬於哪一種權限」這個資訊**。
 要做 A-7，得先決定「院內 exam-server 帳號是一人一組，還是一台一組」——
 一台一組的話，`questions_own` 收窄不但沒有保護作用，還會把同機同事的題目互相藏起來。
 
+> 🔴 **2026-08-21 更正（兩半，一半假一半仍成立）**：
+> ①「沒有那個資訊」**為假** —— `roles` 就是那個資訊，只是當時沒有人消費它。
+> ② 主公確認院內是**一人一帳號**，所以「一台一組」那個風險今天不成立；
+> ⚠️ 但它**仍然是有效的警語**：哪天院內改成共用帳號，收窄就會從保護變成互相藏題，
+> ⇒ 必須重新裁示。這一條已抄進 `doc/question-bank-owner-scope.md` 第 2 節 B。
+
 ⚠️ 這個 repo 已經有一次同型的裁示，結論寫在 `doc/decision-affair-belongs-to-cf.md`：
 
 > 「沒有可信的 caller principal」…… **當一個「缺陷」的修法需要先決定使用者是誰，那它就不是缺陷。**
 
 ## 6. 要裁的其實是一個問題
+
+> 🔴 **2026-08-21 更正：這個二分法不完整。** 主公選的是第三條路
+> （既有 `roles` 當權限來源、預設不收窄、逐帳號選擇性授予），
+> 既沒有重建被 `#96` 刪掉的那層、也沒有讓 CF 簽憑證、也沒有宣告 A-7 不成立。
 
 **院內 `exam-server` 的帳號粒度是「一人一組」還是「一台／一單位一組」？**
 
@@ -120,7 +150,20 @@ rg 'questions_all|questions_own' --glob '!dist' --glob '!*.md' .   ⇒ 零命中
 還是 `identity.userId`；列表、單筆讀取、更新、刪除、**以及本輪新增的統計**都吃同一個 scope
 ⇒ 加一格就全部一起收窄，不會漏掉某一條路徑。該型別的註解已經指向這裡。
 
+> ⚠️ **2026-08-21 更正（處方已執行，但有兩處事實要修）**：
+> ① 欄位名逐字採用（`visibleQuestionOwnerId`），但它加在**新的 `QuestionOwnerScope`** 上，
+> ⛔ 不是加在 `QuestionBankScope`——因為那個型別實際上被試務／考生那一族共用，
+> 加上去會迫使它們談題目可見範圍。
+> ② 「**加一格就全部一起收窄，不會漏掉某一條路徑**」**為假**：
+> 題目那一族（含統計）確實一起收窄了，但 question-clusters／question-groups
+> ／test-booklets ⛔ 完全沒有收窄，逐條登記在
+> `doc/question-bank-owner-scope.md` 第 4 節。
+> ③ 「該型別的註解已經指向這裡」已改成指向 `#101` 與那份新文件。
+
 ## 8. 本輪實際做了什麼
+
+> ⚠️ **2026-08-21 更正**：下面三條是 `#98` 那一輪的紀錄，仍然為真；
+> ②「未來加收窄時會自動吃到」已經發生（`#101` 已實作），⛔ 不再是未來式。
 
 - ①（A-7）：**只稽核、未動任何 production code。**
 - ②（A-5 統計）：已做。統計走的就是第 7 節那個 scope，所以未來加收窄時會自動吃到。

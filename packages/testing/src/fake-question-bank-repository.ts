@@ -23,6 +23,7 @@ import {
 import type {
   QuestionBankRepository,
   QuestionBankScope,
+  QuestionOwnerScope,
 } from "@server-foundation/domain";
 
 const encodeCursor = (offset: number) => btoa(String(offset));
@@ -44,6 +45,22 @@ const readableMedia = (media: QuestionMedia[]): QuestionMediaResult[] =>
     available: true,
   }));
 
+/**
+ * 擁有者收窄（`QuestionOwnerScope.visibleQuestionOwnerId`）：
+ * `null` ＝ 看全部；字串 ＝ 只看 `createdBy` 等於它的題目。
+ *
+ * ⚠️ 要與 MySQL 版的 `ownerPredicate()`
+ * （`packages/adapters/mysql/src/question-bank-repository.ts`）同語意 ⇒
+ * 兩邊都是「條件永遠套用、`null` 時整條為真」，
+ * ⛔ 不要在其中一邊寫成「`null` 就跳過這段過濾」。
+ */
+const ownerVisible = (
+  question: Pick<Question, "createdBy">,
+  scope: QuestionOwnerScope,
+): boolean =>
+  scope.visibleQuestionOwnerId === null ||
+  question.createdBy === scope.visibleQuestionOwnerId;
+
 export class InMemoryQuestionBankRepository implements QuestionBankRepository {
   private readonly questions: Question[] = [];
   private readonly categories: QuestionCategory[] = [];
@@ -52,7 +69,7 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
 
   async listQuestions(
     query: QuestionListQuery,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<QuestionPage> {
     const search = query.search?.toLocaleLowerCase();
     const categoryIds = query.categoryId
@@ -71,6 +88,10 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
     const visible = this.questions.filter((question) => {
       if (question.deletedAt || question.tenantId !== scope.tenantId)
         return false;
+      // 擁有者收窄與 tenant 同級，是基礎條件而不是選用篩選。
+      // ⚠️ 因為 `visible` 同時決定 `items` 與 `page.total`，
+      //    這一行讓「列出幾筆」與「總共幾筆」不可能互相矛盾。
+      if (!ownerVisible(question, scope)) return false;
       if (query.createdBy && question.createdBy !== query.createdBy)
         return false;
       if (query.type && question.type !== query.type) return false;
@@ -117,11 +138,13 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
 
   async questionStats(
     query: QuestionStatsQuery,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<QuestionStats> {
     const counts = new Map<string, number>();
     for (const question of this.questions) {
       if (question.deletedAt || question.tenantId !== scope.tenantId) continue;
+      // 統計套的是**同一個**收窄（對照 PHP `Question::getTypeStats()` 的 `$onlyMine`）。
+      if (!ownerVisible(question, scope)) continue;
       if (query.createdBy && question.createdBy !== query.createdBy) continue;
       counts.set(question.type, (counts.get(question.type) ?? 0) + 1);
     }
@@ -132,13 +155,15 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
 
   async getQuestion(
     id: string,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<Question | null> {
+    // 物件級守門：帶著別人的 id 直接讀 ⇒ `null` ⇒ service 轉 404。
     const question = this.questions.find(
       (candidate) =>
         candidate.id === id &&
         candidate.tenantId === scope.tenantId &&
-        !candidate.deletedAt,
+        !candidate.deletedAt &&
+        ownerVisible(candidate, scope),
     );
     return question ? structuredClone(question) : null;
   }
@@ -184,7 +209,7 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
   async updateQuestion(
     id: string,
     input: UpdateQuestionInput,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<Question> {
     const question = this.requiredQuestion(id, scope);
     if (question.version !== input.version) {
@@ -223,7 +248,7 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
   async softDeleteQuestion(
     id: string,
     version: number,
-    scope: QuestionBankScope,
+    scope: QuestionOwnerScope,
   ): Promise<void> {
     const question = this.requiredQuestion(id, scope);
     if (question.version !== version) {
@@ -342,6 +367,8 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
         `Question category ${id} has changed; reload before deleting.`,
       );
     }
+    // ⛔ 這個「還有題目在用嗎」刻意不吃 `visibleQuestionOwnerId`：
+    //    收窄的話，「只看自己」的人會刪掉別人題目正在用的分類。
     const hasQuestion = this.questions.some(
       (question) =>
         question.tenantId === scope.tenantId &&
@@ -368,6 +395,7 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
     fileId: string,
     scope: QuestionBankScope,
   ): Promise<boolean> {
+    // ⛔ 刻意不吃 `visibleQuestionOwnerId` —— 理由寫在 port 的 `isFileReferenced` 註解。
     return this.questions.some(
       (question) =>
         question.tenantId === scope.tenantId &&
@@ -376,12 +404,20 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
     );
   }
 
-  private requiredQuestion(id: string, scope: QuestionBankScope): Question {
+  /**
+   * 改／刪共用的取列。
+   *
+   * 🔴 這裡也要收窄：它同時決定「版本不符 ⇒ 409」還是「看不到 ⇒ 404」。
+   * 少了 `ownerVisible()`，拿別人的 id ＋ 隨便一個 version 會得到 409，
+   * 而 409 等於承認「這個 id 存在」。
+   */
+  private requiredQuestion(id: string, scope: QuestionOwnerScope): Question {
     const question = this.questions.find(
       (candidate) =>
         candidate.id === id &&
         candidate.tenantId === scope.tenantId &&
-        !candidate.deletedAt,
+        !candidate.deletedAt &&
+        ownerVisible(candidate, scope),
     );
     if (!question) throw new NotFoundError("question", id);
     return question;

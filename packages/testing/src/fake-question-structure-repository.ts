@@ -15,6 +15,7 @@ import {
   DomainError,
   InvalidCursorError,
   NotFoundError,
+  unnarrowedQuestionScope,
 } from "@server-foundation/domain";
 import type {
   QuestionBankRepository,
@@ -327,8 +328,13 @@ export class InMemoryQuestionStructureRepository implements QuestionStructureRep
       cluster.questionIds.map(async (questionId, position) => ({
         questionId,
         position,
+        // ⛔ 刻意不收窄：題組／題本這一族**今天整族都還沒收窄**
+        //    （登記在 `doc/question-bank-owner-scope.md`）⇒ 這裡維持今天的行為。
         available:
-          (await this.questions.getQuestion(questionId, scope)) !== null,
+          (await this.questions.getQuestion(
+            questionId,
+            unnarrowedQuestionScope(scope),
+          )) !== null,
       })),
     );
     const { questionIds: _questionIds, ...metadata } = cluster;
@@ -345,9 +351,12 @@ export class InMemoryQuestionStructureRepository implements QuestionStructureRep
           return {
             ...item,
             position,
+            // ⛔ 刻意不收窄：理由同 `toCluster()`。
             available:
-              (await this.questions.getQuestion(item.questionId, scope)) !==
-              null,
+              (await this.questions.getQuestion(
+                item.questionId,
+                unnarrowedQuestionScope(scope),
+              )) !== null,
           } as const;
         }
         return {
@@ -436,7 +445,15 @@ export class InMemoryQuestionStructureRepository implements QuestionStructureRep
     owner: "cluster" | "group",
   ): Promise<void> {
     for (const questionId of questionIds) {
-      if (!(await this.questions.getQuestion(questionId, scope))) {
+      // ⛔ 刻意不收窄：題組今天可以引用同租戶任何人的題目——那是 PHP
+      //    `filterValidQuestionIds()`（`Ajax/Actions.php:279`）有、院內還沒有的收窄，
+      //    登記在 `doc/question-bank-owner-scope.md`。這裡傳 `null` 維持今天的行為。
+      if (
+        !(await this.questions.getQuestion(
+          questionId,
+          unnarrowedQuestionScope(scope),
+        ))
+      ) {
         validationError(
           `Question ${owner} questionId "${questionId}" does not exist.`,
         );
