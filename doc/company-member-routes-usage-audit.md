@@ -206,3 +206,40 @@ MySQL schema 不建議直接刪掉既有的 `packages/adapters/mysql/schema/014_
 - 本工單只新增這一份 audit markdown；沒有修改任何 `.ts`、route、use-case 或 repository source。
 - `corepack pnpm verify`：**未執行**，依 #93 明確指示。
 - Prettier：**未執行**；先前環境因 Corepack 連 `registry.npmjs.org` DNS `EAI_AGAIN` 無法取得 pnpm，且 #93 最新留言明確授權本輪不要再跑，由收件端排版。
+
+---
+
+## 動態／部署面確認（#95）
+
+#95 依「確真的沒用後刪除」裁示，只補 #93 未涵蓋的動態／部署面，不重做前面的靜態掃描。
+
+### 1. 實際部署：有 WSL 模擬部署，但沒有 repo 證據顯示已部署到院內實體 VPS
+
+- `deploy/README.md` 是 single-VPS production baseline／安裝範本；`deploy/env/server-foundation.env.example` 的 MySQL 與 deployment identity 值仍是 `CHANGE_ME`，這些檔案本身不是已上線主機清冊。
+- issue #49 的 owner 用詞更正明確寫下：先前把 AlmaLinux 那台稱為「院內真機」是錯的；它是**跟開發機同一台 Windows 上的另一個 WSL 發行版**，是院內環境模擬，不是院內實體伺服器，也驗不到院內真正的機器、網路或部署拓樸。
+- issue #73 的 owner 後續量測也把實際執行中的服務定位為 `wsl.exe -d AlmaLinux-10 ...`，並明載「生產機是同一台 Windows 上的另一個 WSL distro」。因此 repo 中先前「正式機／生產機」的說法，不能當成另有院內 VPS 的證據。
+
+**結論**：`exam-server` 確實曾安裝並執行在那個 AlmaLinux WSL 模擬環境，但目前 repo 證據不支持另有院內／客戶實際使用中的 production deployment。#93 保留的「未納管外部 client」缺口因此沒有一個已部署的院內服務面可供外部 client 呼叫。
+
+### 2. 動態證據機制：有 request log 與 mutation audit，但本輪不查任何遠端資料
+
+- `apps/api/src/app.ts` 的全域 middleware 會對每個 request 寫 `http_request` structured log，包含 `method`、`path`、`status`、`requestId` 等資訊；GET `/company-members` 因此也有 request-level 可觀測性。
+- 有 MySQL `auditLog` 時，已認證且狀態 < 500 的 `/api/` POST／PUT／PATCH／DELETE 會額外寫 generic audit record，action 是 `http.<method>`，metadata 會保留 canonical path 與 status。
+- `packages/adapters/mysql/schema/004_audit.sql` 定義 `audit_events` 表，可按 tenant／actor／request 做索引查詢。
+- `deploy/caddy/Caddyfile.example` 的 baseline 另有 JSON access log `/var/log/caddy/server-foundation-access.log`；但目前 AlmaLinux/WireGuard 文件明載該架構不使用 Caddy，因此不能把這份 example 當成現行 WSL 一定有該 log 的證據。
+
+**結論**：repo 有足以做動態追查的機制，但 #95 明令不打生產資料庫，而且第一格已確認沒有院內實體 production deployment；本輪因此**沒有查任何遠端 DB／access log，也不宣稱「audit 表是空的」**。
+
+### 3. CF 是否完整承接 list / create / update：三項都有
+
+`exam-control/src/routes/desktop-member-management.ts` 同一檔已提供：
+
+- list：`GET DESKTOP_MEMBER_MANAGEMENT_PATH` → `MemberManagementRepository.list(...)`；
+- create/invite：`POST DESKTOP_MEMBER_INVITE_PATH` → `MemberManagementRepository.invite(...)`，成功回 201；
+- update：`PUT ${DESKTOP_MEMBER_MANAGEMENT_PATH}/:id` → `MemberManagementRepository.update(...)`。
+
+三條都使用 `desktopCompany` scope 並要求 `members` permission。**沒有缺 list、create 或 update 任一項**，因此刪除 `exam-server` 這組 endpoint 不會刪掉這三種能力的唯一實作。
+
+### 第一階段判定
+
+三格都支持進入第二階段：repo 證據只支持 WSL 模擬部署、沒有院內實體 production deployment；動態 request/audit 機制存在但不需要也沒有查遠端資料；CF 完整承接 list/create/update。依 #95 工單，接續刪除未使用的 `exam-server` company-member route island。
