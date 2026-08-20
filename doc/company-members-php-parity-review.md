@@ -1,3 +1,5 @@
+> ⚠️ **已於 PR #96 刪除，此文件僅為歷史紀錄。** `exam-server` 的 company-member 路由與其專用實作已移除；以下 PHP parity 稽核保留作歷史真相源，其中差異不再是現行 `exam-server` 待修 backlog。
+
 # Company member PHP parity review
 
 Issue: #80
