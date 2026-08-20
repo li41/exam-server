@@ -1,3 +1,5 @@
+> ⚠️ **已於 PR #96 刪除，此文件僅為歷史紀錄。** `exam-server` 的 company-member 路由與其專用實作已移除；以下內容保留作 PHP／舊 server 行為真相源，不再代表現行 `exam-server` 待修 backlog。
+
 # Company members: PHP behavior mapping
 
 Issue: `#55 WO-COMPANY-MEMBERS`
