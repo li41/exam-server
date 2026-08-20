@@ -2,13 +2,15 @@ import { randomUUID } from "node:crypto";
 import type {
   CreateQuestionCategoryInput,
   CreateQuestionInput,
-  Page,
   Question,
   QuestionCategory,
   QuestionCategoryListQuery,
   QuestionListQuery,
   QuestionMedia,
   QuestionMediaResult,
+  QuestionPage,
+  QuestionStats,
+  QuestionStatsQuery,
   UpdateQuestionCategoryInput,
   UpdateQuestionInput,
 } from "@server-foundation/api-contracts";
@@ -17,6 +19,7 @@ import {
   DomainError,
   InvalidCursorError,
   NotFoundError,
+  questionStatsFromCounts,
 } from "@server-foundation/domain";
 import type {
   QuestionBankRepository,
@@ -54,6 +57,7 @@ type QuestionRow = RowDataPacket & {
   created_at: Date | string;
   updated_at: Date | string;
   deleted_at: Date | string | null;
+  created_by_name: string | null;
 };
 
 type MediaRow = RowDataPacket & {
@@ -91,11 +95,27 @@ type CountRow = RowDataPacket & {
   count: number;
 };
 
+type TypeCountRow = RowDataPacket & {
+  type: string;
+  count: number;
+};
+
 const questionColumns = `
   q.id, q.tenant_id, q.code, q.category_id, q.created_by, q.type,
   q.difficulty, q.stem, q.options, q.answer, q.explanation, q.ai_rubric,
   q.points, q.tags, q.status, q.usage_count, q.version,
-  q.created_at, q.updated_at, q.deleted_at`;
+  q.created_at, q.updated_at, q.deleted_at,
+  creator.display_name AS created_by_name`;
+
+/**
+ * 建立者姓名（`#98` A-6）。與 PHP 同形：`LEFT JOIN users ON users.id = q.created_by`
+ * （`exam.tw/src/Models/Question.php:899-906`）。
+ *
+ * ⚠️ 一定是 `LEFT`：`questions.created_by` **沒有外鍵**指向 `users`
+ * （見 `006_question_bank.sql`），帳號被刪或跨 tenant 的舊資料都可能對不到人。
+ * `INNER JOIN` 會讓那些題目**整筆從清單消失** ⇒ 那比少一個姓名嚴重得多。
+ */
+const questionCreatorJoin = `LEFT JOIN users creator ON creator.id = q.created_by`;
 
 const categoryColumns =
   "id, tenant_id, parent_id, name, sort_order, version, created_at, updated_at, deleted_at";
@@ -173,6 +193,7 @@ const toQuestion = (
   code: row.code,
   categoryId: row.category_id,
   createdBy: row.created_by,
+  createdByName: row.created_by_name,
   type: row.type,
   difficulty: row.difficulty,
   stem: row.stem,
@@ -227,14 +248,20 @@ type SqlParam = string | number | boolean | Date | null;
 export class MySqlQuestionBankRepository implements QuestionBankRepository {
   constructor(private readonly pool: Pool) {}
 
-  async listQuestions(
+  /**
+   * 列表與「總筆數」共用的**同一組** WHERE 條件（不含 cursor）。
+   *
+   * ⚠️ 抽成一支的理由：`total` 一旦和列表用不同的條件算，
+   * 畫面就會出現「列出 3 筆但總數說 500」——那比沒有總數更糟。
+   * ⇒ 這裡回傳的 predicates 同時餵給 `SELECT` 與 `COUNT(*)`。
+   */
+  private questionFilterPredicates(
     query: QuestionListQuery,
     scope: QuestionBankScope,
-  ): Promise<Page<Question>> {
+  ): { predicates: string[]; parameters: Array<string | number> } {
     const predicates = ["q.tenant_id = ?", "q.deleted_at IS NULL"];
     const parameters: Array<string | number> = [scope.tenantId];
     const search = query.search?.trim();
-    const limit = Math.min(Math.max(Math.trunc(query.limit), 1), 100);
 
     if (query.createdBy) {
       predicates.push("q.created_by = ?");
@@ -277,6 +304,19 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
       );
       parameters.push(like, like, like);
     }
+    return { predicates, parameters };
+  }
+
+  async listQuestions(
+    query: QuestionListQuery,
+    scope: QuestionBankScope,
+  ): Promise<QuestionPage> {
+    const limit = Math.min(Math.max(Math.trunc(query.limit), 1), 100);
+    const { predicates: filterPredicates, parameters: filterParameters } =
+      this.questionFilterPredicates(query, scope);
+    const predicates = [...filterPredicates];
+    const parameters = [...filterParameters];
+
     if (query.cursor) {
       const cursor = decodeItemCursor(query.cursor);
       if (!cursor) throw new InvalidCursorError();
@@ -287,9 +327,20 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
       parameters.push(mysqlCursorTime, mysqlCursorTime, cursor.id);
     }
 
+    // ⚠️ `total` 用的是**不含 cursor**的條件：它要回答「這組篩選共有幾筆」，
+    //    ⛔ 不是「游標之後還剩幾筆」。對照 PHP `Question.php:891-895`。
+    const [totalRows] = await this.pool.execute<CountRow[]>(
+      `SELECT COUNT(*) AS count
+       FROM questions q
+       WHERE ${filterPredicates.join(" AND ")}`,
+      filterParameters,
+    );
+    const total = Number(totalRows[0]?.count ?? 0);
+
     const [rows] = await this.pool.execute<QuestionRow[]>(
       `SELECT ${questionColumns}
        FROM questions q
+       ${questionCreatorJoin}
        WHERE ${predicates.join(" AND ")}
        ORDER BY q.updated_at DESC, q.id DESC
        LIMIT ${limit + 1}`,
@@ -313,8 +364,31 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
                 id: last.id,
               })
             : null,
+        total,
       },
     };
+  }
+
+  async questionStats(
+    query: QuestionStatsQuery,
+    scope: QuestionBankScope,
+  ): Promise<QuestionStats> {
+    const predicates = ["tenant_id = ?", "deleted_at IS NULL"];
+    const parameters: Array<string | number> = [scope.tenantId];
+    if (query.createdBy) {
+      predicates.push("created_by = ?");
+      parameters.push(query.createdBy);
+    }
+    const [rows] = await this.pool.execute<TypeCountRow[]>(
+      `SELECT type, COUNT(*) AS count
+       FROM questions
+       WHERE ${predicates.join(" AND ")}
+       GROUP BY type`,
+      parameters,
+    );
+    return questionStatsFromCounts(
+      rows.map((row) => ({ type: row.type, count: Number(row.count) })),
+    );
   }
 
   async getQuestion(
@@ -647,6 +721,7 @@ export class MySqlQuestionBankRepository implements QuestionBankRepository {
     const [rawRows] = await executor.execute(
       `SELECT ${questionColumns}
        FROM questions q
+       ${questionCreatorJoin}
        WHERE q.id = ? AND q.tenant_id = ? AND q.deleted_at IS NULL
        LIMIT 1`,
       [id, scope.tenantId],

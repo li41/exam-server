@@ -1,13 +1,15 @@
 import type {
   CreateQuestionCategoryInput,
   CreateQuestionInput,
-  Page,
   Question,
   QuestionCategory,
   QuestionCategoryListQuery,
   QuestionListQuery,
   QuestionMedia,
   QuestionMediaResult,
+  QuestionPage,
+  QuestionStats,
+  QuestionStatsQuery,
   UpdateQuestionCategoryInput,
   UpdateQuestionInput,
 } from "@server-foundation/api-contracts";
@@ -16,6 +18,7 @@ import {
   DomainError,
   InvalidCursorError,
   NotFoundError,
+  questionStatsFromCounts,
 } from "@server-foundation/domain";
 import type {
   QuestionBankRepository,
@@ -50,7 +53,7 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
   async listQuestions(
     query: QuestionListQuery,
     scope: QuestionBankScope,
-  ): Promise<Page<Question>> {
+  ): Promise<QuestionPage> {
     const search = query.search?.toLocaleLowerCase();
     const categoryIds = query.categoryId
       ? new Set([
@@ -105,8 +108,26 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
       page: {
         nextCursor:
           nextOffset < visible.length ? encodeCursor(nextOffset) : null,
+        // ⚠️ `visible` 是套完篩選、**還沒切頁**的集合 ⇒ 與 MySQL 版的
+        //    「COUNT(*) 不含 cursor」同語意。
+        total: visible.length,
       },
     };
+  }
+
+  async questionStats(
+    query: QuestionStatsQuery,
+    scope: QuestionBankScope,
+  ): Promise<QuestionStats> {
+    const counts = new Map<string, number>();
+    for (const question of this.questions) {
+      if (question.deletedAt || question.tenantId !== scope.tenantId) continue;
+      if (query.createdBy && question.createdBy !== query.createdBy) continue;
+      counts.set(question.type, (counts.get(question.type) ?? 0) + 1);
+    }
+    return questionStatsFromCounts(
+      [...counts].map(([type, count]) => ({ type, count })),
+    );
   }
 
   async getQuestion(
@@ -135,6 +156,10 @@ export class InMemoryQuestionBankRepository implements QuestionBankRepository {
       code: input.code,
       categoryId: input.categoryId ?? null,
       createdBy: scope.actorUserId,
+      // ⚠️ 這支 in-memory repository **沒有 users 表**，查不到姓名。
+      //    明寫 `null` 而不是省略欄位：省略的話「舊 server 沒有這個欄位」與
+      //    「這個人沒填姓名」在測試裡會長得一模一樣。
+      createdByName: null,
       type: input.type,
       difficulty: input.difficulty,
       stem: input.stem,

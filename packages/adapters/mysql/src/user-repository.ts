@@ -67,11 +67,14 @@ export class MySqlUserRepository implements UserRepository {
     const now = new Date();
     await this.pool.execute<ResultSetHeader>(
       `INSERT INTO users
-        (id, email, password_hash, tenant_id, roles, created_at, updated_at, disabled_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+        (id, email, display_name, password_hash, tenant_id, roles, created_at, updated_at, disabled_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       [
         id,
         user.email.trim().toLowerCase(),
+        // 空字串一律當成沒填 ⇒ 題庫那側回 null、畫面顯示 `—`，
+        // ⛔ 不會出現一個空白的「建立者」欄。
+        user.displayName?.trim() || null,
         user.passwordHash,
         user.tenantId,
         JSON.stringify(user.roles),

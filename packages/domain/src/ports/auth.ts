@@ -9,8 +9,15 @@ export type UserRecord = AuthIdentity & {
   disabledAt: string | null;
 };
 
+/**
+ * `displayName` 只在**建立帳號時**寫入，⛔ 不進 `AuthIdentity`：
+ * 它不是授權資訊，只是題目「建立者」那一格要顯示的姓名（`#98` A-6）。
+ * 讀取路徑是題庫查詢的 `LEFT JOIN users`，與 PHP 同形
+ * （`exam.tw/src/Models/Question.php:899-906`）。
+ */
 export type NewUser = AuthIdentity & {
   passwordHash: string;
+  displayName?: string | null;
 };
 
 export interface UserRepository {
