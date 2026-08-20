@@ -35,6 +35,53 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTES_DIR = path.join(ROOT, "apps", "api", "src");
 
 /**
+ * ⚠️⚠️ **為什麼是遞迴 ＋ 寬鬆比對，而不是 `^affair.*-routes\.ts$` 加 `readdirSync` 一層。**
+ *
+ * 2026-08-20 王陽明對第一版做突變驗證，四格裡有**兩格是綠的**——也就是兩條可以
+ * 靜默繞過的路：
+ *
+ * | 突變 | 第一版 | 現在 |
+ * | --- | --- | --- |
+ * | D1 多一支 `affair-x-routes.ts` | 🔴 紅（對） | 🔴 紅 |
+ * | D2 刪到 3 支、`MAX` 不動 | 🔴 紅（對） | 🔴 紅 |
+ * | **D3 移進子目錄** `affair/routes.ts` | ⚠️ **綠** | 🔴 紅 |
+ * | **D4 換後綴** `affair-x-handlers.ts` | ⚠️ **綠** | 🔴 紅 |
+ *
+ * D3 的成因是 `readdirSync` **不遞迴**；D4 的成因是名字被綁死在 `-routes.ts`。
+ * 🔴 兩者都是「新增試務程式碼而閘門不叫」——正是這道閘門唯一要防的事。
+ *
+ * ⇒ 現在的母體是：`apps/api/src` **底下任何深度**、**相對路徑**含 `affair`（不分大小寫）
+ *   的 `.ts` 檔。⚠️ 比對路徑而非檔名，否則 `affair/routes.ts` 這種「目錄叫 affair、
+ *   檔名不含 affair」的形狀會漏掉。⚠️ 刻意比「路由」寬——依裁示，這個 repo 不該有**任何**新的試務程式碼，
+ *   ⛔ 不是「不該有新的試務路由」。
+ *
+ * ## ⚠️ 這道閘門**擋不住**什麼（不要以為它全包）
+ *
+ * 檔案整支搬出 `apps/api/src`（例如搬到 `packages/domain/src/use-cases/`）它**看不到**。
+ * 全 repo 現有 47 個含 `affair` 的檔（2026-08-20 實測），要把整個表面都上棘輪是另一件事。
+ * ⇒ ⛔ 不要在這裡假裝已經覆蓋；要覆蓋就另立一格並把 47 這個基線量過再寫。
+ */
+function listAffairSourceFiles(dir) {
+  /** @type {string[]} */
+  const found = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      found.push(...listAffairSourceFiles(full));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith(".ts")) continue;
+    // ⚠️ 比對的是**相對路徑**而不是 basename —— 否則 `affair/routes.ts`
+    //    （目錄叫 affair、檔名不含 affair）會漏掉，而那正是 D3 那條繞道。
+    const rel = path.relative(ROUTES_DIR, full);
+    if (!/affair/i.test(rel)) continue;
+    found.push(rel);
+  }
+  return found;
+}
+
+/**
  * ⚠️ 2026-08-19 實測的基線。**只准往下改。**
  *
  * 目前這四個（全部待刪、`#80` 清點中）：
@@ -43,12 +90,10 @@ const ROUTES_DIR = path.join(ROOT, "apps", "api", "src");
  */
 const MAX_AFFAIR_ROUTE_FILES = 4;
 
-const files = readdirSync(ROUTES_DIR)
-  .filter((name) => /^affair.*-routes\.ts$/.test(name))
-  .sort();
+const files = listAffairSourceFiles(ROUTES_DIR).sort();
 
 console.log(
-  `  試務路由檔：${files.length} 個（上限 ${MAX_AFFAIR_ROUTE_FILES}）`,
+  `  試務程式檔（apps/api/src 遞迴、路徑含 affair 的 .ts）：${files.length} 個（上限 ${MAX_AFFAIR_ROUTE_FILES}）`,
 );
 for (const f of files) console.log(`    ${f}`);
 

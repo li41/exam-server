@@ -70,3 +70,26 @@ SF_HOST="${SF_HOST:-127.0.0.1}"   # ⚠️ 正式機要改成 WireGuard 介面�
 
 ⚠️ 理由：**散文會過期而不會紅。** 本專案 2026-08-19 一天內發現四次
 「把不變式的維持責任交給人的記憶」而失效的實例，⇒ 這裡不重複那個錯。
+
+## ✅ 2026-08-20 補記：領據那一格主公也裁了
+
+王陽明收件時指出一個矛盾：本文件與閘門註解都逐字寫「那**四個**檔全部待刪」（含
+`affair-receipt-routes.ts`），但 `exam-control#16 ④`「收據列印／匯出放哪」當時還標著
+「已問主公，未回」。⇒ 文件比裁示走得快了一步。
+
+**2026-08-20 08:31 主公裁示：「補到 CF 去」。** ⇒ 那句「四個全部待刪」**現在成立**，矛盾解除。
+
+裁示前先釐清掉的兩個誤解（記下來免得下次又繞）：
+
+1. **「列印／匯出」不是資料題。** 主公原話：「列印是用印表機印出來，匯出是匯到使用者電腦上，
+   也跟資料在那保存沒關係」。⇒ ④ 原本的問法問錯了層次，真正要決定的只有「那張領據表放哪」。
+2. **領據不是「只有貴單位自己人在用」**（這是我一開始的誤判）。
+   `packages/adapters/mysql/schema/013_affair_receipts.sql` 有 `submitter_type ENUM('school','city')`，
+   `affair_receipt_access_logs.actor_type` 是 `ENUM('backend','school','city')`
+   ⇒ **領據是學校與縣市自己填的** ⇒ 按判準本來就該在 CF。
+
+⚠️ 搬遷不是「建一張表」：重度個資（身分證號 ＋ blind index、銀行帳號、存摺影本、居留證、稅籍）、
+複合外鍵綁 `affairs`/`affair_schools`/`affair_cities`（皆 `ON DELETE RESTRICT`）、
+稽核表 `affair_receipt_access_logs`（**刻意沒有外鍵**，原始碼註解：`audit evidence must outlive business rows`）、
+兩條業務唯一鍵（`uq_affair_receipt_account`、`uq_affair_receipt_bankbook_file`）。
+⇒ 清單記在 `exam-control#16` 的裁示留言裡。時程：不當急件，跟其他三張試務表一起拆。

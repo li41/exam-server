@@ -37,7 +37,7 @@
     "runtime:exports": "node scripts/runtime-export-smoke.mjs",
     "listener:boundary": "node scripts/listener-boundary.mjs",
     "build": "corepack pnpm --filter @server-foundation/api... build && corepack pnpm --filter @server-foundation/mysql-adapter build && corepack pnpm --filter @server-foundation/redis-adapter build && corepack pnpm --filter @server-foundation/local-fs-storage build",
-    "verify": "corepack pnpm gates:skip-reset && corepack pnpm typecheck && corepack pnpm lint && corepack pnpm format:check && corepack pnpm test && corepack pnpm test:verify-skip && corepack pnpm test:verify-baseref && corepack pnpm build && corepack pnpm runtime:exports && corepack pnpm contract:fixtures && corepack pnpm contract:compatibility && corepack pnpm affair:scope && corepack pnpm migration:numbering && corepack pnpm migration:rollback-compatibility && corepack pnpm test:create-user && corepack pnpm test:migration:numbering && corepack pnpm test:wg-sync && corepack pnpm test:offsite-backup && corepack pnpm test:boot-survival && corepack pnpm test:listener-boundary && corepack pnpm listener:boundary && corepack pnpm boot:accept && corepack pnpm test:outage-alert && corepack pnpm test:wg-contract-oracle && corepack pnpm wg:contract:check && corepack pnpm gates:skip-report",
+    "verify": "corepack pnpm gates:skip-reset && corepack pnpm typecheck && corepack pnpm lint && corepack pnpm format:check && corepack pnpm test && corepack pnpm test:verify-skip && corepack pnpm test:verify-baseref && corepack pnpm build && corepack pnpm runtime:exports && corepack pnpm contract:fixtures && corepack pnpm contract:compatibility && corepack pnpm test:affair-scope && corepack pnpm affair:scope && corepack pnpm migration:numbering && corepack pnpm migration:rollback-compatibility && corepack pnpm test:create-user && corepack pnpm test:migration:numbering && corepack pnpm test:wg-sync && corepack pnpm test:offsite-backup && corepack pnpm test:boot-survival && corepack pnpm test:listener-boundary && corepack pnpm listener:boundary && corepack pnpm boot:accept && corepack pnpm test:outage-alert && corepack pnpm test:wg-contract-oracle && corepack pnpm wg:contract:check && corepack pnpm gates:skip-report",
     "test:create-user": "node --test scripts/create-user.test.mjs",
     "test:migration:numbering": "node --test scripts/check-migration-numbering.test.mjs",
     "test:wg-sync": "node --test scripts/sync-wireguard-peers.test.mjs",
@@ -49,7 +49,8 @@
     "outage:heartbeat": "node scripts/outage-heartbeat.mjs",
     "test:wg-contract-oracle": "node --test scripts/wg-sync-contract-oracle.test.mjs",
     "wg:contract:check": "node scripts/wg-sync-contract-oracle.mjs",
-    "affair:scope": "node scripts/check-affair-scope.mjs"
+    "affair:scope": "node scripts/check-affair-scope.mjs",
+    "test:affair-scope": "node --test scripts/check-affair-scope.test.mjs"
   },
   "devDependencies": {
     "oxlint": "^1.78.0",
