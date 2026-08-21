@@ -13,9 +13,31 @@ if (!connectionString) {
 
 const pool = createMySqlPool(connectionString);
 const repository = new MySqlQuestionBankRepository(pool);
+/**
+ * ⚠️ `visibleQuestionOwnerId: null` ＝ 看全部（今天所有既有帳號的行為），
+ * 這一格是 `#101` 的擁有者收窄加上去的。
+ *
+ * 🔴 這裡**必須明寫**：這個 package 的 `tsconfig.json` 只 `include: ["src"]`
+ * ⇒ 測試檔完全不過型別檢查。少了這一格不會有編譯錯誤，
+ * 而是等到 `MYSQL_TEST_URL` 存在時才炸在 mysql2
+ * 的「Bind parameters must not contain undefined」。
+ */
 const scope = {
   tenantId: "company-opaque-integration",
   actorUserId: "00000000-0000-4000-8000-000000000001",
+  visibleQuestionOwnerId: null,
+};
+
+/** 同租戶的另一個人，用來製造「別人建立的題目」。 */
+const colleagueScope = {
+  ...scope,
+  actorUserId: "00000000-0000-4000-8000-000000000042",
+};
+
+/** 「只看自己建的」——只看得到 `scope.actorUserId` 建立的題目。 */
+const ownOnlyScope = {
+  ...scope,
+  visibleQuestionOwnerId: scope.actorUserId,
 };
 
 const questionInput = (code: string, categoryId: string | null = null) => ({
@@ -191,6 +213,61 @@ describe("MySqlQuestionBankRepository", () => {
       fileId,
     );
     expect(crossTenantMessage).toBe(missingMessage);
+  });
+
+  it("擁有者收窄：清單／單筆／統計／改／刪都只吃自己建的（`#101`）", async () => {
+    const mine = await repository.createQuestion(
+      questionInput("QB-OWN-MINE"),
+      scope,
+    );
+    const theirs = await repository.createQuestion(
+      questionInput("QB-OWN-THEIRS"),
+      colleagueScope,
+    );
+
+    // 看全部：兩筆都在。
+    const all = await repository.listQuestions({ limit: 50 }, scope);
+    const allCodes = all.items.map((item) => item.code);
+    expect(allCodes).toContain("QB-OWN-MINE");
+    expect(allCodes).toContain("QB-OWN-THEIRS");
+
+    // 只看自己：`items` 與 `page.total` 一起收窄。
+    // ⚠️ 這個檔只有 `beforeAll` 清表、⛔ 沒有逐測清乾淨 ⇒ 同一位 actor 在前面的
+    // 測試裡也建了題目。所以這裡**只能斷言相對關係**，⛔ 不可寫死「剛好一筆」。
+    // 鑑別力來自「同事那筆不在」＋「總筆數正好少掉同事那一筆」：收窄一旦失效，
+    // `own` 就會等於 `all`，下面的 `- 1` 立刻紅。
+    const own = await repository.listQuestions({ limit: 50 }, ownOnlyScope);
+    const ownCodes = own.items.map((item) => item.code);
+    expect(ownCodes).toContain("QB-OWN-MINE");
+    expect(ownCodes).not.toContain("QB-OWN-THEIRS");
+    expect(own.page.total).toBe(all.page.total - 1);
+
+    // 物件級：拿別人的 id 讀不到（`null` ⇒ service 轉 404）。
+    expect(await repository.getQuestion(theirs.id, ownOnlyScope)).toBe(null);
+    expect(await repository.getQuestion(mine.id, ownOnlyScope)).not.toBe(null);
+
+    // 統計套同一個收窄（同樣只斷言相對關係、理由同上）。
+    const ownStats = await repository.questionStats({}, ownOnlyScope);
+    const allStats = await repository.questionStats({}, scope);
+    expect(allStats.total).toBeGreaterThanOrEqual(2);
+    expect(ownStats.total).toBe(allStats.total - 1);
+
+    // 改不動、刪不掉別人的，而且錯誤是 not_found ⛔ 不是 conflict。
+    await expect(
+      repository.updateQuestion(
+        theirs.id,
+        { version: theirs.version, stem: "亂改" },
+        ownOnlyScope,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
+    await expect(
+      repository.softDeleteQuestion(theirs.id, theirs.version, ownOnlyScope),
+    ).rejects.toMatchObject({ code: "not_found" });
+
+    // 別人的那一筆原封不動還在。
+    const survivor = await repository.getQuestion(theirs.id, scope);
+    expect(survivor?.version).toBe(theirs.version);
+    expect(survivor?.deletedAt).toBe(null);
   });
 
   it("distinguishes no media from an orphaned media reference on reads", async () => {

@@ -7,8 +7,13 @@ import {
   MySqlUserRepository,
 } from "../packages/adapters/mysql/dist/index.js";
 
-const usage =
-  "usage: node scripts/create-user.mjs --email <email> --tenant <uuid> --roles <a,b>";
+// `--roles` 是自由字串（⛔ 沒有白名單）。這裡把題庫的兩個特殊角色寫進說明，
+// 因為它們**打錯字的後果是靜默地不收窄** —— 判準見 doc/question-bank-owner-scope.md。
+const usage = [
+  "usage: node scripts/create-user.mjs --email <email> --tenant <uuid> --roles <a,b> [--name <\u59d3\u540d>]",
+  "  --roles: \u984c\u5eab\u7684\u5169\u500b\u7279\u6b8a\u89d2\u8272\u662f questions_own\uff08\u53ea\u770b\u81ea\u5df1\u5efa\u7684\u984c\u76ee\uff09\u8207 questions_all\uff08\u770b\u5168\u90e8\uff09\u3002",
+  "           \u5169\u500b\u90fd\u6c92\u6709\u6642\uff1d\u770b\u5168\u90e8\uff08\u65e2\u6709\u5e33\u865f\u7684\u9810\u8a2d\uff09\u3002doc/question-bank-owner-scope.md",
+].join("\n");
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const uuidPattern =
@@ -30,7 +35,7 @@ export const parseCreateUserArgs = (argv) => {
     values.set(key, value);
   }
 
-  const allowed = new Set(["--email", "--tenant", "--roles"]);
+  const allowed = new Set(["--email", "--tenant", "--roles", "--name"]);
   for (const key of values.keys()) {
     if (!allowed.has(key))
       throw new Error(`Unknown argument: ${key}. ${usage}`);
@@ -39,6 +44,9 @@ export const parseCreateUserArgs = (argv) => {
   const email = values.get("--email")?.trim().toLowerCase();
   const tenantId = values.get("--tenant")?.trim();
   const rawRoles = values.get("--roles")?.trim();
+  // 可選：題目「建立者」那一格要顯示的姓名（#98 A-6）。
+  // ⬛ 不採用 email 遞補：email 是個資，PHP 的 view 也不畫。
+  const displayName = values.get("--name")?.trim();
 
   if (!email || !tenantId || !rawRoles) throw new Error(usage);
   if (email.length > 254 || !emailPattern.test(email)) {
@@ -61,13 +69,18 @@ export const parseCreateUserArgs = (argv) => {
     throw new Error("--roles must not contain duplicate role names.");
   }
 
-  return { email, tenantId, roles };
+  if (displayName !== undefined && displayName.length > 100) {
+    throw new Error("--name must be 100 characters or fewer.");
+  }
+
+  return { email, tenantId, roles, displayName: displayName || null };
 };
 
 export const createUser = async ({
   email,
   tenantId,
   roles,
+  displayName = null,
   users,
   passwordHasher,
   passwordFactory = () => randomBytes(24).toString("base64url"),
@@ -85,6 +98,7 @@ export const createUser = async ({
     email,
     tenantId,
     roles,
+    displayName,
     passwordHash,
   });
 

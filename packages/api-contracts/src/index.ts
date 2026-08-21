@@ -93,6 +93,17 @@ export const QuestionSchema = z.object({
   code: z.string().min(1).max(50),
   categoryId: z.string().min(1).nullable(),
   createdBy: z.string().min(1),
+  /**
+   * 建立者的**可顯示姓名**（`#98` A-6）。
+   *
+   * `createdBy` 是不透明帳號 id，⛔ 不該直接印在客戶畫面上。
+   * PHP 那側畫的是 `users.name`（`exam.tw/src/Models/Question.php:899-906`），
+   * 而且 PHP 的單筆查詢雖然一併撈了 `creator_email`，**沒有任何 view 用它**
+   * ⇒ ⛔ 這裡也不用 email 遞補。沒填姓名就是 `null`，由呼叫端顯示 `—`。
+   *
+   * ⚠️ `optional`：舊版 server 不會回這個欄位，可加欄位不破壞既有消費端。
+   */
+  createdByName: z.string().min(1).max(100).nullable().optional(),
   type: QuestionTypeSchema,
   difficulty: z.number().int().min(1).max(5),
   stem: z.string().min(1),
@@ -174,9 +185,50 @@ export const DeleteQuestionQuerySchema = z.object({
   version: z.coerce.number().int().positive(),
 });
 
+/**
+ * 題目列表的分頁資訊：在共用的 `PageInfoSchema` 之外**多一個 `total`**。
+ *
+ * PHP 的題庫清單頁把 `paginateForCompany()` 回傳的 `total` 直接畫成
+ * 「總題數」卡（`exam.tw/src/Pages/Manage/questionsView.php:7,25`），
+ * 而那個 `total` 是**套完全部篩選、但不套分頁**的 `COUNT(*)`
+ * （`exam.tw/src/Models/Question.php:891-895`）。
+ * ⚠️ 因此這裡的 `total` 也是「目前這組篩選條件底下的總筆數」，
+ * ⛔ 不是「題庫總量」——題庫總量請看 `GET /questions/stats`。
+ */
+export const QuestionPageInfoSchema = PageInfoSchema.extend({
+  total: z.number().int().nonnegative(),
+});
+
 export const QuestionListResponseSchema = z.object({
   items: z.array(QuestionSchema),
-  page: PageInfoSchema,
+  page: QuestionPageInfoSchema,
+});
+
+/**
+ * 題庫統計的查詢條件：**只有 `createdBy`**。
+ *
+ * 這是照 PHP `Question::getTypeStats($companyId, $onlyMine, $userId)`
+ * （`exam.tw/src/Models/Question.php:926-935`）：那支只用 company + 建立者收窄，
+ * ⛔ 不吃題型／難度／狀態／關鍵字。理由在 PHP 畫面上很明顯——
+ * 統計卡是拿來**逐題型顯示數量**的（`questionsView.php:29-38`），
+ * 若再套題型篩選，其他題型會全部變成 0。
+ */
+export const QuestionStatsQuerySchema = z.object({
+  createdBy: z.string().trim().min(1).max(191).optional(),
+});
+
+/**
+ * 題庫統計。`byType` **十四種題型一律齊全**（沒有題目的填 0），
+ * 對應 PHP 逐 `$available_types` 畫、缺鍵補零的寫法
+ * （`exam.tw/src/Pages/Manage/questionsView.php:30-31`：`$type_stats[$t] ?? 0`）。
+ * ⇒ 呼叫端不需要自己補鍵，也就不會因為少一鍵而畫出空白。
+ *
+ * 不變式：`total === Object.values(byType).reduce(...)`，
+ * 只要每一列的 `type` 都是這十四種之一（寫入路徑由本契約把關）。
+ */
+export const QuestionStatsResponseSchema = z.object({
+  total: z.number().int().nonnegative(),
+  byType: z.record(QuestionTypeSchema, z.number().int().nonnegative()),
 });
 
 export const QuestionCategorySchema = z.object({
@@ -305,6 +357,8 @@ export type QuestionStatus = z.infer<typeof QuestionStatusSchema>;
 export type QuestionMedia = z.infer<typeof QuestionMediaSchema>;
 export type QuestionMediaResult = z.infer<typeof QuestionMediaResultSchema>;
 export type QuestionListQuery = z.infer<typeof QuestionListQuerySchema>;
+export type QuestionStatsQuery = z.infer<typeof QuestionStatsQuerySchema>;
+export type QuestionStats = z.infer<typeof QuestionStatsResponseSchema>;
 export type CreateQuestionInput = z.infer<typeof CreateQuestionSchema>;
 export type UpdateQuestionInput = z.infer<typeof UpdateQuestionSchema>;
 export type QuestionCategory = z.infer<typeof QuestionCategorySchema>;
@@ -320,6 +374,11 @@ export type UpdateQuestionCategoryInput = z.infer<
 export type Page<T> = {
   items: T[];
   page: z.infer<typeof PageInfoSchema>;
+};
+/** 題目列表專用的分頁封套：比共用的 `Page<T>` 多一個 `total`。 */
+export type QuestionPage = {
+  items: Question[];
+  page: z.infer<typeof QuestionPageInfoSchema>;
 };
 export type FileMetadata = z.infer<typeof FileMetadataSchema>;
 export type UploadSession = z.infer<typeof UploadSessionSchema>;

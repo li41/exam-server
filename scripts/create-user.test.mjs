@@ -16,7 +16,51 @@ test("parses and normalizes create-user arguments", () => {
       email: "admin@example.com",
       tenantId: "550e8400-e29b-41d4-a716-446655440000",
       roles: ["owner", "member"],
+      displayName: null,
     },
+  );
+});
+
+test("--name 是可選的顯示姓名，會 trim，空字串等於沒填", () => {
+  assert.equal(
+    parseCreateUserArgs([
+      "--email",
+      "user@example.com",
+      "--tenant",
+      "550e8400-e29b-41d4-a716-446655440000",
+      "--roles",
+      "member",
+      "--name",
+      "  \u738b\u5c0f\u660e  ",
+    ]).displayName,
+    "\u738b\u5c0f\u660e",
+  );
+  assert.equal(
+    parseCreateUserArgs([
+      "--email",
+      "user@example.com",
+      "--tenant",
+      "550e8400-e29b-41d4-a716-446655440000",
+      "--roles",
+      "member",
+      "--name",
+      "   ",
+    ]).displayName,
+    null,
+  );
+  assert.throws(
+    () =>
+      parseCreateUserArgs([
+        "--email",
+        "user@example.com",
+        "--tenant",
+        "550e8400-e29b-41d4-a716-446655440000",
+        "--roles",
+        "member",
+        "--name",
+        "x".repeat(101),
+      ]),
+    /--name must be 100 characters or fewer/,
   );
 });
 
@@ -130,6 +174,7 @@ test("hashes generated password and creates exactly one user", async () => {
         email: "user@example.com",
         tenantId: "550e8400-e29b-41d4-a716-446655440000",
         roles: ["member"],
+        displayName: null,
         passwordHash: "hash:generated-secret",
       },
     ],

@@ -1,3 +1,16 @@
+/**
+ * 題庫路由。
+ *
+ * 🔴 **這裡的權限判斷是什麼**：除了 Bearer 驗證（`authenticate`）與租戶隔離
+ * （`scope.tenantId`）之外，題目還有一層**擁有者收窄**：
+ * 帳號的 `roles` 含 `questions_own` 時只看得到自己建立的題目。
+ * 判準與「為什麼預設是看全部」寫在 `doc/question-bank-owner-scope.md`，
+ * 唯一的實作處是 `visibleQuestionOwnerIdFor()`（domain 的 `question-visibility.ts`）
+ * ＋ `scopeFor()`。⛔ 不要在個別 handler 自己補角色判斷。
+ *
+ * ⚠️ 收窄**只套在 questions**：同一支檔案裡的 question-clusters／question-groups
+ * ／test-booklets／examinees ⛔ 今天不收窄（登記在同一份文件）。
+ */
 import { createHash } from "node:crypto";
 import { zValidator } from "@hono/zod-validator";
 import {
@@ -23,6 +36,7 @@ import {
   QuestionClusterListQuerySchema,
   QuestionGroupListQuerySchema,
   QuestionListQuerySchema,
+  QuestionStatsQuerySchema,
   TestBookletListQuerySchema,
   UpdateExamineeGroupSchema,
   UpdateExamineeSchema,
@@ -43,6 +57,7 @@ import {
   QuestionStructureService,
   TestBookletService,
   UnauthorizedError,
+  visibleQuestionOwnerIdFor,
 } from "@server-foundation/domain";
 import type {
   AuthenticationService,
@@ -367,7 +382,13 @@ const createQuestionRouter = (dependencies: Dependencies) => {
   const scopeFor = (context: IdentityContext) => {
     const identity = context.get("identity");
     if (!identity) throw new UnauthorizedError();
-    return { tenantId: identity.tenantId, actorUserId: identity.userId };
+    return {
+      tenantId: identity.tenantId,
+      actorUserId: identity.userId,
+      // 這裡是**唯一**一處把身分翻成題庫可見範圍的地方（判準見檔頭）。
+      // ⛔ 不要在個別 route 裡再判斷一次 `identity.roles`。
+      visibleQuestionOwnerId: visibleQuestionOwnerIdFor(identity),
+    };
   };
 
   api.get("/question-import/template", authenticate, () =>
@@ -403,6 +424,32 @@ const createQuestionRouter = (dependencies: Dependencies) => {
     async (context) =>
       context.json(
         await service.listQuestions(
+          context.req.valid("query"),
+          scopeFor(context),
+        ),
+      ),
+  );
+
+  /**
+   * 題庫統計卡（PHP `questionsView.php:17-41` 那張）。
+   *
+   * 🔴 **這一條必須註冊在 `/questions/:id` 之前**：Hono 依註冊順序比對，
+   * 反過來寫的話 `stats` 會被當成題目 id ⇒ 永遠回 404。
+   * ⇒ `apps/api/test/question-bank-stats.test.ts` 有一案專門釘住這個順序。
+   */
+  api.get(
+    "/questions/stats",
+    zValidator("query", QuestionStatsQuerySchema, (result, context) => {
+      if (!result.success) {
+        return validationError(
+          context,
+          "Invalid question stats query parameters.",
+        );
+      }
+    }),
+    async (context) =>
+      context.json(
+        await service.questionStats(
           context.req.valid("query"),
           scopeFor(context),
         ),

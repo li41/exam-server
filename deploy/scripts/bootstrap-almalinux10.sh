@@ -9,11 +9,14 @@
 #   bash deploy/scripts/bootstrap-almalinux10.sh                # 全套
 #   SF_PORT=18787 SF_WG_ADDR=10.99.0.1 bash deploy/scripts/...  # 換參數
 #   SF_STOP_AFTER=system bash deploy/scripts/...                # 只裝系統，不裝 app
+#   SF_WG_ROTATE_KEYS=1 bash deploy/scripts/...                 # 明確輪替 WireGuard server key
 #
 # ⚠️ 這支不含任何密碼，一律走互動式 sudo。不要把密碼寫進這個檔或任何檔案。
 # ⚠️ 每一步做完就驗，驗不過就停。「沒報錯」不算通過。
+# ⚠️ 永遠不要用 `wg show <iface> dump`：第一欄會包含私鑰。看狀態只用 `wg show`。
 #
 # 對照文件：doc/almalinux-10-安裝.md
+# #103 隧道啟動／金鑰輪替補充：doc/server-tunnel-bringup.md
 #
 # ──────────────────────────────────────────────────────────────
 # 實測修正（2026-08-14 於 AlmaLinux 10.2，與文件初稿不符之處）
@@ -48,6 +51,8 @@ SF_HOST="${SF_HOST:-127.0.0.1}"      # ⚠️ 正式機要改成 WireGuard 介�
 SF_WG_ADDR="${SF_WG_ADDR:-10.99.0.1}"
 SF_WG_CIDR="${SF_WG_CIDR:-10.99.0.1/24}"
 SF_WG_PORT="${SF_WG_PORT:-51820}"
+SF_WG_ROTATE_KEYS="${SF_WG_ROTATE_KEYS:-0}"
+SF_WG_TUNNEL_UNIT="${SF_WG_TUNNEL_UNIT:-wg-quick@wg0.service}"
 SF_DB_NAME="${SF_DB_NAME:-server_foundation}"
 SF_DB_USER="${SF_DB_USER:-server_foundation}"
 SF_SETUP_WIREGUARD="${SF_SETUP_WIREGUARD:-1}"
@@ -57,10 +62,18 @@ SF_ADMIN_ROLES="${SF_ADMIN_ROLES:-developer}"
 SF_TENANT_ID="${SF_TENANT_ID:-}"            # 空＝自動產一個 UUID
 SF_STOP_AFTER="${SF_STOP_AFTER:-all}"       # system | all
 
+# 下面三個只為讓 #103 的啟動失敗路徑可用假指令測試；正常執行不要覆寫。
+SF_SUDO_BIN="${SF_SUDO_BIN:-sudo}"
+SF_SYSTEMCTL_BIN="${SF_SYSTEMCTL_BIN:-systemctl}"
+SF_WG_BIN="${SF_WG_BIN:-wg}"
+
 ENV_FILE=/etc/server-foundation/server-foundation.env
 WG_SYNC_BIN=/usr/local/sbin/exam-server-wg-sync
 WG_SYNC_ENV_FILE=/etc/server-foundation/wireguard-peer-sync.env
 WG_SYNC_DEFAULT_CF_BASE=https://control.exam.tw
+WIREGUARD_GO_VERSION=0.0.20250522
+WIREGUARD_GO_BIN=/usr/local/bin/wireguard-go
+SERVER_TUNNEL_DROPIN=/etc/systemd/system/server-foundation.service.d/10-tunnel.conf
 SERVICE_USER=server-foundation
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -71,6 +84,75 @@ warn() { printf '  \033[33m⚠\033[0m  %s\n' "$*"; }
 die()  { printf '  \033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 is_wsl() { grep -qi microsoft /proc/version 2>/dev/null; }
+run_root() { "$SF_SUDO_BIN" "$@"; }
+
+kernel_wireguard_available() {
+  local probe="sfwg$$"
+  run_root ip link del "$probe" >/dev/null 2>&1 || true
+  if run_root ip link add dev "$probe" type wireguard >/dev/null 2>&1; then
+    run_root ip link del "$probe" >/dev/null 2>&1 || true
+    return 0
+  fi
+  return 1
+}
+
+install_wireguard_go() {
+  if command -v wireguard-go >/dev/null 2>&1; then
+    ok "wireguard-go 已存在：$(command -v wireguard-go)"
+    return 0
+  fi
+
+  [ -c /dev/net/tun ] || die "核心沒有 WireGuard，且 /dev/net/tun 不可用；無法啟動 userspace WireGuard"
+  warn "核心沒有 WireGuard，安裝 userspace fallback：wireguard-go ${WIREGUARD_GO_VERSION}"
+  sudo dnf -y install golang make xz
+
+  local build_dir archive source_dir
+  build_dir="$(mktemp -d)"
+  archive="$build_dir/wireguard-go.tar.xz"
+  source_dir="$build_dir/wireguard-go-${WIREGUARD_GO_VERSION}"
+  if ! curl -fsSL \
+      "https://git.zx2c4.com/wireguard-go/snapshot/wireguard-go-${WIREGUARD_GO_VERSION}.tar.xz" \
+      -o "$archive"; then
+    rm -rf "$build_dir"
+    die "wireguard-go 原始碼下載失敗"
+  fi
+  if ! tar -xJf "$archive" -C "$build_dir"; then
+    rm -rf "$build_dir"
+    die "wireguard-go 原始碼解壓失敗"
+  fi
+  if ! make -C "$source_dir" >/dev/null; then
+    rm -rf "$build_dir"
+    die "wireguard-go 編譯失敗"
+  fi
+  sudo install -m 0755 -o root -g root "$source_dir/wireguard-go" "$WIREGUARD_GO_BIN"
+  rm -rf "$build_dir"
+  sudo test -x "$WIREGUARD_GO_BIN" || die "wireguard-go 安裝失敗：${WIREGUARD_GO_BIN}"
+  ok "userspace WireGuard：${WIREGUARD_GO_BIN}"
+
+  # 若日後改成 boringtun-cli：非互動 shell 會踩 DropPrivileges("NULL from getlogin")；
+  # 必須帶 --disable-drop-privileges。那個錯誤不是權限不足，而是 drop-privileges 本身失敗。
+}
+
+start_wireguard_tunnel() {
+  if [ "$SF_WG_ROTATE_KEYS" = "1" ]; then
+    if ! run_root "$SF_SYSTEMCTL_BIN" enable "$SF_WG_TUNNEL_UNIT" >/dev/null 2>&1 \
+       || ! run_root "$SF_SYSTEMCTL_BIN" restart "$SF_WG_TUNNEL_UNIT" >/dev/null 2>&1; then
+      die "隧道未建立、server-foundation 將無法啟動：${SF_WG_TUNNEL_UNIT} restart 失敗"
+    fi
+  elif ! run_root "$SF_SYSTEMCTL_BIN" enable --now "$SF_WG_TUNNEL_UNIT" >/dev/null 2>&1; then
+    die "隧道未建立、server-foundation 將無法啟動：${SF_WG_TUNNEL_UNIT} 啟動失敗"
+  fi
+
+  run_root "$SF_WG_BIN" show wg0 >/dev/null 2>&1 \
+    || die "隧道 unit 已啟動但 wg0 不存在；server-foundation 將無法啟動"
+  ok "wg0 已啟動（${SF_WG_TUNNEL_UNIT}）"
+}
+
+# #103 的鑑別力測試只走上面的 tunnel-start 函式，不碰 sudo/dnf/實機。
+if [ "${SF_BOOTSTRAP_TEST_WG_START_ONLY:-0}" = "1" ]; then
+  start_wireguard_tunnel
+  exit 0
+fi
 
 # ⚠️⚠️ firewalld 一旦啟用，**服務會連不上自己的資料庫**，除非明確放行 loopback。
 #    症狀：應用程式打 127.0.0.1:3306 得到 errno 113（EHOSTUNREACH），
@@ -100,6 +182,9 @@ sudo -v || die "需要 sudo 權限"
 
 [ -f "$REPO_DIR/package.json" ] || die "找不到 repo 根目錄（推得的是 $REPO_DIR）"
 ok "repo: $REPO_DIR"
+
+[[ "$SF_WG_TUNNEL_UNIT" =~ ^[A-Za-z0-9@_.:-]+\.service$ ]] \
+  || die "SF_WG_TUNNEL_UNIT 不是合法的 systemd service 名稱：${SF_WG_TUNNEL_UNIT}"
 
 if is_wsl; then
   warn "偵測到 WSL。以下兩項在這裡驗不到，正式機必須重跑一次："
@@ -177,7 +262,6 @@ step "步驟 5：資料庫、應用帳號、環境檔"
 #    密碼含 @ : / # ? 會被解析成 URL 結構而不是密碼，
 #    症狀是「密碼明明對卻 access denied」，極難查。
 gen_password() { head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32; }
-
 # ⚠️ 服務帳號要先建，/etc/server-foundation 的 group 才設得起來
 id -u "$SERVICE_USER" >/dev/null 2>&1 \
   || sudo useradd --system --home /var/lib/server-foundation --shell /sbin/nologin "$SERVICE_USER"
@@ -263,8 +347,16 @@ ok "Valkey 已啟動並回 PONG"
 if [ "$SF_SETUP_WIREGUARD" = "1" ]; then
   step "步驟 7：WireGuard（伺服器端）"
   sudo dnf -y install wireguard-tools
-  if [ ! -f /etc/wireguard/server.key ]; then
-    sudo install -d -m 0700 /etc/wireguard
+  sudo install -d -m 0700 /etc/wireguard
+
+  if [ "$SF_WG_ROTATE_KEYS" = "1" ]; then
+    warn "SF_WG_ROTATE_KEYS=1：明確輪替 WireGuard server key，並清掉舊 probe key"
+    sudo rm -f \
+      /etc/wireguard/probe.key /etc/wireguard/probe.pub \
+      /etc/wireguard/server.key /etc/wireguard/server.pub
+  fi
+
+  if ! sudo test -f /etc/wireguard/server.key; then
     # ⚠️⚠️ umask 一定要關在子 shell 裡。
     #    2026-08-15 實測：原本這裡是裸的 `umask 077`，**一路漏到步驟 10 的 pnpm build**，
     #    於是所有建置產物變成 0600 ⇒ 打包進 tarball ⇒ 解開後服務帳號讀不到自己的程式。
@@ -278,10 +370,10 @@ if [ "$SF_SETUP_WIREGUARD" = "1" ]; then
     )
     ok "已產伺服器金鑰對"
   else
-    ok "伺服器金鑰已存在（不覆蓋）"
+    ok "伺服器金鑰已存在（不覆蓋；要輪替請明確設 SF_WG_ROTATE_KEYS=1）"
   fi
 
-  if [ ! -f /etc/wireguard/wg0.conf ]; then
+  if ! sudo test -f /etc/wireguard/wg0.conf; then
     sudo sh -c "cat > /etc/wireguard/wg0.conf" <<EOWG
 [Interface]
 Address    = ${SF_WG_CIDR}
@@ -297,6 +389,27 @@ PrivateKey = $(sudo cat /etc/wireguard/server.key)
 EOWG
     sudo chmod 0600 /etc/wireguard/wg0.conf
     ok "已建立 wg0.conf"
+  elif [ "$SF_WG_ROTATE_KEYS" = "1" ]; then
+    # 不重建 wg0.conf，避免把現有 [Peer] 名冊一起抹掉；只在 root shell 裡換 PrivateKey。
+    # 私鑰只存在於 shell variable/stdin，不進 argv、不印 log。
+    sudo sh -c '
+      set -eu
+      key=$(cat /etc/wireguard/server.key)
+      tmp=$(mktemp /etc/wireguard/wg0.conf.XXXXXX)
+      trap '\''rm -f "$tmp"'\'' EXIT
+      chmod 0600 "$tmp"
+      found=0
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          PrivateKey[[:space:]]*=*) printf "PrivateKey = %s\n" "$key"; found=1 ;;
+          *) printf "%s\n" "$line" ;;
+        esac
+      done < /etc/wireguard/wg0.conf > "$tmp"
+      [ "$found" -eq 1 ]
+      mv "$tmp" /etc/wireguard/wg0.conf
+      trap - EXIT
+    ' || die "輪替金鑰後更新 wg0.conf 失敗"
+    ok "wg0.conf 已換成新 server key；既有 peer 保留"
   else
     ok "wg0.conf 已存在（不覆蓋，避免蓋掉既有 peer）"
   fi
@@ -305,11 +418,16 @@ EOWG
   #    開了等於讓 20 台桌面能透過這台互連。
   sudo sysctl -w net.ipv4.ip_forward=0 >/dev/null 2>&1 || true
 
-  if sudo systemctl enable --now "wg-quick@wg0" 2>/dev/null; then
-    sudo wg show >/dev/null 2>&1 && ok "wg0 已啟動" || warn "wg show 無輸出"
+  # wg-quick 的 Linux 實作在核心 `ip link add ... type wireguard` 失敗時，會自動尋找
+  # `wireguard-go` userspace backend；因此 kernel 與 userspace 都維持同一個 wg-quick@wg0 unit。
+  # 這避免換 WSL custom kernel，也不影響同一台 Windows 上其他 distro。
+  if kernel_wireguard_available; then
+    ok "核心 WireGuard 可建立介面"
   else
-    warn "wg-quick@wg0 啟動失敗（WSL 常見：核心模組未載入）。正式機必須成功。"
+    install_wireguard_go
   fi
+
+  start_wireguard_tunnel
 else
   step "步驟 7：WireGuard —— 跳過（SF_SETUP_WIREGUARD=0）"
 fi
@@ -420,6 +538,22 @@ fi
 
 sudo install -m 0644 "$REPO_DIR/deploy/systemd/server-foundation.service" \
   /etc/systemd/system/server-foundation.service
+
+# server-foundation.service 同時服務舊的 Caddy/loopback baseline，所以 repo 內的 base unit
+# 不能無條件 Require WireGuard。只有這條 WireGuard bootstrap 路徑安裝 drop-in；重跑時
+# SF_SETUP_WIREGUARD=0 會移除它。SF_WG_TUNNEL_UNIT 讓未來若 userspace backend 改成
+# 自己的 unit，不必把 unit 名硬寫進 base service。
+if [ "$SF_SETUP_WIREGUARD" = "1" ]; then
+  sudo install -d -m 0755 /etc/systemd/system/server-foundation.service.d
+  sudo sh -c "cat > '$SERVER_TUNNEL_DROPIN'" <<EOSYSTEMD
+[Unit]
+After=${SF_WG_TUNNEL_UNIT}
+Requires=${SF_WG_TUNNEL_UNIT}
+EOSYSTEMD
+  ok "server-foundation 依賴隧道 unit：${SF_WG_TUNNEL_UNIT}"
+else
+  sudo rm -f "$SERVER_TUNNEL_DROPIN"
+fi
 sudo systemctl daemon-reload
 ok "systemd unit 已安裝"
 
@@ -560,7 +694,8 @@ echo "       撈不到 CF、HTTP/JSON/欄位壞掉，或空清單沒有 authorit
 echo "       ERROR 後停止，fail closed，不改 wg0.conf。"
 echo
 echo "  正式機還要自己確認的（這台驗不到）："
-echo "    ① 把 HOST 改成 wg0 的位址（現在是 ${SF_HOST}）並重啟服務"
-echo "    ② sudo firewall-cmd --list-ports 應只有 ${SF_WG_PORT}/udp"
+echo "    ① wg0 / ${SF_WG_TUNNEL_UNIT} 重開機後會自動回 active"
+echo "    ② 把 HOST 改成 wg0 的位址（現在是 ${SF_HOST}）並重啟服務"
+echo "    ③ sudo firewall-cmd --list-ports 應只有 ${SF_WG_PORT}/udp"
 echo
 ok "全部完成"
