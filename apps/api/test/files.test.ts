@@ -78,6 +78,112 @@ describe("files API", () => {
     }
   });
 
+  it("looks up metadata without revealing whether a foreign-tenant file exists", async () => {
+    const root = await mkdtemp(join(tmpdir(), "server-foundation-api-files-"));
+    try {
+      const storage = new LocalFileStorage(root);
+      const app = createApp({
+        itemRepository: createInMemoryItemRepository(),
+        blobStorage: storage,
+        allowUnauthenticatedItems: true,
+      });
+      const localScope = {
+        userId: "local-development-user",
+        tenantId: "local-development-tenant",
+        roles: ["developer"],
+      };
+      const localContent = new TextEncoder().encode("question image");
+      const localSession = await storage.initiateUpload({
+        ownerId: localScope.userId,
+        tenantId: localScope.tenantId,
+        originalName: "diagram.png",
+        displayName: "題目附圖.png",
+        mimeType: "image/png",
+        sizeBytes: localContent.byteLength,
+        checksum: createHash("sha256").update(localContent).digest("hex"),
+      });
+      await storage.writeUpload(
+        localSession.sessionId,
+        new Response(localContent).body!,
+        localScope,
+      );
+      await storage.completeUpload(localSession.sessionId, localScope);
+
+      const metadataResponse = await app.request(
+        `/api/files/${localSession.fileId}`,
+      );
+      expect(metadataResponse.status).toBe(200);
+      expect(await metadataResponse.json()).toMatchObject({
+        fileId: localSession.fileId,
+        originalName: "diagram.png",
+        displayName: "題目附圖.png",
+        mimeType: "image/png",
+        sizeBytes: localContent.byteLength,
+        status: "ready",
+        deletedAt: null,
+      });
+
+      const foreignScope = {
+        userId: "foreign-user",
+        tenantId: "foreign-tenant",
+        roles: ["member"],
+      };
+      const foreignContent = new TextEncoder().encode("foreign image");
+      const foreignSession = await storage.initiateUpload({
+        ownerId: foreignScope.userId,
+        tenantId: foreignScope.tenantId,
+        originalName: "foreign.png",
+        displayName: "foreign.png",
+        mimeType: "image/png",
+        sizeBytes: foreignContent.byteLength,
+        checksum: createHash("sha256").update(foreignContent).digest("hex"),
+      });
+      await storage.writeUpload(
+        foreignSession.sessionId,
+        new Response(foreignContent).body!,
+        foreignScope,
+      );
+      await storage.completeUpload(foreignSession.sessionId, foreignScope);
+
+      const foreignResponse = await app.request(
+        `/api/files/${foreignSession.fileId}`,
+      );
+      const missingResponse = await app.request(
+        "/api/files/definitely-not-a-real-file-id",
+      );
+      expect(foreignResponse.status).toBe(404);
+      expect(missingResponse.status).toBe(404);
+      const foreignError = ApiErrorResponseSchema.parse(
+        await foreignResponse.json(),
+      );
+      const missingError = ApiErrorResponseSchema.parse(
+        await missingResponse.json(),
+      );
+      expect(foreignError.error).toEqual(missingError.error);
+      expect(foreignError.error).toEqual({
+        code: "not_found",
+        message: "file requested was not found.",
+      });
+
+      const deleteResponse = await app.request(
+        `/api/files/${localSession.fileId}`,
+        { method: "DELETE" },
+      );
+      expect(deleteResponse.status).toBe(204);
+      const deletedResponse = await app.request(
+        `/api/files/${localSession.fileId}`,
+      );
+      expect(deletedResponse.status).toBe(200);
+      expect(await deletedResponse.json()).toMatchObject({
+        fileId: localSession.fileId,
+        status: "deleted",
+        deletedAt: expect.any(String),
+      });
+    } finally {
+      await rm(root, { recursive: true });
+    }
+  });
+
   it("returns checksum failures using the shared API error contract", async () => {
     const root = await mkdtemp(join(tmpdir(), "server-foundation-api-files-"));
     try {
