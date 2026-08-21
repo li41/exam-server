@@ -23,7 +23,7 @@
     "@server-foundation/redis-adapter": "workspace:*",
     "@server-foundation/testing": "workspace:*",
     "hono": "^4.13.2",
-    "redis": "^6.2.0"
+    "redis": "^6.2.1"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

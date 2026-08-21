@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@server-foundation/domain": "workspace:*",
-    "redis": "^6.2.0"
+    "redis": "^6.2.1"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
