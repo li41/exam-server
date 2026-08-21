@@ -301,6 +301,16 @@ export class LocalFileStorage implements BlobStorage {
     await this.writeJson(this.sessionPath(session.sessionId), session);
   }
 
+  async getMetadata(
+    fileId: string,
+    scope: FileAccessScope,
+  ): Promise<FileMetadata> {
+    const metadata = await this.readMetadataIfExists(fileId);
+    if (!metadata) throw new NotFoundError("file", "requested");
+    assertAccess(metadata.ownerId, metadata.tenantId, scope);
+    return metadata;
+  }
+
   async getDownload(
     fileId: string,
     scope: FileAccessScope,
