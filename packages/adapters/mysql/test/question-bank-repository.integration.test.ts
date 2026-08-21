@@ -232,19 +232,25 @@ describe("MySqlQuestionBankRepository", () => {
     expect(allCodes).toContain("QB-OWN-THEIRS");
 
     // 只看自己：`items` 與 `page.total` 一起收窄。
+    // ⚠️ 這個檔只有 `beforeAll` 清表、⛔ 沒有逐測清乾淨 ⇒ 同一位 actor 在前面的
+    // 測試裡也建了題目。所以這裡**只能斷言相對關係**，⛔ 不可寫死「剛好一筆」。
+    // 鑑別力來自「同事那筆不在」＋「總筆數正好少掉同事那一筆」：收窄一旦失效，
+    // `own` 就會等於 `all`，下面的 `- 1` 立刻紅。
     const own = await repository.listQuestions({ limit: 50 }, ownOnlyScope);
-    expect(own.items.map((item) => item.code)).toEqual(["QB-OWN-MINE"]);
-    expect(own.page.total).toBe(1);
+    const ownCodes = own.items.map((item) => item.code);
+    expect(ownCodes).toContain("QB-OWN-MINE");
+    expect(ownCodes).not.toContain("QB-OWN-THEIRS");
+    expect(own.page.total).toBe(all.page.total - 1);
 
     // 物件級：拿別人的 id 讀不到（`null` ⇒ service 轉 404）。
     expect(await repository.getQuestion(theirs.id, ownOnlyScope)).toBe(null);
     expect(await repository.getQuestion(mine.id, ownOnlyScope)).not.toBe(null);
 
-    // 統計套同一個收窄。
+    // 統計套同一個收窄（同樣只斷言相對關係、理由同上）。
     const ownStats = await repository.questionStats({}, ownOnlyScope);
-    expect(ownStats.total).toBe(1);
     const allStats = await repository.questionStats({}, scope);
     expect(allStats.total).toBeGreaterThanOrEqual(2);
+    expect(ownStats.total).toBe(allStats.total - 1);
 
     // 改不動、刪不掉別人的，而且錯誤是 not_found ⛔ 不是 conflict。
     await expect(
