@@ -14,7 +14,10 @@ import {
   validateReadiness,
 } from "./cold-boot-acceptance.mjs";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const bootstrapScript = path.join(
   repoRoot,
   "deploy",
