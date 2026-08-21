@@ -319,8 +319,10 @@ export const createApp = (dependencies: AppDependencies) => {
           code: "internal_error" as const,
           message: "An unexpected error occurred.",
         },
-        500,
-      );
+        requestId,
+      },
+      500,
+    );
   });
 
   app.notFound((context) =>
