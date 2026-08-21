@@ -6,6 +6,7 @@ import {
   AuthTokenResponseSchema,
   CreateItemSchema,
   DeleteItemQuerySchema,
+  FileMetadataSchema,
   InitiateUploadRequestSchema,
   ItemListQuerySchema,
   LEGACY_API_PREFIX,
@@ -318,10 +319,8 @@ export const createApp = (dependencies: AppDependencies) => {
           code: "internal_error" as const,
           message: "An unexpected error occurred.",
         },
-        requestId,
-      },
-      500,
-    );
+        500,
+      );
   });
 
   app.notFound((context) =>
@@ -638,6 +637,14 @@ export const createApp = (dependencies: AppDependencies) => {
         "Accept-Ranges": "none",
       });
       return new Response(download.stream, { headers });
+    });
+
+    api.get("/files/:id", async (context) => {
+      const metadata = await requireBlobStorage().getMetadata(
+        context.req.param("id"),
+        fileScope(context),
+      );
+      return context.json(FileMetadataSchema.parse(metadata));
     });
 
     api.delete("/files/:id", async (context) => {
