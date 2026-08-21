@@ -76,6 +76,17 @@ suite("files API with MySQL metadata", () => {
       tenantId: "local-development-tenant",
     });
 
+    const metadataResponse = await app.request(`/api/files/${metadata.fileId}`);
+    expect(metadataResponse.status).toBe(200);
+    expect(await metadataResponse.json()).toMatchObject({
+      fileId: metadata.fileId,
+      displayName: "資料.txt",
+      mimeType: "text/plain",
+      sizeBytes: content.byteLength,
+      status: "ready",
+      deletedAt: null,
+    });
+
     const downloadResponse = await app.request(
       `/api/files/${metadata.fileId}/download`,
     );
@@ -92,6 +103,16 @@ suite("files API with MySQL metadata", () => {
     ).toBe(204);
     await expect(metadataStore.get(metadata.fileId)).resolves.toMatchObject({
       status: "deleted",
+    });
+
+    const deletedMetadataResponse = await app.request(
+      `/api/files/${metadata.fileId}`,
+    );
+    expect(deletedMetadataResponse.status).toBe(200);
+    expect(await deletedMetadataResponse.json()).toMatchObject({
+      fileId: metadata.fileId,
+      status: "deleted",
+      deletedAt: expect.any(String),
     });
   });
 
