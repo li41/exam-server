@@ -5,6 +5,7 @@ import type {
   FileMetadata,
   LoginRequest,
 } from "@server-foundation/api-contracts";
+import { NotFoundError } from "@server-foundation/domain";
 import type {
   AuthenticationService,
   BlobStorage,
@@ -154,6 +155,31 @@ describe("runtime hardening", () => {
         throw new Error("not used");
       },
       async cancelUpload() {},
+      async getMetadata(fileId, scope): Promise<FileMetadata> {
+        const metadata: FileMetadata = {
+          fileId: "file-a",
+          ownerId: "local-development-user",
+          tenantId: "local-development-tenant",
+          originalName: "file-a.bin",
+          displayName: "file-a.bin",
+          mimeType: "application/octet-stream",
+          sizeBytes: 1,
+          checksum: "a".repeat(64),
+          status: "ready",
+          createdAt: "2030-01-01T00:00:00.000Z",
+          deletedAt: null,
+        };
+        const privileged =
+          scope.roles.includes("owner") || scope.roles.includes("admin");
+        if (
+          fileId !== metadata.fileId ||
+          scope.tenantId !== metadata.tenantId ||
+          (scope.userId !== metadata.ownerId && !privileged)
+        ) {
+          throw new NotFoundError("file", "requested");
+        }
+        return metadata;
+      },
       async getDownload() {
         throw new Error("not used");
       },

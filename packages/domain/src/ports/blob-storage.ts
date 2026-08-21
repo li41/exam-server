@@ -35,6 +35,7 @@ export interface BlobStorage {
     scope: FileAccessScope,
   ): Promise<FileMetadata>;
   cancelUpload(sessionId: string, scope: FileAccessScope): Promise<void>;
+  getMetadata(fileId: string, scope: FileAccessScope): Promise<FileMetadata>;
   getDownload(fileId: string, scope: FileAccessScope): Promise<DownloadSource>;
   delete(fileId: string, scope: FileAccessScope): Promise<void>;
 }

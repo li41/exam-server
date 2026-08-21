@@ -6,6 +6,7 @@ import {
   AuthTokenResponseSchema,
   CreateItemSchema,
   DeleteItemQuerySchema,
+  FileMetadataSchema,
   InitiateUploadRequestSchema,
   ItemListQuerySchema,
   LEGACY_API_PREFIX,
@@ -638,6 +639,14 @@ export const createApp = (dependencies: AppDependencies) => {
         "Accept-Ranges": "none",
       });
       return new Response(download.stream, { headers });
+    });
+
+    api.get("/files/:id", async (context) => {
+      const metadata = await requireBlobStorage().getMetadata(
+        context.req.param("id"),
+        fileScope(context),
+      );
+      return context.json(FileMetadataSchema.parse(metadata));
     });
 
     api.delete("/files/:id", async (context) => {
