@@ -3,7 +3,7 @@ import type {
   UploadProgress,
   UploadSession,
 } from "@server-foundation/api-contracts";
-import { AffairService } from "@server-foundation/domain";
+import { AffairService, NotFoundError } from "@server-foundation/domain";
 import type {
   BlobStorage,
   FileAccessScope,
@@ -43,6 +43,9 @@ class MemoryFileMetadata implements FileMetadataStore {
 
 class MemoryBlobStorage implements BlobStorage {
   readonly deleted: string[] = [];
+
+  constructor(private readonly metadata: MemoryFileMetadata) {}
+
   async initiateUpload(_input: UploadInput): Promise<UploadSession> {
     throw new Error("not used");
   }
@@ -63,6 +66,22 @@ class MemoryBlobStorage implements BlobStorage {
     _sessionId: string,
     _scope: FileAccessScope,
   ): Promise<void> {}
+  async getMetadata(
+    fileId: string,
+    scope: FileAccessScope,
+  ): Promise<FileMetadata> {
+    const metadata = await this.metadata.get(fileId);
+    const privileged =
+      scope.roles.includes("owner") || scope.roles.includes("admin");
+    if (
+      !metadata ||
+      scope.tenantId !== metadata.tenantId ||
+      (scope.userId !== metadata.ownerId && !privileged)
+    ) {
+      throw new NotFoundError("file", "requested");
+    }
+    return metadata;
+  }
   async getDownload(_fileId: string, _scope: FileAccessScope) {
     return {
       stream: new ReadableStream<Uint8Array>({
@@ -170,7 +189,7 @@ const setup = async () => {
   const receipts = createInMemoryAffairReceiptRepository(affairs);
   const accessLog = new InMemoryAffairReceiptAccessLog();
   const files = new MemoryFileMetadata();
-  const blobs = new MemoryBlobStorage();
+  const blobs = new MemoryBlobStorage(files);
   const fileId = "bankbook-file-1";
   files.items.set(fileId, {
     fileId,
